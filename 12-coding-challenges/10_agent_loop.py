@@ -34,18 +34,27 @@ A strong solution demonstrates:
 - Errors are observations, not exceptions: feeding "unknown tool" back lets
   the model self-correct - exactly how production agents recover.
 - A safe calculator: walking the AST whitelist (constants, + - * / ** %),
-  never eval()/exec() on model output. Injecting `llm` and the tool registry
-  makes the loop unit-testable without network calls.
+  never eval()/exec() on model output. Safe means bounded cost too: with
+  Python ints, "9 ** 9 ** 9" builds a number with hundreds of millions of
+  digits and hangs the worker, so evaluate in floats (overflow raises
+  immediately) or cap exponents.
+- Injecting `llm` and the tool registry makes the loop unit-testable
+  without network calls.
 Common mistakes: eval() on model-generated strings; no iteration cap
 (runaway loops burn tokens/money); swallowing tool errors instead of
 returning them to the model; mutating a shared history list across runs.
-Follow-ups: parallel tool calls in one turn; token budgets in addition to
-iteration caps; structured tool schemas + argument validation (the essence
-of MCP tool definitions); persisting history for resumability.
+Follow-ups: parallel tool calls in one turn, with call ids so each result
+maps back to its request (how native tool-calling APIs pair them); token
+and wall-clock budgets in addition to iteration caps; detecting a stuck
+loop (same tool, same args, repeated); JSON Schema tool definitions with
+argument validation before execution (the shape MCP tools and
+function-calling APIs share); human approval gates for side-effecting
+tools; persisting history for resumability.
 """
 
 import ast
 import operator
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -64,8 +73,11 @@ def calculator(expression: str) -> float:
     def ev(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return ev(node.body)
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-            return node.value
+        if (isinstance(node, ast.Constant) and isinstance(node.value, (int, float))
+                and not isinstance(node.value, bool)):
+            # floats, not ints: 9**9**9 raises OverflowError at once instead
+            # of spending minutes building a giant integer
+            return float(node.value)
         if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED_BINOPS:
             return _ALLOWED_BINOPS[type(node.op)](ev(node.left), ev(node.right))
         if isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED_UNARY:
@@ -199,5 +211,26 @@ if __name__ == "__main__":
         except (ValueError, SyntaxError):
             pass
     assert calculator("-(2 ** 3) % 5") == 2.0
+    for bad in ("True + 1", "'a' * 3"):
+        try:
+            calculator(bad)
+            assert False, f"should have rejected: {bad}"
+        except ValueError:
+            pass
+
+    # 6. Calculator cost is bounded: a power tower fails fast, not hangs, and
+    # the failure reaches the model as an observation.
+    t_start = time.perf_counter()
+    try:
+        calculator("9 ** 9 ** 9")
+        assert False, "power tower should overflow"
+    except OverflowError:
+        pass
+    assert time.perf_counter() - t_start < 1.0
+    llm = MockLLM([{"tool": "calculator", "args": {"expression": "9 ** 9 ** 9"}},
+                   {"final": "too large"}])
+    result = run_agent(llm, TOOLS, "Compute 9^9^9")
+    assert result.output == "too large"
+    assert "OverflowError" in result.history[2]["content"]
 
     print("All tests passed.")

@@ -31,14 +31,17 @@ final training state.
 Common mistakes: operating on Python chars instead of bytes (then decode
 crashes on unseen characters); merging greedily left-to-right at encode
 time (produces different tokens than training did); nondeterministic
-tie-breaking (dict order) so two training runs disagree; O(n^2) scans that
-time out on a big corpus - fine here, but say how you'd fix it (pair-count
-deltas / priority queue, as in the original Sennrich-style implementations).
+tie-breaking (dict order) so two training runs disagree; a full rescan of
+the corpus per merge (O(n * merges)) that times out on a big corpus - fine
+here, but say how you'd fix it (update pair counts only around each merge
+site and pick the next merge from a priority queue).
 
 Follow-up variations: why byte-level vs char-level (no OOV, 256-symbol
-base alphabet); pre-tokenization with a regex (GPT-2 splits on words so
-merges never cross spaces - why?); special tokens and why they're inserted
-outside BPE; how tokenizer choice affects arithmetic/code performance.
+base alphabet); regex pre-tokenization (GPT-2 and tiktoken encodings split
+text into word, number and punctuation chunks first, so merges never cross
+those boundaries - why does that help?); special tokens and why they're
+inserted outside BPE; how tokenizer choice affects arithmetic and code
+(single-digit vs up-to-3-digit number chunks, whitespace runs in code).
 """
 from __future__ import annotations
 
@@ -120,6 +123,14 @@ if __name__ == "__main__":
 
     # --- round-trip on training text ---
     assert tok.decode(tok.encode(corpus)) == corpus
+
+    # --- encode == replaying every merge in learned (rank) order ---
+    # dicts keep insertion order, so iterating merges walks ranks 0, 1, 2, ...
+    for text in (corpus, "the lazier fox quizzed the boring tokenizers"):
+        replay = list(text.encode("utf-8"))
+        for pair, new_id in tok.merges.items():
+            replay = _merge(replay, pair, new_id)
+        assert tok.encode(text) == replay, "encode must apply merges by rank"
 
     # --- round-trip on UNSEEN text, including multibyte unicode ---
     unseen = "Héllo, 世界! Zebras quiz vexed jockeys - 🚀 naïve café №42"

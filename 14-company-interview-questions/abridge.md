@@ -1,10 +1,10 @@
 # 🩺 Abridge - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- Reported loop: recruiter screen → hiring manager technical conversation (deep dive on a complex project plus a short design exercise) → virtual onsite of ~3 rounds (DS&A coding, system design, an AI/GenAI-flavoured round or role-specific round such as frontend) → final with a senior engineering leader (VP Engineering or CTO). Roughly a month end to end (reported, varies).
+- Reported loop: recruiter screen → hiring manager technical conversation (deep dive on a complex project plus a short design exercise) → virtual onsite of ~3 rounds (DS&A coding, system design, an AI/GenAI-flavoured round or role-specific round such as frontend) → final with a senior engineering leader (VP Engineering or CTO). Roughly a month end to end (reported, varies). A 2026 third-party write-up describes the same four-step shape, with the third onsite round framed as a practical round tied to the product (applied coding, AI, or frontend by role) (reported, varies).
 - Public loop detail is **thin**: a handful of candidate posts, one third-party guide, and a small Glassdoor sample. The stage table below is partly **inference** from the applied-vertical-AI category, and every uncertain row is labelled.
 - One candidate report describes the hiring manager screen carrying a ~20-minute mini design exercise on their clinical tool execution service, with **design stubs pre-written** and the candidate asked to fill in the critical part. Expect design conversation earlier than usual.
 - The technical centre of gravity is **speech plus structured generation under a safety bar**: ASR on messy clinic-room audio, diarisation and role attribution, turning free conversation into a coded, billable, signable note, and proving every line of it traces back to something the patient or clinician actually said.
@@ -12,7 +12,7 @@
 
 ## Company context
 
-Abridge builds ambient clinical documentation: a microphone runs during a patient visit, and the conversation comes out the other side as a structured clinical note, with diagnosis codes and draft orders attached, written back into the EHR before the clinician leaves the room. Public materials describe deployment across a large number of US health systems, speech recognition tuned for medical conversation across 14+ languages, a "Contextual Reasoning Engine" that pulls in prior encounters and health-system-specific guidelines, and a "Linked Evidence" feature that ties every generated span, code, or order back to the point in the transcript where it was discussed. Since 2025 the product has extended into revenue cycle and clinical documentation integrity, validating billing codes in the moment rather than weeks later in a back office.
+Abridge builds ambient clinical documentation: a microphone runs during a patient visit, and the conversation comes out the other side as a structured clinical note, with diagnosis codes and draft orders attached, written back into the EHR before the clinician leaves the room. Public materials describe deployment across a large number of US health systems, speech recognition tuned for medical conversation across 14+ languages, a "Contextual Reasoning Engine" that pulls in prior encounters and health-system-specific guidelines, and a "Linked Evidence" feature that ties every generated span, code, or order back to the point in the transcript where it was discussed. Since 2025 the product has extended into revenue cycle and clinical documentation integrity, validating billing codes in the moment rather than weeks later in a back office. It has also moved into nursing: built with Mayo Clinic and Epic, the nursing product turns spoken observations into drafted flowsheet entries in the EHR, with linked sources back to the transcript, and was the subject of an April 2026 KLAS early-adopter report. That is structured data entry across a shift, not a narrative note per visit, and it widens what "the pipeline" means.
 
 "AI engineer" here is unusually broad and unusually constrained at the same time. Broad, because the pipeline spans streaming audio, ASR, diarisation, retrieval over chart context, LLM generation, structured extraction, and EHR write-back. Constrained, because the output is a legal medical record: a fabricated dose is a safety incident, a wrong code is a billing compliance problem, and a leaked transcript is a HIPAA breach. Engineers who like the systems problem but are bored by the verification problem tend not to enjoy it here.
 
@@ -351,6 +351,27 @@ flowchart TD
 
 </details>
 
+### 13. Nurses chart structured flowsheet rows across a twelve-hour shift, not one narrative note per visit. How would you adapt an ambient pipeline built for physician visits to draft flowsheet entries?
+
+<details><summary><b>Answer</b></summary>
+
+Change the output contract first. A physician note is sectioned free text; a flowsheet is a site-configured schema of rows, each with a type (numeric with units, pick-list, free text), validation rules, and the time the observation was true. Generation becomes constrained extraction into that schema, not summarisation.
+
+Pipeline changes:
+
+- **Capture is episodic.** A nurse moves between rooms all shift, so you need patient binding per burst of speech, short sessions, and a hard check that each burst attaches to the right patient. Wrong-patient charting is the top-severity failure, as encounter mismatch is for notes.
+- **Schema per site.** Load the health system's flowsheet rows and allowed values at session start and constrain decoding to them, so the model cannot emit a value the EHR will reject or a pick-list option that does not exist.
+- **Observation time is not documentation time.** "Pain was 7 when I came on at six, now it's 4" is two rows with two timestamps. Temporal extraction is its own stage.
+- **Numerics are deterministic.** Vitals, scores, and intake and output volumes are parsed and unit-checked by rules, range-checked against plausibility and the patient's recent values, and routed for review when they do not match rather than guessed.
+- **Provenance per row.** Every drafted row links to the transcript span that supports it so the nurse can verify in seconds. A row with no supporting span is not drafted.
+- **Silence is not normal.** A row the nurse did not verbalise stays empty. Defaulting it to "within normal limits" is fabrication with a clinical consequence.
+
+Evaluation changes with it: per-row precision and recall by row type, wrong-patient and wrong-time rates as separate release gates, and time-to-file per shift as the product metric, because the value is documentation that no longer piles up at handover.
+
+**Follow-ups:** A nurse describes the patient in bed A while standing at bed B. How does the system know? How would you onboard a site whose flowsheet template has hundreds of custom rows?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -366,7 +387,7 @@ flowchart TD
 **Company-specific moves:**
 
 1. Learn the clinical note formats. Know what SOAP means, what belongs in HPI versus assessment and plan, and why a condition being "assessed or addressed" is different from being mentioned. You do not need to be a clinician, but sounding like you have never read a clinical note is disqualifying.
-2. Read their product and platform pages, particularly the material on Linked Evidence, the Contextual Reasoning Engine, and the revenue cycle work. Then be ready to say what you would build next and why.
+2. Read their product and platform pages, particularly the material on Linked Evidence, the Contextual Reasoning Engine, the revenue cycle work, and the nursing flowsheet product. Then be ready to say what you would build next and why.
 3. Have one worked example of evaluating a generative system where correctness was genuinely contested. This is the question they come back to, and a real story about building an error taxonomy and getting annotators to agree beats any framework recital.
 4. Prepare a project deep dive that emphasises infrastructure decisions and trade-offs, since candidate reports describe the hiring manager round centring on exactly that rather than on generic coding.
 5. Be able to answer "why healthcare" without platitudes. The regulated-vertical companies screen for it, and mission fit shows up again in the final leadership round.
@@ -383,3 +404,6 @@ flowchart TD
 - [Blind - Abridge system design](https://www.teamblind.com/post/abridge-system-design-7zklyo6q) (candidate report of a ~20 min design exercise on a clinical tool execution service with design stubs)
 - [Glassdoor - Abridge senior software engineer interviews](https://www.glassdoor.com/Interview/Abridge-Senior-Software-Engineer-Interview-Questions-EI_IE3146134.0,7_KO8,32.htm) (small sample, mixed sentiment)
 - [Abridge Trust Center](https://trust.abridge.com/) (compliance posture)
+- [Abridge - Abridge, Mayo Clinic and Epic collaborate on nursing documentation](https://abridge.com/press-release/abridge-mayo-epic) (official press release on the nursing workflow)
+- [HIT Consultant - KLAS report on Abridge ambient AI for nursing (April 2026)](https://hitconsultant.net/2026/04/02/klas-report-abridge-ambient-ai-nursing-flowsheets-ehr/) (verbalised nursing observations drafted into EHR flowsheets, linked sources, early-adopter sample)
+- [Design Gurus - Abridge interview process, round by round](https://www.designgurus.io/answers/detail/what-is-the-abridge-interview-process-like-round-by-round) (third-party 2026 write-up; four-step shape, practical round by role)

@@ -1,18 +1,18 @@
 # 🤗 Hugging Face - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **No LeetCode - their recruiter has said so publicly.** The role-specific assessment is a take-home (often untimed) or a job talk, built around realistic use cases, not algorithm puzzles.
-- The reported skeleton: application → culture/mission screen → **2-3 conversational team interviews** → role-specific assessment (take-home or job talk) → final conversation with team leads or co-founders. Reported timelines are fast - roughly 2-3 weeks on average.
+- The reported skeleton: application → culture/mission screen → **2-3 conversational team interviews** → role-specific assessment (take-home or job talk) → final conversation with team leads or co-founders. Reported timelines are fast - roughly 2-3 weeks on average. A 2026 third-party guide describes the assessment debrief as a ~60-minute conversational deep dive where you walk through your take-home and justify each decision, with application to offer still around three weeks (reported, varies).
 - **Open-source track record is the single biggest lever.** Their talent lead has said 30-40% of hires come directly from the open-source community; visible PRs and projects are "the best way to show your added value."
 - The company is remote-first, low-hierarchy, and writing-heavy. They explicitly screen for **autonomous self-starters** - people who can "tell us where to go," not people who need a roadmap.
 - Expect deep fluency checks on **their ecosystem** (transformers, tokenizers, datasets, PEFT/TRL, the Hub, Gradio/Spaces) and on why open-source AI matters to you specifically. Generic applications reportedly get skipped.
 
 ## Company context
 
-Hugging Face is the GitHub of machine learning: the Hub hosts millions of model, dataset, and app (Spaces) repos, and the company maintains the open-source stack most of the industry fine-tunes and ships with - `transformers`, `tokenizers`, `datasets`, `peft`, `trl`, `accelerate`, text-generation-inference, plus research artifacts like the FineWeb corpus and SmolLM models. Revenue comes from enterprise Hub, inference endpoints, and partnerships, but the product surface is fundamentally open. An "AI engineer" here is usually a **machine learning engineer who ships in public** - library code, Hub features, demos, docs, and research reproductions - rather than someone tuning a proprietary model behind an API.
+Hugging Face is the GitHub of machine learning: the Hub hosts millions of model, dataset, and app (Spaces) repos, and the company maintains the open-source stack most of the industry fine-tunes and ships with - `transformers`, `tokenizers`, `datasets`, `peft`, `trl`, `accelerate`, plus research artifacts like the FineWeb corpus and SmolLM models. Two shifts matter for interviews: text-generation-inference (TGI) went into maintenance mode in December 2025, with Hugging Face now recommending vLLM and SGLang for serving, and `transformers` v5 (first release candidate December 2025) dropped TensorFlow and Flax to go PyTorch-only and is positioned as the model-definition layer that inference engines use as a backend. Revenue comes from enterprise Hub, inference endpoints, and partnerships, but the product surface is fundamentally open. An "AI engineer" here is usually a **machine learning engineer who ships in public** - library code, Hub features, demos, docs, and research reproductions - rather than someone tuning a proprietary model behind an API.
 
 ## Roles & titles they hire
 
@@ -37,7 +37,7 @@ Public information is decent on shape but thin on stage-by-stage detail - source
 | Culture / mission screen | ~30 min call | Why Hugging Face, why open source, mission alignment (reported; talent lead describes culture fit as the first gate) |
 | Team interviews | 2-3 conversational calls with future teammates | Technical depth via discussion, ecosystem familiarity, collaboration style; explicitly *not* LeetCode (recruiter AMA) |
 | Role-specific assessment | Take-home (often untimed) for most roles; job talk for senior/research | Realistic use cases: e.g., a customer-facing candidate reported writing an email reply + Python notebook; interns report Spaces/dataset-card projects (reported, varies) |
-| Assessment debrief | Call walking through your solution | Reasoning, tradeoffs, communication (reported, varies) |
+| Assessment debrief | ~60-min call walking through your solution | Reasoning, tradeoffs, communication; interviewers probe why you made each decision (reported, varies) |
 | Final round | Team lead and/or co-founder conversation | Autonomy, ownership, long-term fit (reported; Sifted describes founder involvement) |
 
 Reported average timeline is around three weeks, faster for ML roles. Caveats from public reviews: feedback on take-homes can be thin, and a minority of candidates report slow or absent follow-up - ask your recruiter up front how the take-home will be evaluated.
@@ -61,7 +61,7 @@ Reported average timeline is around three weeks, faster for ML roles. Caveats fr
 
 Four phases. **Resolution:** `huggingface_hub` resolves the repo id and revision to a commit hash, then fetches `config.json` - checking the local cache first (`~/.cache/huggingface/hub`, laid out by repo and commit hash, revalidated with ETags so unchanged files aren't re-downloaded). **Class dispatch:** the config's `model_type` is looked up in the Auto-class mapping to pick the concrete architecture class (`LlamaForCausalLM`, etc.). If the repo ships custom code, that path only runs with `trust_remote_code=True` - which is arbitrary code execution and should be treated as such.
 
-**Weight download:** the loader prefers `model.safetensors`; for large models it's sharded, with an index JSON mapping tensor names to shard files, downloaded via CDN-backed resolve URLs. **Instantiation and loading:** with `low_cpu_mem_usage`/accelerate, the model skeleton is created on the meta device (no memory allocated), then tensors are loaded shard-by-shard directly into place - safetensors makes this cheap because the format supports lazy, zero-copy, per-tensor reads. `torch_dtype="auto"` reads the checkpoint's dtype instead of upcasting to fp32; `device_map="auto"` asks accelerate to solve a placement problem - fit layers on GPU(s), spill remainder to CPU/disk offload, and wire hooks that move activations between devices at runtime.
+**Weight download:** the loader prefers `model.safetensors`; for large models it's sharded, with an index JSON mapping tensor names to shard files, downloaded via CDN-backed resolve URLs. **Instantiation and loading:** with `device_map` set (or `low_cpu_mem_usage` on older releases), the model skeleton is created on the meta device (no memory allocated), then tensors are loaded shard-by-shard directly into place - safetensors makes this cheap because the format supports lazy, zero-copy, per-tensor reads. `torch_dtype="auto"` reads the checkpoint's dtype instead of upcasting to fp32 (current releases spell the argument `dtype`, keep `torch_dtype` as a legacy alias, and default to the dtype recorded in `config.json`, so the fp32-upcast trap now mostly bites pinned older versions); `device_map="auto"` asks accelerate to solve a placement problem - fit layers on GPU(s), spill remainder to CPU/disk offload, and wire hooks that move activations between devices at runtime.
 
 Knowing this pipeline is what lets you debug the classic failures: cache misses re-downloading 16 GB, meta-device tensors leaking into training, mismatched `dtype` silently doubling memory.
 
@@ -87,7 +87,7 @@ The meta-point interviewers look for: library design is a product decision about
 
 <details><summary><b>Answer</b></summary>
 
-**BPE** (GPT family, Llama): start from bytes/characters, greedily merge the most frequent adjacent pair, repeat until vocab size; encoding replays learned merges. Byte-level BPE guarantees no out-of-vocabulary input. **WordPiece** (BERT): similar merge loop but picks merges by likelihood gain rather than raw frequency, and encodes greedily longest-match-first with `##` continuation markers. **Unigram** (SentencePiece, T5/Llama-style via SentencePiece): the inverse philosophy - start with a huge candidate vocab, assume each token has a probability, and prune tokens whose removal least hurts corpus likelihood; encoding picks the most probable segmentation (Viterbi), which also enables sampling different segmentations as regularization.
+**BPE** (GPT family, Llama): start from bytes/characters, greedily merge the most frequent adjacent pair, repeat until vocab size; encoding replays learned merges. Byte-level BPE guarantees no out-of-vocabulary input. **WordPiece** (BERT): similar merge loop but picks merges by likelihood gain rather than raw frequency, and encodes greedily longest-match-first with `##` continuation markers. **Unigram** (SentencePiece's default mode, used by T5, ALBERT, and XLNet; note that SentencePiece is a toolkit, and Llama 1 and 2 used it in BPE mode): the inverse philosophy - start with a huge candidate vocab, assume each token has a probability, and prune tokens whose removal least hurts corpus likelihood; encoding picks the most probable segmentation (Viterbi), which also enables sampling different segmentations as regularization.
 
 Rust because tokenization is a hot loop over terabytes: a compiled, parallel implementation gives order-of-magnitude speedups over pure Python for batch encoding, and - as important - makes **offset mapping** tractable, tracking exact character spans per token so NER/QA/extraction can align predictions back to source text.
 
@@ -147,7 +147,7 @@ The senior signal is knowing what QLoRA costs you: slower steps than bf16 LoRA (
 
 PPO-based RLHF is a three-stage, four-model production: train a reward model on human preference pairs, then optimize the policy with PPO against that reward plus a KL penalty to a frozen reference model, with a value model along for the ride. It works but is infrastructure-heavy, sample-inefficient, and notoriously sensitive to reward-model quality and PPO hyperparameters - reward hacking is a constant threat.
 
-DPO's insight: under the standard KL-constrained RLHF objective, there's a closed-form relationship between the optimal policy and the reward function. Substitute it back and the RL problem collapses into a supervised loss directly on preference pairs - increase the margin between the log-likelihood ratios (policy vs. frozen reference) of chosen over rejected responses, with β controlling the implicit KL constraint. Two models, no sampling loop, no reward model, trains like classification. That stability and simplicity is why it became the default open-source alignment recipe - HF's own Zephyr work and alignment-handbook recipes demonstrated preference tuning at 7B scale with modest compute, and `trl` ships DPO alongside SFT and PPO trainers.
+DPO's insight: under the standard KL-constrained RLHF objective, there's a closed-form relationship between the optimal policy and the reward function. Substitute it back and the RL problem collapses into a supervised loss directly on preference pairs - increase the margin between the log-likelihood ratios (policy vs. frozen reference) of chosen over rejected responses, with β controlling the implicit KL constraint. Two models, no sampling loop, no reward model, trains like classification. That stability and simplicity is why it became the default open-source alignment recipe - HF's own Zephyr work and alignment-handbook recipes demonstrated preference tuning at 7B scale with modest compute, and `trl` ships DPO alongside SFT and online RL trainers such as GRPO.
 
 Limits: DPO is offline - it only learns from the pairs you have, its implicit reward can drift on off-policy data, and a known pathology is both chosen *and* rejected likelihoods falling while their gap grows. Choose online methods (PPO, or GRPO-style approaches) when you have a **verifiable or cheap reward** - unit tests for code, checkable math answers, a strong reward model - and want the policy to explore beyond the preference dataset; that's the regime behind the reasoning-model wave.
 
@@ -223,13 +223,33 @@ The interaction is half the job. This contributor is possibly a future colleague
 
 </details>
 
+### 13. Hugging Face put TGI into maintenance mode and now positions `transformers` as the model definition that engines like vLLM and SGLang can run as a backend. Argue for that strategy, then tell me what has to be true of the modeling code for it to work.
+
+<details><summary><b>Answer</b></summary>
+
+The strategy trades owning a serving engine for owning the canonical model definition. Architecture support is the scarce resource: every new model needs a correct implementation, and serving engines compete on kernels and scheduling, not on porting. If a model lands in `transformers` on release day and engines can run it through a generic backend, the whole ecosystem gets day-zero support without N separate ports, and Hugging Face stops duplicating work that vLLM and SGLang do better.
+
+The costs are real. A generic backend path is usually slower than an engine's hand-tuned native port, so hot models still get native implementations and `transformers` becomes the correctness reference plus the long-tail path. Existing TGI users have to migrate, and architectures added after the maintenance cut-off get no TGI support. And a modeling bug now ships to every engine at once.
+
+For it to work, the modeling code has to give up control of the things an engine owns:
+
+- **Pluggable attention.** The model calls attention through an interface (`attn_implementation` and a registry of attention functions) so an engine can substitute its paged-attention kernel and own the KV cache, instead of the modeling file hard-coding cache tensors.
+- **Batch-shape agnostic.** Continuous batching hands the model packed variable-length sequences with explicit positions, not a padded rectangle. No hidden state, no in-place mutation the engine cannot see.
+- **Declared parallelism.** Which layers shard column-wise or row-wise for tensor parallelism should live in the config, so an engine can shard without per-model code.
+- **Parity tests across backends.** CI compares engine-backend logits against the reference implementation, because a regression is no longer local.
+- **A narrow, stable surface.** The v5 move to PyTorch-only shrinks what engines must track.
+
+**Follow-ups:** A new architecture ships with an attention variant no engine kernel supports. What happens on day zero, and what is the fallback? How would you catch a `transformers` change that breaks the vLLM backend before it is released?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
 
 1. **[02-llm-fundamentals](../02-llm-fundamentals/)** - tokenization is *their* library; know BPE/WordPiece/Unigram mechanics, chat templating, and transformer internals well enough to discuss implementation, not just concepts.
 2. **[05-fine-tuning-and-alignment](../05-fine-tuning-and-alignment/)** - the PEFT/TRL stack is Hugging Face's bread and butter. LoRA/QLoRA memory math, SFT data handling, DPO vs. PPO - this is the most likely technical-discussion territory for ML roles.
-3. **[08-inference-and-production](../08-inference-and-production/)** - they build TGI and run inference-as-a-product; continuous batching, KV-cache economics, quantization, and multi-model serving are directly on-topic.
+3. **[08-inference-and-production](../08-inference-and-production/)** - they built TGI (now in maintenance mode, with vLLM and SGLang recommended in its place) and run inference-as-a-product; continuous batching, KV-cache economics, quantization, and multi-model serving are directly on-topic.
 4. **[07-evaluation-and-observability](../07-evaluation-and-observability/)** - leaderboards and open evaluation are part of their identity; ablation-driven, benchmark-honest thinking shows up in their research culture (FineWeb, SmolLM).
 5. **[12-coding-challenges](../12-coding-challenges/)** - but calibrate: the assessment is a take-home mirroring real work, not algorithms. Practice producing a *polished notebook + clear written explanation*, which is what reported take-homes actually grade.
 6. **[13-interview-process-and-behavioral](../13-interview-process-and-behavioral/)** - the culture screen is the first gate; prepare concrete autonomy and community-collaboration stories.
@@ -251,4 +271,8 @@ Company-specific moves:
 - [Hugging Face job board (Workable)](https://apply.workable.com/huggingface/) - current openings and role titles
 - [Glassdoor: Hugging Face interview questions](https://www.glassdoor.com/Interview/Hugging-Face-Interview-Questions-E6487302.htm) - aggregated candidate reports: untimed take-homes, customer-email + notebook exercise, timeline data
 - [Interview Query: Hugging Face Machine Learning Engineer guide](https://www.interviewquery.com/interview-guides/huggingface-machine-learning-engineer) and [Software Engineer guide](https://www.interviewquery.com/interview-guides/huggingface-software-engineer) - third-party stage breakdowns (unofficial)
+- [Hugging Face blog: Transformers v5](https://huggingface.co/blog/transformers-v5) - official: PyTorch as the sole backend, `transformers` as a backend for inference engines (published December 2025 with the first v5 release candidate)
+- [Text Generation Inference docs](https://huggingface.co/docs/text-generation-inference/index) - official maintenance-mode notice and the recommendation to use vLLM or SGLang
+- [Transformers docs: Loading models](https://huggingface.co/docs/transformers/main/en/models) - `dtype` argument, legacy `torch_dtype`, default dtype behaviour
+- [TechPrep: Hugging Face's Interview Process (2026)](https://www.techprep.app/blog/hugging-face-interview-process) - third-party 2026 stage breakdown: ~60-minute take-home deep dive, ~3-week timeline (unofficial)
 - [Hugging Face blog: We are hiring interns!](https://huggingface.co/blog/interns-2023) - official post describing intern roles and application expectations

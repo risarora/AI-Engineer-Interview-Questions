@@ -1,18 +1,19 @@
 # 🟩 NVIDIA - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- **The hypothesis holds: AI roles skew systems/performance.** Public reports consistently describe loops centred on hardware-software co-design - GPU memory hierarchy, quantization, inference optimization, TensorRT/TensorRT-LLM, Triton/NIM - rather than model-architecture trivia. Expect performance math, not just ML flashcards.
+- **The hypothesis holds: AI roles skew systems/performance.** Public reports consistently describe loops centred on hardware-software co-design - GPU memory hierarchy, quantization, inference optimization, TensorRT/TensorRT-LLM, Dynamo, Dynamo-Triton (formerly Triton Inference Server) and NIM - rather than model-architecture trivia. Expect performance math, not just ML flashcards.
 - **CUDA literacy is expected even when you won't write kernels.** Multiple public guides report that AI/ML candidates are asked to read CUDA and reason about memory coalescing, warp divergence, and bank conflicts. C++ shows up in coding rounds far more than at typical "AI engineer" employers.
 - **Standard big-tech loop shape, domain-heavy content.** Recruiter screen → technical phone screen (CoderPad/HackerRank) → optional hiring-manager call → 3-6 round final loop (coding, domain deep-dive, system design for senior, behavioural). End-to-end reports range 4-8 weeks.
+- **In-person onsite, no AI tools.** NVIDIA's official hiring page states that full-time candidates complete an in-person onsite at an NVIDIA office before they can be considered for an offer, and that using unapproved outside tools such as ChatGPT during an interview disqualifies the candidacy. Earlier rounds are still commonly virtual (reported, varies by team and location).
 - **Loops vary a lot by business unit.** A TensorRT-LLM performance role, an AI-frameworks role, and a Generative AI Solutions Architect role interview very differently - SA loops are reported as panel-style architecture conversations (up to ~7 technical discussions), not LeetCode marathons. Ask your recruiter what your specific loop covers; they generally tell you.
 - **Culture screens are real but technical.** NVIDIA's publicly stated values - innovation, intellectual honesty, speed & agility, excellence, one team - show up as probing on how you handle being wrong, how fast you ship, and whether you can defend every claim you make. Even "leadership" conversations are reported to stay technical.
 
 ## Company context
 
-NVIDIA builds the compute layer of the AI industry: GPUs (Hopper, Blackwell), the CUDA platform, networking (NVLink, InfiniBand/Spectrum-X), and an increasingly thick software stack on top - TensorRT-LLM, Triton Inference Server, NIM microservices, NeMo, Omniverse, and full AI "blueprints" for enterprises. Engineers want in because it's the rare place where the hardware, compiler, kernel, and serving layers are all first-party - you can chase a performance problem from PyTorch down to the SM. "AI engineer" at NVIDIA usually means *making models run fast and shipping the software that makes that repeatable* - inference optimization, framework internals, DL libraries, or customer-facing architecture - much more often than training frontier models.
+NVIDIA builds the compute layer of the AI industry: GPUs (Hopper, Blackwell and Blackwell Ultra in volume, with the Vera Rubin generation ramping from the second half of 2026), the CUDA platform, networking (NVLink, InfiniBand/Spectrum-X), and an increasingly thick software stack on top - TensorRT-LLM, Dynamo (datacenter-scale inference orchestration with disaggregated prefill/decode and KV-aware routing), Dynamo-Triton (formerly Triton Inference Server), NIM microservices, NeMo, Omniverse, and full AI "blueprints" for enterprises. Engineers want in because it's the rare place where the hardware, compiler, kernel, and serving layers are all first-party - you can chase a performance problem from PyTorch down to the SM. "AI engineer" at NVIDIA usually means *making models run fast and shipping the software that makes that repeatable* - inference optimization, framework internals, DL libraries, or customer-facing architecture - much more often than training frontier models.
 
 ## Roles & titles they hire
 
@@ -36,7 +37,7 @@ NVIDIA does not publish an official step-by-step interview guide, so confidence 
 | Online assessment | ~75 min HackerRank - DS&A problems plus multiple choice; mostly new-grad and some SWE pipelines (reported, varies) | Medium-difficulty coding, CS fundamentals |
 | Technical phone screen | 45-60 min with a peer engineer; CoderPad/HackerRank; resume deep-dive + live coding (reported, varies) | Coding in C++ or Python, domain fluency, how you reason aloud |
 | Hiring manager call | 30-60 min, mixed behavioural + high-level technical (reported, varies) | Project depth, ownership, team fit |
-| Final loop | 3-6 back-to-back rounds of 45-60 min, virtual or onsite | 1-2 coding rounds; domain deep-dive (GPU architecture, DL, inference optimization); system design for senior roles; behavioural with the hiring manager |
+| Final loop | 3-6 back-to-back rounds of 45-60 min; parts may be virtual, but the official hiring page requires an in-person onsite at an NVIDIA office before a full-time offer, and unapproved AI tools in any round disqualify (official; details vary by team) | 1-2 coding rounds; domain deep-dive (GPU architecture, DL, inference optimization); system design for senior roles; behavioural with the hiring manager |
 | Solutions Architect variant | Panel with several senior SAs plus serial technical conversations - candidates report up to ~7 rounds, all technical including "leadership" chats (reported, varies) | Architecture discussion, cost-effective LLM deployment, customer scenarios, communication |
 | Decision | Days to ~2 weeks after finals | - |
 
@@ -65,7 +66,7 @@ Then throughput: autoregressive decode at batch 1 is memory-bandwidth-bound, bec
 
 tokens/sec ≈ memory bandwidth / bytes read per token
 
-On an H100-class part (~3.3 TB/s HBM), INT4 weights (~35 GB) give a ceiling of roughly 90-95 tokens/sec single-stream. Real systems land below that - KV-cache reads grow with context, kernels don't hit peak bandwidth, and dequantization adds overhead - so quoting "maybe 60-80% of the ceiling" shows calibration. At FP16 across 2 GPUs, the same math gives ~24 tok/s per stream (140 GB over ~3.3 TB/s per GPU with TP splitting the reads).
+On an H100-class part (~3.3 TB/s HBM), INT4 weights (~35 GB) give a ceiling of roughly 90-95 tokens/sec single-stream. Real systems land below that - KV-cache reads grow with context, kernels don't hit peak bandwidth, and dequantization adds overhead - so quoting "maybe 60-80% of the ceiling" shows calibration. At FP16 with tensor parallelism across 2 GPUs, each GPU streams its own ~70 GB half in parallel, so the ceiling is roughly 70 GB / 3.3 TB/s ≈ 21 ms per token, ~45-48 tok/s per stream, before the per-layer all-reduce overhead pulls it lower. (Dividing the full 140 GB by one GPU's bandwidth, ~24 tok/s, is the common mistake: TP splits the reads.)
 
 The senior follow-through: single-stream latency is the wrong target for most services. Batching amortises the weight reads across requests, raising arithmetic intensity until you approach compute-bound - which is why throughput-oriented serving runs large batches and the per-token weight-streaming argument stops dominating.
 
@@ -284,6 +285,24 @@ Variants worth naming: self-speculation via extra decoding heads (Medusa/EAGLE-s
 
 </details>
 
+### 13. Blackwell-class GPUs run NVFP4 natively. How does it differ from INT4 weight-only quantization, and when would you serve a model in it?
+
+<details><summary><b>Answer</b></summary>
+
+Short version: INT4 weight-only shrinks the bytes, NVFP4 shrinks the bytes and the math. That changes which regime it helps.
+
+**INT4 weight-only** (AWQ/GPTQ-style) stores weights as 4-bit integers with one scale per group of ~64-128 values, then dequantizes to FP16/BF16 inside the GEMM. Weight traffic drops ~4×, so bandwidth-bound decode gets faster, but the tensor-core math still runs at 16-bit. In compute-bound prefill or large-batch serving it buys little, and the dequantization work can cost throughput.
+
+**NVFP4** stores each value as a 4-bit float (E2M1, magnitudes 0, 0.5, 1, 1.5, 2, 3, 4, 6), with an FP8 (E4M3) scale shared by each 16-element block plus a per-tensor FP32 scale: about 4.5 bits per value. Because Blackwell tensor cores consume FP4 directly, weights and activations can both be FP4 (W4A4), roughly doubling dense throughput over FP8. Two design choices make 4-bit activations survivable: the small block limits how far one outlier distorts its neighbours, and a fractional FP8 scale fits each block more tightly than the power-of-two scale in MXFP4, the OCP microscaling format with 32-element blocks.
+
+When to use it: high-throughput serving on Blackwell or later, where prefill and batched decode are compute-bound and FP8 has become the ceiling. On Hopper there is no FP4 tensor-core path, so engines can only run FP4 weights through a weight-only dequantize path, and the compute benefit disappears.
+
+Validation is the senior half. Start from post-training calibration, run task evals (reasoning, code, long context) against an FP8 or BF16 baseline, and keep sensitive layers in higher precision, commonly the LM head, embeddings and some attention projections. If a gap persists, quantization-aware training or distillation into the FP4 model usually recovers more than further calibration tuning. Treat KV-cache precision as a separate decision with its own evals.
+
+**Follow-ups:** Why does a non-uniform floating-point grid suit weight distributions better than INT4's uniform grid? What would you measure to choose between FP8 and NVFP4 for a latency-sensitive chat product?
+
+</details>
+
 ## How to prepare
 
 Repo topics, in priority order for NVIDIA specifically:
@@ -297,7 +316,7 @@ Repo topics, in priority order for NVIDIA specifically:
 
 Company-specific moves:
 
-1. **Read the NVIDIA Technical Blog** ([developer.nvidia.com/blog](https://developer.nvidia.com/blog/)) - the TensorRT-LLM, Triton, and NIM posts are effectively the interview syllabus for inference roles, written by the teams that interview you.
+1. **Read the NVIDIA Technical Blog** ([developer.nvidia.com/blog](https://developer.nvidia.com/blog/)) - the TensorRT-LLM, Dynamo, and NIM posts are effectively the interview syllabus for inference roles, written by the teams that interview you.
 2. **Run the stack yourself.** Quantize and serve a Llama-class model with [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) (or vLLM for contrast) on any cloud GPU: build an engine, enable in-flight batching, measure tokens/sec at several batch sizes. "I benchmarked it" beats "I read about it" in every domain round.
 3. **Learn one GPU generation's numbers cold.** Pick H100 (or Blackwell): memory capacity, HBM bandwidth, FP16/FP8 tensor-core throughput, NVLink bandwidth - from the public architecture whitepapers. Most performance-math questions are unanswerable without these anchors, and knowing them signals you live in this world.
 4. **Refresh C++ and read some CUDA.** Even a weekend with a matrix-multiply kernel tutorial (tiling, shared memory, coalescing) covers the CUDA-literacy bar for most AI-application roles; DevTech/kernel roles need far more.
@@ -307,6 +326,7 @@ Compensation: no numbers here - see [levels.fyi](https://www.levels.fyi/companie
 
 ## Sources
 
+- [NVIDIA - How We Hire (official)](https://www.nvidia.com/en-eu/about-nvidia/careers/how-we-hire/) - in-person onsite required before a full-time offer, unapproved tools such as ChatGPT disqualify, phone then virtual or in-person interview stages
 - [Exponent - Get a Job at NVIDIA: Interview Process and Top Questions](https://www.tryexponent.com/blog/nvidia-interview-process) - loop stages, HackerRank screen format, final-round structure, core values
 - [Final Round AI - NVIDIA Interview Process 2026](https://www.finalroundai.com/blog/nvidia-interview-process) - timelines, AI/ML-specific focus areas (quantization, CUDA, distributed training), resume-screen priorities
 - [IGotAnOffer - NVIDIA Interview Process & Timeline](https://igotanoffer.com/en/advice/nvidia-interview-process) - six-step process overview, C++ emphasis (surfaced via search; page fetch blocked, claims cross-checked against other sources)
@@ -314,4 +334,6 @@ Compensation: no numbers here - see [levels.fyi](https://www.levels.fyi/companie
 - [NVIDIA Careers](https://jobs.nvidia.com/) - role titles and job-description requirements (TensorRT, PyTorch, CUDA, Triton)
 - [NVIDIA Technical Blog](https://developer.nvidia.com/blog/) - TensorRT-LLM, Triton, and NIM engineering posts underpinning the domain-focus claims
 - [TensorRT-LLM on GitHub](https://github.com/NVIDIA/TensorRT-LLM) - in-flight batching, paged KV cache, quantization feature set
+- [NVIDIA Dynamo on GitHub](https://github.com/ai-dynamo/dynamo) - disaggregated prefill/decode, KV-aware routing, orchestration above vLLM, SGLang and TensorRT-LLM
+- [NVIDIA Dynamo-Triton](https://developer.nvidia.com/dynamo-triton) - Triton Inference Server's current name and feature set
 - [levels.fyi - NVIDIA](https://www.levels.fyi/companies/nvidia) - compensation data

@@ -123,14 +123,15 @@ def understand(raw_query: str) -> Query:
 - Candidates: **HNSW** (great recall/latency, memory-hungry, costly deletes/rebuilds) vs **IVF-PQ/OPQ** (compact, fast bulk builds, slightly lower recall at same latency) vs **DiskANN-style** (SSD-resident, cheap at huge scale, higher tail latency). At 100M vectors with 2M daily updates and tight p95: a common pragmatic choice is **sharded HNSW with scalar/product quantization**, or IVF-PQ if memory dominates cost.
 - Memory math to say out loud (the point is showing you can do it):
 
-| Configuration | Vector storage | With HNSW graph (~1.5-2x) | Notes |
+| Configuration | Vector storage | Total index | Notes |
 |---|---|---|---|
-| 100M × 768d × fp32 | ~300GB | ~500GB+ | Naive baseline - don't |
-| 100M × 384d × fp16 | ~77GB | ~130-150GB | Reasonable |
-| 100M × 384d × int8 SQ | ~38GB | ~80-100GB | Common sweet spot; ~1-2% recall cost |
-| 100M × 384d PQ (64 bytes/vec) | ~6.4GB | ~20-30GB | IVF-PQ route; more recall loss, cheapest |
+| 100M × 768d × fp32 | ~300GB | ~330GB (HNSW) | Naive baseline - don't |
+| 100M × 384d × fp16 | ~77GB | ~95-110GB (HNSW) | Reasonable |
+| 100M × 384d × int8 SQ | ~38GB | ~55-70GB (HNSW) | Common sweet spot; ~1-2% recall cost |
+| 100M × 384d PQ (64 bytes/vec) | ~6.4GB | ~8-10GB (IVF-PQ, no graph) | More recall loss, cheapest; usually re-scored against full vectors kept on SSD |
 
-- Take the int8 row: ~100GB → **8-16 shards of 8-16GB**, replicated 3x for QPS and availability → ~30-50 serving nodes. Entirely feasible on commodity memory-optimised instances.
+- The HNSW graph is an additive cost, not a multiplier: layer 0 stores ~2M neighbour IDs per vector (4 bytes each), so M=16-32 adds ~13-26GB at 100M vectors regardless of dimensionality, plus small upper layers and IDs.
+- Take the int8 row: ~60-70GB, plus filterable metadata and ~30% headroom → plan for ~100GB → **~8-12 shards of ~8-12GB**, replicated 3x for QPS and availability → ~25-40 ANN serving nodes. Entirely feasible on commodity memory-optimised instances.
 - **Scatter-gather**: query fans out to all shards, each returns top-k, coordinator merges. Tail latency is governed by the slowest shard → hedge requests, tight per-shard timeouts, return-what-you-have on stragglers (slightly degraded recall beats a timeout).
 
 ```python
@@ -149,7 +150,8 @@ async def query_shard_hedged(shard, q, hedge_after_ms=20, timeout_ms=40):
 ### Reranker
 
 - Cross-encoder (query and item text jointly encoded) over the top ~100-200 fused candidates. Cross-encoders are far more accurate than bi-encoder similarity but O(candidates) model calls → only affordable post-retrieval.
-- Latency: a distilled ~100-400M-parameter reranker, batched on GPU, scores 200 pairs in ~20-30ms. Distill it from a large teacher (or an LLM judge) on your own click data.
+- Latency: a distilled ~30-150M-parameter reranker on short inputs (query + title + key attributes, ~64-128 tokens per pair), FP8/INT8, batched on GPU, scores 200 pairs in ~20-30ms. Model size is the fleet-size knob: at 5k QPS × 200 pairs = ~1M pairs/sec, a 400M model needs several times the GPUs of a 100M one. Distill it from a large teacher (or an LLM judge) on your own click data.
+- The reranked top ~200 lead the returned list; fused candidates ranked ~201-500 follow in RRF order, so the downstream ranker still sees the full candidate set.
 - ROI framing: reranking typically delivers the largest single offline-nDCG jump in the stack; if forced to cut scope in the interview, cut learned fusion, keep the reranker.
 - Cache reranked results for hot queries (again Zipf: high hit rates for head traffic) with short TTLs and availability-aware invalidation.
 
@@ -162,7 +164,7 @@ Two very different "refresh" problems - distinguish them explicitly:
 
 | Step | Action | Gate |
 |---|---|---|
-| 1 | Full re-embed of 100M items with v2 (a few GPU-days, parallelize to hours) | Vector-norm distributions sane vs v1 |
+| 1 | Full re-embed of 100M items with v2 (~10-30 GPU-hours for a sub-1B encoder, a few hundred for a 7B-class LLM embedder, parallelised to hours of wall-clock) | Vector-norm distributions sane vs v1 |
 | 2 | Build v2 index blue/green alongside v1 | ANN recall vs exact-KNN ≥ SLO |
 | 3 | Shadow: mirror 100% of queries to v2, log both result sets | Offline nDCG on judgement set ≥ v1 per segment |
 | 4 | Interleave v1/v2 on a traffic slice | Neutral-or-positive engagement |
@@ -199,7 +201,7 @@ Two very different "refresh" problems - distinguish them explicitly:
 
 **Online:**
 - Primary: add-to-cart per search, conversion per search session; secondary: CTR@k, zero-results rate, reformulation rate (quick re-query ≈ dissatisfaction), abandoned-search rate; guardrails: latency p95/p99, revenue per session.
-- **Interleaving** (team-draft) for sensitive ranking comparisons - orders of magnitude more statistically efficient than A/B for ranking changes; conventional A/B for anything touching latency or UI.
+- **Interleaving** (team-draft) for sensitive ranking comparisons - published results put it at roughly 10-100x more sample-efficient than A/B for detecting ranking preference; conventional A/B for anything touching latency or UI.
 - Long-term holdout (~1%) on the old system to measure cumulative drift and keep the offline suite honest.
 
 ## Cost estimate
@@ -208,13 +210,13 @@ Assumed ~prices, illustrative:
 
 | Item | Math | ~Cost |
 |---|---|---|
-| ANN + lexical serving | ~40-60 nodes (memory-optimised + some GPU for rerank/encode) | ~$40-70k/mo |
+| ANN + lexical serving | ~25-40 ANN nodes + a lexical cluster of similar size (memory-optimised) | ~$40-70k/mo |
 | Query embedding compute | 5k QPS peak, ~50% cache hit → small GPU/CPU fleet | ~$3-5k/mo |
-| Reranker GPUs | 5k QPS × 200 pairs, batched → ~10-20 inference GPUs | ~$15-30k/mo |
+| Reranker GPUs | 5k QPS × 200 pairs = ~1M pairs/sec at peak; ~100M-param model × ~64 tokens/pair ≈ 13 PFLOP/s → ~15-25 H100-class GPUs at FP8, fewer after result-cache hits | ~$20-35k/mo |
 | Continuous re-embedding | 2M items/day × ~200 tokens; self-hosted encoder | ~$1k/mo |
-| Full re-embed (episodic) | 100M × 200 tokens = 20B tokens; self-hosted ≈ few hundred GPU-hours, or API at ~$0.02-0.10/M | ~$400-2,000/event |
-| LLM catalog enrichment (one-time + deltas) | 100M items × ~1k tokens through a small model via batch API at ~$0.10/M in (batch discount) | ~$15-25k one-time; deltas negligible |
-| **Serving cost per query** | ~$100k/mo ÷ ~5B queries/mo | **~$0.00002/query** |
+| Full re-embed (episodic) | 100M × 200 tokens = 20B tokens; self-hosted ≈ tens of GPU-hours for a small encoder (hundreds for a 7B-class one), or API at ~$0.02-0.10/M | ~$50-100 self-hosted; ~$400-2,000/event via API |
+| LLM catalog enrichment (one-time + deltas) | 100M items × (~1k in + ~200 out) through a small model via batch API at ~$0.10/M in and ~$0.40/M out (batch discount): ~$10k + ~$8k | ~$15-25k one-time; deltas negligible |
+| **Serving cost per query** | ~$65-110k/mo (rows above) ÷ ~5B queries/mo (~2k QPS steady) | **~$0.00001-0.00002/query** |
 
 Two framing points: (1) unlike the generation-heavy case studies, cost here is **infra-shaped, not token-shaped** - capacity planning looks classic; (2) the episodic costs (re-embeds, enrichment) are noise next to serving, so never let "re-embedding is expensive" block an embedding-model upgrade that evals justify.
 
@@ -244,9 +246,10 @@ Two framing points: (1) unlike the generation-heavy case studies, cost here is *
 ## Likely interviewer follow-ups
 
 - *"Your p99 is 250ms but p95 is fine. Where do you look?"* (Scatter-gather stragglers: slowest-shard distribution, GC/compaction pauses on index nodes, hedging misconfigured, reranker batch queuing at peak. Fix order: hedged requests, partial-result merges, isolate compaction to replicas out of rotation.)
-- *"Why not just use one of the vector-DB SaaS products?"* (Fair at 1-10M vectors; at 100M × 5k QPS × sub-100ms with heavy filters and custom fusion/rerank, cost and control favor self-hosting - but I'd prototype on managed to validate quality first. Give the honest scale-dependent answer.)
+- *"Why not just use one of the vector-DB SaaS products?"* (Raw scale is no longer the argument: managed and serverless vector stores now serve 100M+ vector indexes, and object-storage-backed designs made large, rarely queried indexes cheap. The argument here is a sustained 5k QPS at p95 < 100ms with selective filters, custom fusion and an in-house reranker, where per-query pricing and limited control over tail latency and index lifecycle tend to favour self-hosting. I'd prototype on managed, benchmark filtered recall and p99 at real QPS, then decide on measured cost.)
 - *"How do you evaluate the tail where you have no clicks?"* (LLM-judge-scaled judgements calibrated on human labels, zero-results and reformulation-rate monitoring, targeted human eval on stratified tail samples, exploration traffic to gather signal.)
 - *"The embedding model upgrade improves nDCG +3% offline but interleaving is flat. Ship it?"* (Investigate segment mix first - offline suite may over-represent tail; check latency regression eating the quality gain; if truly flat online at equal cost, ship only if it unlocks something else, e.g. multilingual. Offline metrics are means, not ends.)
 - *"How would filters interact with HNSW exactly - what goes wrong?"* (Post-filtering: top-k shrinks after filter → recall collapse. In-traversal filtering: graph connectivity breaks under selective filters → traversal dead-ends; needs filter-aware algorithms, higher ef, or pre-partitioned indexes per coarse facet. This is a depth-check question - the failure mechanism is the answer.)
 - *"Personalised embeddings per user?"* (Not in retrieval v1: personalisation lives in the downstream ranker where it's cheaper and safer. Retrieval-layer personalisation - user-conditioned query embeddings - is a research-grade complexity jump; consider a user-segment feature in the reranker as middle ground.)
 - *"What breaks when marketing runs a Super Bowl ad?"* (10x query spike, head-heavy → caches absorb most of it - hit rate climbs during spikes; query-encoder fleet is the scaling pinch point; pre-scale on schedule, shed to lexical-only under extreme load, protect indexing pipeline from being starved by serving.)
+- *"Shopping assistants and other AI agents are now a meaningful share of your search traffic. What changes?"* (Query mix shifts to long, fully specified queries with many constraints, so attribute extraction into filters matters more and the query-embedding cache hit rate drops. Agents don't click, so click-trained rankers and CTR metrics degrade for that segment: identify agent traffic, exclude it from training logs, and measure it on task success instead, e.g. did the agent's session end in add-to-cart. Agents fan out many queries per task, so give them a separate quota and a structured API that returns attributes, price and availability directly rather than scraping the page. Also budget for one-shot consumers: an agent rarely paginates, so precision in the top few results counts for more than recall@100 on this segment.)

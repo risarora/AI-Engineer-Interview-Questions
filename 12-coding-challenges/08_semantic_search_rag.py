@@ -33,14 +33,18 @@ A strong solution demonstrates:
 - Determinism awareness: Python's built-in hash() is salted per process
   (PYTHONHASHSEED), so a stable hash (crc32/md5) is required.
 - top-k via argpartition (O(n)) before sorting only the k winners, rather
-  than a full O(n log n) argsort - the habit matters at 10M vectors.
+  than a full O(n log n) argsort. Brute force is fine to ~1M vectors; past
+  that, say you'd move to an ANN index (HNSW, IVF-PQ) and measure the recall
+  you trade for latency.
 - Clean separation of embed / index / prompt / eval, which mirrors how real
   RAG stacks are tested (retrieval metrics independent of generation).
 Common mistakes: normalizing after batching but not in embed(), recall@k
 computed per-doc instead of per-query, prompts that dump documents with no
 citation anchors, and dividing by zero when a query has no relevant docs.
 Follow-ups: add MMR re-ranking for diversity; swap recall@k for MRR/nDCG;
-add a keyword (BM25-ish) scorer and reciprocal-rank-fusion hybrid search.
+add a keyword (BM25-ish) scorer and reciprocal-rank-fusion hybrid search;
+rerank the top 50 with a cross-encoder; filter by metadata (tenant, ACL,
+date) before or during the vector search, not after.
 """
 
 import zlib
@@ -146,6 +150,17 @@ if __name__ == "__main__":
     assert results[0][1] > results[1][1]  # scores sorted descending
     assert index.search("what is retrieval augmented generation", k=2)[0][0] == 3
     assert index.search("rate limiting with token buckets", k=1)[0][0] == 2
+
+    # 2b. argpartition top-k agrees with a brute-force full sort, and adding
+    # docs in two batches is equivalent to adding them at once.
+    q = "model weights and loss"
+    brute = np.argsort(-(embedder.embed_batch(CORPUS) @ embedder.embed(q)))
+    assert [i for i, _ in index.search(q, k=3)] == [int(i) for i in brute[:3]]
+    split_index = VectorIndex(embedder)
+    split_index.add(CORPUS[:2])
+    split_index.add(CORPUS[2:])
+    assert split_index.search(q, k=5) == index.search(q, k=5)
+    assert VectorIndex(embedder).search(q) == []  # empty index
 
     # 3. Prompt assembly carries numbered citations and the query.
     top_docs = [CORPUS[i] for i, _ in results[:2]]

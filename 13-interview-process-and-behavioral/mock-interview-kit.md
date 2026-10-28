@@ -6,6 +6,8 @@ This kit removes the improvisation. Five rounds, one per stage of the loop descr
 
 Hand this file to a friend, a partner, or anyone who can hold a timer. They do not need to know what a KV cache is. If you have nobody, use the [self-mock protocol](#self-mock-protocol-no-partner) at the end.
 
+> **Want an experienced interviewer instead?** A friend with this script beats no mock at all, but an interviewer who knows what strong AI engineering answers sound like will catch things a script cannot. You can book a mock interview or a mentorship session at [enginebogie.com/u/om](https://enginebogie.com/u/om) or [topmate.io/ombharatiya](https://topmate.io/ombharatiya).
+
 ## For the interviewer: how to run a round
 
 You are not teaching. You are collecting evidence. The whole job is: read the script, start the clock, stay quiet, deliver the escalations on time, and score alone before you say anything nice.

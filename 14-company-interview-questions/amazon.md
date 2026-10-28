@@ -1,23 +1,23 @@
 # 📦 Amazon (AWS + AGI) - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **Leadership Principles are half the interview.** Every interviewer in the loop is assigned 2-3 of Amazon's 16 Leadership Principles and grades you against them with STAR-format behavioural questions. This is not a formality - candidates with strong technical rounds fail on weak LP stories. Prepare 8-10 quantified stories before you touch LeetCode.
 - **The Bar Raiser is real and has veto power.** One interviewer from outside the hiring team, specially trained, whose job is to keep the bar high. They ask the hardest behavioural questions and probe your STAR stories several "why" levels deep.
 - **The loop shape is well documented.** Recruiter screen → (sometimes) online assessment → 1-2 technical phone screens → 4-6 back-to-back ~60-minute interviews covering coding, (ML) system design, domain depth, and behavioural. Amazon publishes official prep pages for several tracks.
-- **"AI engineer" spans very different orgs.** AWS AI platform teams (Bedrock, SageMaker, Q) interview like senior SDE loops with an ML flavour; the AGI org (Nova models, AGI SF Lab agents) runs science-style loops with ML breadth/depth rounds and - per candidate reports - fewer behavioural questions and heavy modern-LLM content.
+- **"AI engineer" spans very different orgs.** AWS AI platform teams (Bedrock, SageMaker, Amazon Quick, Q Developer and Kiro) interview like senior SDE loops with an ML flavour; the AGI org (Nova models, AGI SF Lab agents) runs science-style loops with ML breadth/depth rounds and - per candidate reports - fewer behavioural questions and heavy modern-LLM content. The AGI org has been reshaped: since December 2025 it sits under Peter DeSantis alongside Amazon's custom silicon, and 2026 reports describe job cuts, a narrower Nova model roadmap, and the SF Lab's founding lead leaving. Confirm the team's current remit with your recruiter (reported, varies).
 - **Coding is still classic DS&A.** Unlike most frontier labs, Amazon keeps traditional algorithm rounds (graphs, heaps, design-a-cache) alongside ML content. System design is at genuine extreme scale: multi-tenancy, throttling, cell-based isolation, and operational excellence are native vocabulary.
-- **Know the AI-use rules for your loop.** Amazon has begun mixing an AI-assisted coding task into some online assessments (documented in its own newsroom), while treating unauthorised AI-generated code in evaluations as misrepresentation. AI is allowed only where candidate instructions explicitly permit it - read them carefully.
+- **Know the AI-use rules for your loop.** Amazon has begun mixing an AI-assisted coding task into some online assessments (documented in its own newsroom), while treating unauthorised AI-generated code in evaluations as misrepresentation. 2026 candidate reports describe one conventional problem followed by a repository task where you work from failing tests alongside a guard-railed AI assistant, while other candidates in the same season still got two conventional problems; live interview rounds remain no-AI (reported, varies). AI is allowed only where candidate instructions explicitly permit it - read them carefully.
 
 ## Company context
 
-Amazon runs two distinct AI bets: AWS sells the picks and shovels - Bedrock (multi-model inference platform), SageMaker, Amazon Q (enterprise/developer assistants), and Trainium silicon - while the AGI org builds Amazon's own frontier models (the Nova family) and agents (Nova Act, the AGI SF Lab founded around Adept's team). Engineers want in for scale you cannot get elsewhere - Bedrock serves foundation-model inference to a large share of the world's enterprises - and, on the AGI side, for a funded frontier-model effort with its own silicon. "AI engineer" at Amazon therefore means anything from multi-tenant GPU serving infrastructure, to applied GenAI teams embedding LLMs in every product org (search, ads, Alexa+, Rufus), to research engineering on pretraining and agents.
+Amazon runs two distinct AI bets: AWS sells the picks and shovels - Bedrock (multi-model inference platform), SageMaker, Amazon Quick (the agentic workplace assistant that succeeded Q Business, which closed to new customers at the end of July 2026), Q Developer and the Kiro agentic IDE, and Trainium silicon - while the AGI org builds Amazon's own models (the Nova family) and agents (Nova Act, the AGI SF Lab founded around Adept's team). Since a December 2025 reorganisation, the AGI org, Nova, and custom silicon (Trainium, Graviton, Nitro) report to Peter DeSantis, which pulls model work closer to the hardware teams. Engineers want in for scale you cannot get elsewhere - Bedrock serves foundation-model inference to a large share of the world's enterprises - and, on the AGI side, for a funded frontier-model effort with its own silicon. "AI engineer" at Amazon therefore means anything from multi-tenant GPU serving infrastructure, to applied GenAI teams embedding LLMs in every product org (search, ads, Alexa+, Rufus), to research engineering on pretraining and agents.
 
 ## Roles & titles they hire
 
-- **Software Development Engineer (SDE I/II/III)** - on Bedrock, SageMaker, Q, and GenAI feature teams; the most common door into AI work at Amazon
+- **Software Development Engineer (SDE I/II/III)** - on Bedrock, SageMaker, Quick, Q Developer/Kiro, and GenAI feature teams; the most common door into AI work at Amazon
 - **Applied Scientist / Senior Applied Scientist** - science track; official interview-prep page exists; heavy ML breadth/depth
 - **Machine Learning Engineer / ML Ops Engineer** - productionising models, more common in product orgs
 - **Research Scientist / Research Engineer (AGI, AGI SF Lab)** - frontier model training and agents; the SF Lab publicly recruits strong quantitative people from any discipline
@@ -31,7 +31,7 @@ Public confidence here is high: Amazon documents its process (including official
 | Stage | Format | What's evaluated |
 |---|---|---|
 | Recruiter screen | 15-30 min | Fit, level calibration, timeline |
-| Online assessment | Coding tasks + work-style simulation; mainly SDE-track and junior roles. Some SDE/MLE assessments now include an AI-assisted task: work in a small repository alongside an interactive AI assistant instead of a second standalone algorithm problem (rollout reported as uneven by team) | DS&A correctness, LP-aligned judgement; on the AI-assisted variant, how you direct and verify the assistant |
+| Online assessment | Coding tasks + work-style simulation; mainly SDE-track and junior roles. Some SDE/MLE assessments now include an AI-assisted task: work in a small repository, typically starting from failing tests, alongside an interactive AI assistant instead of a second standalone algorithm problem (rollout reported as uneven by team, still seen in 2026 reports) | DS&A correctness, LP-aligned judgement; on the AI-assisted variant, how you direct and verify the assistant |
 | Technical phone screen(s) | 1-2 × ~60 min, shared editor; for Applied Scientist, with a senior scientist/leader (official) | Coding, ML fundamentals (metrics, evaluation), 1-2 LP questions |
 | Onsite "loop" | 4-6 × 55-60 min back-to-back, virtual or in person; 4 interviews is the official applied-scientist shape | See below - every round includes assigned Leadership Principles |
 | - Coding round(s) | 1-2 rounds, classic DS&A; AGI loops add ML coding (implement a model component) (reported, varies) | Working code, complexity analysis, testing instincts |
@@ -97,7 +97,7 @@ Tradeoffs to name: batching raises throughput but hurts tail latency for streami
 
 </details>
 
-### 3. Design an enterprise assistant that answers questions over a company's internal documents, respecting per-user permissions (Amazon Q-shaped).
+### 3. Design an enterprise assistant that answers questions over a company's internal documents, respecting per-user permissions (Amazon Q Business / Quick-shaped).
 
 <details><summary><b>Answer</b></summary>
 
@@ -154,7 +154,7 @@ class TopK:
         return row[idx]
 ```
 
-Properties worth stating: CMS never undercounts, only overcounts - with width w and depth d, error ≤ n/w with probability 1 − (1/2)^d roughly, so memory is a tunable accuracy knob. For distributed streams, CMS sketches merge by element-wise addition, so each shard sketches locally and a reducer merges - this is what makes it production-viable.
+Properties worth stating: CMS never undercounts, only overcounts. In one row the expected overcount is at most n/w, so by Markov's inequality the min over d rows is within 2n/w with probability at least 1 − (1/2)^d. The textbook form: width ⌈e/ε⌉ and depth ⌈ln(1/δ)⌉ give error ≤ εn with probability 1 − δ, so memory is a tunable accuracy knob. For distributed streams, CMS sketches merge by element-wise addition, so each shard sketches locally and a reducer merges - this is what makes it production-viable.
 
 **Follow-ups:** How do you get top-K over a sliding 5-minute window? When would you just use exact counting sharded over hosts instead?
 
@@ -305,7 +305,7 @@ Ordered by typical impact:
 1. **Right-size the model per task.** Most traffic in a real workload is easy. Route with a cheap classifier or confidence signal: small model (a Haiku/Nova-Lite-class option) for the bulk, large model for the hard tail. This alone is often a multiple-x cost cut. Requires an eval set to prove quality holds - routing without evals is guessing.
 2. **Attack input tokens.** Prompts accrete cruft: trim the system prompt, deduplicate few-shot examples, cap retrieved chunks by relevance instead of a fixed k. Prompt caching makes repeated prefixes (long system prompts, shared documents) dramatically cheaper - restructure prompts so the static part is a stable prefix.
 3. **Cap and shorten outputs.** Output tokens cost more than input; set max-token limits, ask for terse formats (JSON, not prose), stop sequences.
-4. **Batch the asynchronous work.** Anything not latency-sensitive (nightly summarisation, backfills) moves to batch processing at discounted, off-peak pricing.
+4. **Batch the asynchronous work.** Anything not latency-sensitive (nightly summarisation, backfills) moves to batch inference, which Bedrock prices at a discount to on-demand for supported models.
 5. **Distill or fine-tune small.** If one high-volume task dominates, fine-tune a small model on the large model's outputs for that task - highest effort, biggest durable win.
 6. **Semantic caching** for genuinely repeated queries - measure the real hit rate first; it's often lower than hoped.
 
@@ -334,11 +334,31 @@ What gets probed: whether you take real ownership (blaming a teammate or "the pr
 
 </details>
 
+### 13. You get a small repository, a set of failing tests, and an AI assistant with guardrails. Walk me through how you work, and how you know the fix is right.
+
+<details><summary><b>Answer</b></summary>
+
+Treat the assistant as a fast, unreliable collaborator: useful for reading and drafting, never the authority on correctness. What is being assessed is how you direct and verify it, not how much code it produces.
+
+A workflow that holds up:
+
+1. **Read before prompting.** Run the tests yourself, read the failures, and skim the modules they touch. Form your own hypothesis about the bug first. Pasting the failure straight into the assistant hands over the one judgement being measured.
+2. **Ask narrow questions.** "What does `parse_window` return when end equals start?" is answerable and checkable. "Fix the tests" invites a patch that special-cases the test inputs, the classic failure where the suite goes green and the behaviour is still wrong.
+3. **Review every diff as if a stranger wrote it.** Is the change in the right layer? Did it weaken an assertion, delete a test, or swallow an exception? Any line you cannot explain yourself, ask the assistant to justify, then check the justification against the code.
+4. **Verify beyond the given tests.** Add one or two cases of your own around the boundary the bug lived on, run the full suite rather than the failing subset, and confirm nothing nearby regressed.
+5. **Leave a trail.** If the task asks for a summary or notes, state the root cause, what you accepted from the assistant, and what you rejected and why. This is Dive Deep in practice: the reviewer wants evidence you understood the cause, not just that the tests pass.
+
+Common ways to fail: accepting a confident but wrong explanation, letting the assistant rewrite unrelated code, burning time on prompt iteration instead of reading the code, and finishing with green tests you cannot explain.
+
+**Follow-ups:** The assistant's fix passes every test but you believe it is wrong, with ten minutes left. What do you do? If you were designing this assessment, how would you stop a candidate passing by letting the assistant drive?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo, given Amazon's loop shape:
 
-- **[11-ai-system-design](../11-ai-system-design/)** - the highest-leverage dir. AWS design rounds are extreme-scale and multi-tenant by default; practise saying "control plane vs data plane," "cell-based isolation," "throttling and admission control" naturally. Closest case study: **[01-enterprise-rag-assistant](../11-ai-system-design/case-studies/01-enterprise-rag-assistant.md)** (this is Amazon Q Business almost exactly - permissions-aware enterprise RAG); also do **[02-ai-code-assistant](../11-ai-system-design/case-studies/02-ai-code-assistant.md)** if you're targeting Q Developer.
+- **[11-ai-system-design](../11-ai-system-design/)** - the highest-leverage dir. AWS design rounds are extreme-scale and multi-tenant by default; practise saying "control plane vs data plane," "cell-based isolation," "throttling and admission control" naturally. Closest case study: **[01-enterprise-rag-assistant](../11-ai-system-design/case-studies/01-enterprise-rag-assistant.md)** (this is Amazon Q Business, now succeeded by Amazon Quick, almost exactly - permissions-aware enterprise RAG); also do **[02-ai-code-assistant](../11-ai-system-design/case-studies/02-ai-code-assistant.md)** if you're targeting Q Developer or Kiro.
 - **[12-coding-challenges](../12-coding-challenges/)** - Amazon keeps classic DS&A rounds more than any frontier lab. Heaps, graphs, design-a-cache, streaming problems.
 - **[01-ml-and-dl-foundations](../01-ml-and-dl-foundations/)** + **[02-llm-fundamentals](../02-llm-fundamentals/)** - the ML breadth round is a real filter, and AGI loops go deep on attention, KV caching, training techniques, and evaluation metrics.
 - **[08-inference-and-production](../08-inference-and-production/)** - batching, KV-cache memory, quantization, latency decomposition. This is AWS's home turf; shallow answers here hurt more than anywhere else.
@@ -350,7 +370,7 @@ Company-specific moves:
 1. **Write your LP stories first.** 8-10 STAR stories, quantified, first-person, covering at minimum: Customer Obsession, Ownership, Dive Deep, Invent and Simplify, Have Backbone/Disagree and Commit, Deliver Results, and a genuine failure. Practise them aloud - Bar Raiser follow-ups destroy stories you've only written down.
 2. **Build something small on Bedrock.** A weekend RAG or agent project using Knowledge Bases and Guardrails teaches you the platform's real seams (provisioned vs on-demand throughput, model routing, guardrail layering) - exactly the vocabulary of their design rounds.
 3. **Read the official prep pages** for your track on amazon.jobs ("how we hire," the applied-scientist interview-prep page) - Amazon is unusually explicit about what it grades.
-4. **Skim the AWS Machine Learning Blog and Amazon Science blog** for posts from your target team (Bedrock, Q, Nova, AGI SF Lab) - referencing their actual architecture posts lands well and generates good questions for you to ask.
+4. **Skim the AWS Machine Learning Blog and Amazon Science blog** for posts from your target team (Bedrock, Quick, Kiro, Nova, AGI SF Lab) - referencing their actual architecture posts lands well and generates good questions for you to ask.
 5. **For AGI-org loops:** weight prep toward ML depth - modern training techniques, distributed training, data curation, eval design - and expect fewer behavioural questions than a standard Amazon loop (per candidate reports; still prepare LP stories).
 
 Compensation data for Amazon is on [levels.fyi](https://www.levels.fyi/companies/amazon/salaries).
@@ -367,4 +387,10 @@ Compensation data for Amazon is on [levels.fyi](https://www.levels.fyi/companies
 - [IGotAnOffer: Amazon Machine Learning Engineer interview](https://igotanoffer.com/blogs/tech/amazon-machine-learning-engineer-interview) - MLE loop structure (surfaced in search; page body not fully retrievable at review time)
 - Publicly shared candidate reports on 1Point3Acres (e.g., [AGI ML onsite](https://www.1point3acres.com/interview/thread/1151585), [AGI SF Lab ML coding and design](https://www.1point3acres.com/interview/thread/1148854)) - AGI loop shape: coding, ML breadth/depth, science application; heavier LLM-training content, lighter behavioural (reported)
 - [About Amazon - How Amazon is using AI in hiring](https://www.aboutamazon.com/news/workplace/artificial-intelligence-resume-jobs-hiring-amazon) - official newsroom coverage of AI-assisted assessment elements
+- [techinterview.org - AI tool policy tracker (2026)](https://www.techinterview.org/post/3233474911/ai-tool-policy-tracker-tech-companies-2026/) - third-party tracker; Amazon live rounds no-AI, selected SDE assessments pairing a conventional problem with an AI-assisted repository task
+- [PracHub - Amazon SDE interview: AI coding assessment](https://prachub.com/interview-experiences/amazon-software-engineer-interview-ai-coding-assessment-5391adddda) - single candidate report of the repository-plus-failing-tests AI task
+- [AWS docs - Amazon Q Business availability change](https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/qbusiness-availability-change.html) - official; Q Business closed to new customers from 31 July 2026, Amazon Quick recommended as successor
+- [The Register - Jassy taps Peter DeSantis to run AGI org (December 2025)](https://www.theregister.com/2025/12/17/jassy_taps_peter_desantis_to_run_agi/) - AGI, Nova, and custom silicon combined under one leader
+- [GeekWire - Head of Amazon's AGI lab is leaving (2026)](https://www.geekwire.com/2026/head-of-amazons-agi-lab-is-leaving-in-latest-exit-from-high-profile-adept-deal/) - AGI SF Lab leadership change (surfaced via search)
+- [Neowin - Amazon reportedly winds down most Nova models in AGI strategy overhaul](https://www.neowin.net/news/amazon-reportedly-winds-down-most-nova-models-in-major-agi-strategy-overhaul/) - reported Nova roadmap narrowing and AGI-group cuts; Nova 2 Lite, Nova 2 Sonic, Nova Forge, and Nova Act stay available (surfaced via search)
 - [levels.fyi: Amazon](https://www.levels.fyi/companies/amazon/salaries) - compensation data

@@ -1,18 +1,19 @@
 # ☁️ Qwen (Alibaba) - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - Qwen (Tongyi Qianwen) is built by **Tongyi Lab inside Alibaba Cloud**, so the loop is a **big-tech loop plus model-depth rounds**: an online assessment and algorithmic coding rounds like any large-company software role, then deeper rounds on LLM internals for the Qwen/Tongyi org specifically.
 - Company-specific interview detail is **thin publicly** - the general Alibaba process is reasonably documented (OA, resume screen, two to three technical rounds, a hiring-manager round, an HR round), but Tongyi-Lab-specific stages are inference from the category. Everything process-related below is marked accordingly.
-- Expect to be probed on **what Qwen actually ships**: byte-level multilingual tokenization, GQA and KV-cache economics, dense-vs-MoE architecture choices, hybrid thinking modes with a thinking budget, training-free long-context extension (YaRN + Dual Chunk Attention), and code/maths reasoning.
+- **The team was reorganised in 2026.** Long-time tech lead Junyang Lin stepped down in March 2026, and Alibaba Cloud reportedly split Qwen into more independent horizontal teams (pre-training, post-training, text, image, voice). Expect team matching to map to those units and ask which one you are interviewing for (reported, varies).
+- Expect to be probed on **what Qwen actually ships**: byte-level multilingual tokenization, GQA and KV-cache economics, dense-vs-MoE architecture choices, hybrid linear attention (Qwen3.5's Gated DeltaNet layers), hybrid thinking modes with a thinking budget, long-context extension (YaRN + Dual Chunk Attention), and code/maths reasoning.
 - Two flavours of role: **research/algorithm** (foundation-model pretraining, post-training/RL, multimodal, evaluation) and **applied/infra** (large-scale training and serving systems, Alibaba Cloud Model Studio / DashScope productisation). Both sit inside a large-company loop.
-- Open-weights conviction matters here: Qwen is one of the most-downloaded open model families in the world. Have a real opinion on **why an at-scale cloud business ships Apache-2.0 weights**, and be fluent in Chinese-plus-multilingual and coding/maths performance as first-class product goals.
+- Open-weights conviction matters here: Qwen is one of the most-downloaded open model families in the world. Have a real opinion on **why an at-scale cloud business ships Apache-2.0 weights** while keeping its top Plus/Max tier API-only, and be fluent in Chinese-plus-multilingual and coding/maths performance as first-class product goals.
 
 ## Company context
 
-Qwen (Tongyi Qianwen) is the large-language-model family built by Tongyi Lab, Alibaba Cloud's foundation-model group. The team ships on a fast open-weight cadence that regularly tops open leaderboards: the Qwen2.5 and Qwen3 general models, Qwen2.5-Coder for code, the Qwen-VL / Qwen2.5-VL vision-language line, and reasoning variants (QwQ and Qwen3's thinking mode), with strong multilingual (especially Chinese), coding, and maths performance. The models back Alibaba Cloud products (Model Studio / DashScope APIs, the Tongyi app) and a huge external developer ecosystem via Hugging Face and ModelScope. "AI engineer" here spans two worlds: an algorithm/research engineer close to pretraining, post-training RL, or multimodal work, and an applied/systems engineer owning training infrastructure, inference serving, and the cloud APIs that expose the models. Because the employer is Alibaba, a large-company hiring machine sits underneath the model-depth expectations.
+Qwen (Tongyi Qianwen) is the large-language-model family built by Tongyi Lab, Alibaba Cloud's foundation-model group. The team ships on a fast open-weight cadence that regularly tops open leaderboards: the Qwen2.5 and Qwen3 general models, Qwen2.5-Coder for code, the Qwen-VL / Qwen2.5-VL vision-language line, and reasoning variants (QwQ and Qwen3's thinking mode), with strong multilingual (especially Chinese), coding, and maths performance. In 2026 the line moved on: **Qwen3.5** (February-March 2026) is natively multimodal and uses a hybrid Gated DeltaNet + gated-attention MoE stack (flagship 397B total, ~17B active, 262K native context), and **Qwen3.6** (April 2026) added open-weight 35B-A3B and dense 27B models aimed at agentic coding, while the Plus and Max-Preview tiers stay API-only. The models back Alibaba Cloud products (Model Studio / DashScope APIs, the Tongyi app) and a huge external developer ecosystem via Hugging Face and ModelScope. "AI engineer" here spans two worlds: an algorithm/research engineer close to pretraining, post-training RL, or multimodal work, and an applied/systems engineer owning training infrastructure, inference serving, and the cloud APIs that expose the models. Because the employer is Alibaba, a large-company hiring machine sits underneath the model-depth expectations.
 
 ## Roles & titles they hire
 
@@ -46,8 +47,8 @@ Number of rounds and their order shift by track (campus vs experienced), team, a
 
 ## What they emphasise
 
-- **Model internals as shipped, not as taught.** Qwen's public differentiation is concrete: GQA, a ~151K multilingual byte-level BPE vocab, dense and MoE variants, hybrid thinking with a thinking budget, and training-free long-context extension. Expect "explain why Qwen did X" rather than textbook definitions.
-- **Multilingual and Chinese-first thinking.** Tokenizer design, script coverage, and cross-lingual transfer are product concerns, not trivia. Qwen3 expanded language coverage substantially over Qwen2.5.
+- **Model internals as shipped, not as taught.** Qwen's public differentiation is concrete: GQA, a large multilingual byte-level BPE vocab (~151K through Qwen3, ~250K in Qwen3.5), dense and MoE variants, hybrid linear attention, hybrid thinking with a thinking budget, and training-free long-context extension. Expect "explain why Qwen did X" rather than textbook definitions.
+- **Multilingual and Chinese-first thinking.** Tokenizer design, script coverage, and cross-lingual transfer are product concerns, not trivia. Qwen3 expanded language coverage substantially over Qwen2.5 (119 languages), and Qwen3.5 pushed it to 201 languages and dialects.
 - **Coding and maths reasoning.** Qwen2.5-Coder and the reasoning line are flagship efforts. Repo-level code training, fill-in-the-middle, and verifiable-reward RL for maths/code are fair game.
 - **Efficiency and serving economics.** As a cloud business, cost per token matters: KV-cache math, MoE active-vs-total parameters, quantization, and long-context memory show up because they are Alibaba Cloud's bill.
 - **Open-weight strategy and evaluation trust.** Shipping Apache-2.0 weights that top leaderboards raises the bar on honest evaluation (contamination control) and on articulating the business logic of open releases.
@@ -57,7 +58,7 @@ Number of rounds and their order shift by track (campus vs experienced), team, a
 
 *Representative questions synthesised from this company's publicly known focus areas and role descriptions - not leaked questions.*
 
-### 1. Qwen uses a byte-level BPE tokenizer with a vocabulary around 151K, augmented for multilingual coverage and with digits split into single characters. Why those choices for a multilingual, maths-capable model, and what are the tradeoffs?
+### 1. Through Qwen3, Qwen used a byte-level BPE tokenizer with a vocabulary around 151K, augmented for multilingual coverage and with digits split into single characters. Why those choices for a multilingual, maths-capable model, and what are the tradeoffs?
 
 <details><summary><b>Answer</b></summary>
 
@@ -65,7 +66,7 @@ Start with the goal: one tokenizer that compresses Chinese, English, and dozens 
 
 **Digit splitting** (each digit its own token) is a deliberate maths choice. If "1234" is one merged token, the model has to memorise arithmetic on opaque chunks; splitting into `1 2 3 4` exposes place value consistently, so carrying and long addition generalise far better. It costs a few extra tokens on numbers, which is a cheap price.
 
-Tradeoffs: a large vocab inflates the embedding and output-projection matrices (vocab x hidden), which grows parameters and the softmax cost, and it needs enough multilingual data so rare tokens are actually trained. Byte fallback can fragment a rare script into many byte tokens, hurting compression for the least-resourced languages. From Qwen2.5 onward the family moved to a **unified vocabulary** shared across text, code, and multimodal subfamilies, which simplifies serving and lets special tokens (roles, tool calls, FIM markers) live in one namespace.
+Tradeoffs: a large vocab inflates the embedding and output-projection matrices (vocab x hidden), which grows parameters and the softmax cost, and it needs enough multilingual data so rare tokens are actually trained. Byte fallback can fragment a rare script into many byte tokens, hurting compression for the least-resourced languages. From Qwen2.5 onward the family moved to a **unified vocabulary** shared across text, code, and multimodal subfamilies, which simplifies serving and lets special tokens (roles, tool calls, FIM markers) live in one namespace. Qwen3.5 pushed the same tradeoff further: roughly 250K tokens (248,320 padded) to cover 201 languages and dialects, buying compression for more scripts at the price of bigger embedding and output matrices.
 
 **Follow-ups:** How would you measure whether the tokenizer is fair across languages? Why does adding a new language after pretraining rarely mean just retraining the tokenizer?
 
@@ -79,13 +80,13 @@ The product goal is one checkpoint that can do fast, cheap answers for easy quer
 
 Serving: expose the mode as a flag plus a **thinking budget** (a token cap on the internal reasoning, reported up to tens of thousands of tokens). When the budget is small or zero, the model skips or truncates the thinking span and answers directly; when it is large, it can reason further before the answer. Practically the reasoning tokens sit between control markers so you can bill or hide them, and you can route by difficulty: cheap classifier or heuristics decide whether to spend budget at all.
 
-The hard part is not regressing the fast path. Fusing a heavy-reasoning model with a terse one risks the model over-thinking trivial prompts (latency and cost blow up) or leaking reasoning style into simple answers. That is exactly why a later general-RL stage and careful mode gating exist. Alibaba publicly noted the unified toggle had rough edges, which is a useful, honest thing to be able to discuss.
+The hard part is not regressing the fast path. Fusing a heavy-reasoning model with a terse one risks the model over-thinking trivial prompts (latency and cost blow up) or leaking reasoning style into simple answers. That is exactly why a later general-RL stage and careful mode gating exist. Alibaba publicly noted the unified toggle had rough edges, and the mid-2025 Qwen3-2507 refresh shipped separate Instruct and Thinking checkpoints instead; Qwen3.5 then returned to one model that thinks by default with an `enable_thinking` switch. That back-and-forth is a useful, honest thing to be able to discuss.
 
 **Follow-ups:** How would you stop the model from "thinking" on trivial prompts? How do you evaluate whether extra budget actually buys accuracy rather than just tokens?
 
 </details>
 
-### 3. Qwen moved from dense-only to shipping both dense and MoE models (for example a 30B model with ~3B active parameters, and a 235B model with ~22B active). Explain the tradeoff, and when you would pick the 30B-A3B MoE over a 32B dense.
+### 3. Qwen ships both dense and MoE models (for example Qwen3's 30B model with ~3B active parameters, and a 235B model with ~22B active). Explain the tradeoff, and when you would pick the 30B-A3B MoE over a 32B dense.
 
 <details><summary><b>Answer</b></summary>
 
@@ -305,6 +306,22 @@ For the ownership half, use STAR and pick a real story where the requirements we
 
 </details>
 
+### 13. Qwen3.5 interleaves Gated DeltaNet linear-attention layers with full gated-attention layers at about 3:1. Why build a hybrid, and what does it change for long-context serving?
+
+<details><summary><b>Answer</b></summary>
+
+Full softmax attention is the expensive part at long context: prefill compute grows quadratically and the KV cache grows with every token at every layer. Linear-attention layers keep a fixed-size state instead. A hybrid lets the cheap layers do most of the sequence mixing and keeps a minority of full-attention layers for precise recall over the whole context.
+
+**How Gated DeltaNet works.** Each head maintains a matrix-valued state rather than a cache of all past keys and values. The delta rule updates it like online regression: read what the state currently predicts for the new key, then write a correction toward the new value, scaled by a learned rate. A learned gate decays the state so the layer can forget stale content. Memory and per-token decode cost are constant in sequence length, and chunked parallel forms keep training efficient on GPUs.
+
+**Why not all linear.** A fixed-size state is lossy compression. Exact retrieval of one specific token far back (a name, a number, a needle) is where pure linear models fall down. One full-attention layer every few blocks restores that. The model card layout is 15 repeats of (3 Gated DeltaNet + 1 gated attention), each followed by an MoE layer.
+
+**Serving consequences.** Only about a quarter of the layers hold a KV cache, so long-context memory drops roughly 4x against an all-attention stack of the same depth, which is what makes a 262K native context practical. The engine now manages two kinds of state: paged KV blocks for attention layers and recurrent states for DeltaNet layers. Prefix caching gets harder because a recurrent state is a snapshot at one position, not blocks you can share at any prefix boundary, so engines checkpoint states at chunk boundaries. Speculative decoding needs state rollback when draft tokens are rejected, and kernels are less mature than FlashAttention.
+
+**Follow-ups:** How would you show the hybrid has not lost long-range recall relative to a full-attention baseline? How would you implement prefix caching when a quarter of your layers hold KV and the rest hold recurrent state?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
@@ -319,7 +336,7 @@ Priority order for this repo's topics:
 
 Company-specific moves:
 
-- **Read the Qwen technical reports** (Qwen2, Qwen2.5, Qwen3, Qwen2.5-Coder, Qwen2.5-VL, and the Qwen2.5-1M long-context report, all on arXiv). Being fluent in their specific choices - 151K multilingual tokenizer, GQA, hybrid thinking, four-stage post-training, YaRN + DCA, repo-level FIM - covers a large fraction of any model-depth round.
+- **Read the Qwen technical reports** (Qwen2, Qwen2.5, Qwen3, Qwen2.5-Coder, Qwen2.5-VL, and the Qwen2.5-1M long-context report, all on arXiv), then the Qwen3.5 and Qwen3.6 model cards for the hybrid-attention and agentic-coding changes. Being fluent in their specific choices - 151K multilingual tokenizer, GQA, hybrid thinking, four-stage post-training, YaRN + DCA, repo-level FIM - covers a large fraction of any model-depth round.
 - **Actually run a Qwen model** from Hugging Face or ModelScope: quantize it, serve it (vLLM), try thinking vs non-thinking mode and the thinking budget, and use Qwen2.5-Coder for FIM completion. Hands-on beats book knowledge in a lab that ships weights.
 - **Use the products**: Alibaba Cloud Model Studio / DashScope APIs and the Tongyi app, so you can speak to the productisation side.
 - **Prepare the big-tech behavioural round** with STAR stories on ownership, cross-team collaboration, and incident response, and have a crisp view on the open-weights-plus-cloud business strategy.
@@ -335,6 +352,9 @@ Company-specific moves:
 - [Qwen2.5-Coder Technical Report (arXiv)](https://arxiv.org/abs/2409.12186) - file-level vs repo-level FIM, special tokens
 - [Qwen2.5-VL Technical Report (arXiv)](https://arxiv.org/abs/2502.13923) - native dynamic-resolution ViT, window attention, MRoPE
 - [Qwen documentation - key concepts](https://qwen.readthedocs.io/en/latest/getting_started/concepts.html) - tokenizer vocabulary and unified-vocab details
+- [Qwen3.5-397B-A17B model card (Hugging Face)](https://huggingface.co/Qwen/Qwen3.5-397B-A17B) - hybrid Gated DeltaNet + gated attention layout, 512-expert MoE, ~250K vocab, 201 languages, 262K native context, thinking-by-default
+- [Qwen3.6-35B-A3B release coverage (NYU Shanghai RITS)](https://rits.shanghai.nyu.edu/ai/qwen3-6-35b-a3b-alibaba-open-sources-a-frontier-class-agentic-coder/) and [Qwen3.6-Max-Preview (DataNorth)](https://datanorth.ai/news/alibaba-releases-qwen3-6-max-preview) - April 2026 open-weight and API-only releases
+- [TechNode: Qwen technical lead Lin Junyang leaves Alibaba (March 2026)](https://technode.com/2026/03/04/qwen-technical-lead-lin-junyang-leaves-alibaba-sources-say/) - leadership change and reported team restructuring
 - [SCMP: inside Tongyi Lab](https://www.scmp.com/tech/big-tech/article/3330653/meet-young-talent-scaling-alibabas-ai-future-tongyi-lab-developer-qwen-models) - team context and open-source strategy
 - [Alibaba Software Engineer interview guide (Interview Query)](https://www.interviewquery.com/interview-guides/alibaba-software-engineer) and [Glassdoor Alibaba interviews](https://www.glassdoor.com/Interview/Alibaba-Group-Software-Engineer-Interview-Questions-EI_IE225974.0,13_KO14,31.htm) - general Alibaba loop (OA, coding rounds, HM and HR rounds); not Tongyi/Qwen-specific
 

@@ -1,6 +1,6 @@
 # Agents, Tool Use & MCP - Interview Questions
 
-60 questions: 14 basic, 24 intermediate, 22 advanced.
+65 questions: 15 basic, 26 intermediate, 24 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -224,7 +224,7 @@ flowchart LR
 
 <details><summary><b>Answer</b></summary>
 
-MCP (Model Context Protocol) is an open standard - released by Anthropic in November 2024 and since adopted broadly across the industry - that standardises how LLM applications connect to external tools and data sources.
+MCP (Model Context Protocol) is an open standard - released by Anthropic in November 2024, donated to the Linux Foundation's Agentic AI Foundation in December 2025, and adopted broadly across the industry - that standardises how LLM applications connect to external tools and data sources.
 
 The problem is the **N×M integration matrix**. Before MCP, every LLM app (Claude Desktop, an IDE, your internal chatbot) needed bespoke glue for every integration (GitHub, Postgres, Slack, Jira...): N hosts × M integrations = N×M adapters, each with its own auth handling, schemas, and maintenance. MCP turns that into **N+M**: an integration author builds one MCP *server*; any MCP-capable *host* can use it unchanged. The standard analogy is USB-C for AI applications - one connector, many peripherals.
 
@@ -266,9 +266,9 @@ The tools/resources/prompts split is a deliberate control hierarchy - model-chos
 
 **Client-side primitives** (what a server can ask of the host):
 
-- **Sampling** - the server requests an LLM completion through the host, so servers can use model intelligence without holding API keys (host/user keeps approval control).
-- **Roots** - the host tells the server which filesystem locations it may operate in.
-- **Elicitation** (added in the 2025 spec revisions) - the server asks the host to collect input from the user mid-operation.
+- **Sampling** - the server requests an LLM completion through the host, so servers can use model intelligence without holding API keys (host/user keeps approval control). Deprecated in the 2026-07-28 revision: servers are now expected to call model APIs directly.
+- **Roots** - the host tells the server which filesystem locations it may operate in. Also deprecated in 2026-07-28, in favour of paths passed as tool parameters, resource URIs or server configuration.
+- **Elicitation** (added in the 2025 spec revisions) - the server asks the host to collect input from the user mid-operation. In 2026-07-28 it survives as a multi round-trip request: the server returns an input-required result, and the client re-issues the original call with the user's answers attached.
 
 **Transports:** **stdio** - the host spawns the server as a subprocess and speaks over stdin/stdout; simplest, local-only, inherits local privileges. **Streamable HTTP** - a single HTTP endpoint with optional SSE streaming for remote/shared servers with real auth; it replaced the older HTTP+SSE two-endpoint transport in the 2025-03-26 spec revision.
 
@@ -280,7 +280,7 @@ flowchart LR
     A --> C["Client 2"]
     B -->|"JSON-RPC 2.0 over stdio"| D["Server: filesystem<br/>tools, resources, prompts"]
     C -->|"JSON-RPC 2.0 over HTTP"| E["Server: GitHub"]
-    E -->|"sampling, elicitation, roots"| A
+    E -->|"elicitation, only mid-request"| A
 ```
 
 **Follow-ups:** Why does sampling route through the host instead of the server calling a model API directly? When would you expose data as a resource instead of a "search" tool?
@@ -293,7 +293,7 @@ flowchart LR
 
 ReAct (Yao et al., 2022 - "Synergizing Reasoning and Acting in Language Models") is the pattern of interleaving reasoning and action: the model emits a Thought (free-text reasoning about what to do next), then an Action (a tool call), receives an Observation (the result), and repeats until it can answer. The insight was that reasoning traces and actions reinforce each other: thinking improves action selection, and real observations ground the reasoning, cutting hallucination relative to pure chain-of-thought.
 
-Historical context: the original work used few-shot prompting to coax the Thought/Action/Observation format out of models with no native tool support, then parsed actions out of raw text. That machinery is obsolete - every serious model since ~2023 has native structured tool calling, and reasoning models (o-series, Claude with extended thinking, DeepSeek-R1 lineage) generate deliberate reasoning internally, trained via RL rather than prompted.
+Historical context: the original work used few-shot prompting to coax the Thought/Action/Observation format out of models with no native tool support, then parsed actions out of raw text. That machinery is obsolete - every serious model since ~2023 has native structured tool calling, and reasoning models (OpenAI's o-series and GPT-5 family, Claude with extended thinking, Gemini thinking models, the DeepSeek-R1 lineage) generate deliberate reasoning internally, trained via RL rather than prompted.
 
 But ReAct's *shape* is exactly what the modern agent loop is: reason → act → observe → repeat. When you call a tool-use-trained model in a loop, you are running ReAct with better plumbing. So the honest 2026 answer: the paper's specific prompting technique is dead; its architecture won so completely that it stopped having a name.
 
@@ -332,7 +332,7 @@ The concrete differences:
 
 **Discovery is dynamic.** REST gives you a static document you bake into your prompt at build time. An MCP client connects, calls `tools/list`, and finds out what exists right now. A server can add a tool and every host picks it up without a redeploy, and it can emit a list-changed notification so hosts refetch.
 
-**It is bidirectional.** REST is request/response, client to server. MCP runs JSON-RPC 2.0 over a persistent connection, so the server can call back into the host: request an LLM completion (sampling), or ask the user a question mid-call (elicitation). An OpenAPI endpoint cannot do that.
+**It is bidirectional.** REST is request/response, client to server. MCP lets the server turn a call back towards the host while it is handling a request, most usefully to ask the user a question mid-call (elicitation). Since the 2026-07-28 revision there is no persistent session, so this runs as a multi round-trip request: the server answers "input required", and the client re-issues the call with the user's answers. An OpenAPI endpoint has no standard way to express that. (Sampling, where the server borrowed the host's model, was the other callback, and is now deprecated.)
 
 **It standardises more than actions.** REST endpoints are all verbs. MCP separates model-controlled actions (tools) from app-controlled context (resources) from user-invoked templates (prompts). That distinction is what lets a host build a sensible UI over a server it has never seen.
 
@@ -452,9 +452,32 @@ sequenceDiagram
 
 </details>
 
+### 15. What does strict mode on a tool schema guarantee, and what does it leave to you?
+
+<details><summary><b>Answer</b></summary>
+
+Strict mode guarantees shape, not truth. With it on, the provider constrains decoding so the arguments the model emits always parse and conform to your JSON Schema: correct types, required fields present, enum values respected, no invented properties. It does not guarantee that the values are correct, that the right tool was chosen, or that a tool should have been called at all.
+
+Mechanically, the provider compiles your schema into a grammar and, at each decoding step, masks any token that would make the output invalid. Most major APIs now expose this as a `strict` flag on the tool definition, and the first request with a new schema can pay a one-off compilation cost.
+
+What it removes: parse failures, missing required fields, misspelled enum values, and the retry loop teams used to build around them.
+
+What stays your job:
+
+- **Semantic validation.** `{"user_id": "usr_4821"}` is schema-valid and may belong to another customer. Referential checks, ranges, authorisation and cross-field rules ("end date after start date") live in the executor, because JSON Schema cannot express most of them and strict modes usually support only a subset of the spec anyway.
+- **Valid fabrication.** When the model lacks a value, strict mode gives it no way to say so: it must emit something that fits. A required `order_id` on a request that contains no order ID produces a plausible fake. Make genuinely optional fields nullable, and give the model a legitimate way to signal "not enough information".
+- **Field order.** Output follows property order, so a `decision` field placed before an `evidence` field makes the model commit before it has written its reasoning. Put supporting fields first.
+- **Tool selection.** A perfectly valid call to the wrong tool is still a wrong call.
+
+The interview signal is separating syntactic guarantees from semantic ones. Strict mode deletes a whole class of bugs, and it makes the remaining ones look more legitimate, which is why executor validation gets no lighter when you turn it on.
+
+**Follow-ups:** Your extraction schema has 40 fields and uses keywords strict mode rejects. What do you do? Would you ever turn strict mode off for a tool, and why?
+
+</details>
+
 ## Intermediate
 
-### 15. How should tool errors be surfaced to the model?
+### 16. How should tool errors be surfaced to the model?
 
 <details><summary><b>Answer</b></summary>
 
@@ -475,7 +498,7 @@ The meta-point: error messages are prompts. Teams tune system prompts obsessivel
 
 </details>
 
-### 16. Consolidated vs granular tools - how do you decide?
+### 17. Consolidated vs granular tools - how do you decide?
 
 <details><summary><b>Answer</b></summary>
 
@@ -505,7 +528,7 @@ flowchart LR
 
 </details>
 
-### 17. How do you make tool outputs token-efficient, and why does it matter so much for agents?
+### 18. How do you make tool outputs token-efficient, and why does it matter so much for agents?
 
 <details><summary><b>Answer</b></summary>
 
@@ -518,7 +541,7 @@ Techniques:
 - **Pagination and limits with signposts.** Return the first N items plus `"showing 20 of 4,312 - refine your query or pass page=2"`. The signpost matters: the model must know the result is truncated or it will reason over incomplete data as if complete.
 - **A `response_format` parameter** (`concise` | `detailed`) so the same tool serves quick checks and deep dives without two tools.
 - **Offload large artifacts.** Write the full result to a file or store and return a path/handle plus a short summary; provide read/grep tools for on-demand access. This is how code agents handle big files and how sub-agent results are typically integrated.
-- **Hard caps in the harness.** Truncate any result above a threshold (Claude Code, for instance, caps tool results at ~25k tokens by default) so one misbehaving tool can't blow the context.
+- **Hard caps in the harness.** Truncate any result above a threshold (Claude Code, for instance, caps MCP tool output with a configurable limit, ~25k tokens by default) so one misbehaving tool can't blow the context.
 
 Anti-pattern to name: teams optimise prompts for weeks while their `search` tool returns raw HTML. Reading a few production trajectories usually finds a 5× token saving in one afternoon of result-shaping.
 
@@ -526,7 +549,7 @@ Anti-pattern to name: teams optimise prompts for weeks while their `search` tool
 
 </details>
 
-### 18. Your agent's context window fills up mid-task. What are your options?
+### 19. Your agent's context window fills up mid-task. What are your options?
 
 <details><summary><b>Answer</b></summary>
 
@@ -558,7 +581,7 @@ flowchart LR
 
 </details>
 
-### 19. Distinguish working memory from persistent memory in agent design.
+### 20. Distinguish working memory from persistent memory in agent design.
 
 <details><summary><b>Answer</b></summary>
 
@@ -582,7 +605,7 @@ Persist distilled conclusions, not transcripts - raw history is bulky, and retri
 
 </details>
 
-### 20. Compare plan-then-execute with reactive (ReAct-style) execution. When does each win?
+### 21. Compare plan-then-execute with reactive (ReAct-style) execution. When does each win?
 
 <details><summary><b>Answer</b></summary>
 
@@ -621,7 +644,7 @@ flowchart TD
 
 </details>
 
-### 21. When do reflection / self-critique loops actually help, and what do they cost?
+### 22. When do reflection / self-critique loops actually help, and what do they cost?
 
 <details><summary><b>Answer</b></summary>
 
@@ -655,7 +678,7 @@ flowchart LR
 
 </details>
 
-### 22. Explain the orchestrator-worker / subagent pattern. What's the real benefit?
+### 23. Explain the orchestrator-worker / subagent pattern. What's the real benefit?
 
 <details><summary><b>Answer</b></summary>
 
@@ -682,7 +705,7 @@ flowchart LR
 
 </details>
 
-### 23. When does multi-agent beat single-agent, and when does it make things worse?
+### 24. When does multi-agent beat single-agent, and when does it make things worse?
 
 <details><summary><b>Answer</b></summary>
 
@@ -702,7 +725,7 @@ The senior take: multi-agent is not the mature form of single-agent - it's a spe
 
 </details>
 
-### 24. What are handoffs in multi-agent systems, and how do they differ from orchestration?
+### 25. What are handoffs in multi-agent systems, and how do they differ from orchestration?
 
 <details><summary><b>Answer</b></summary>
 
@@ -733,7 +756,7 @@ flowchart LR
 
 </details>
 
-### 25. Compare MCP's transports. When would you choose each?
+### 26. Compare MCP's transports. When would you choose each?
 
 <details><summary><b>Answer</b></summary>
 
@@ -745,13 +768,13 @@ MCP defines two supported transports: **stdio** and **Streamable HTTP**, both ca
 
 Decision rule: local personal tooling → stdio; anything crossing a machine or trust boundary → Streamable HTTP. A common production pattern is developing against stdio and deploying the same server logic behind Streamable HTTP, since most SDKs abstract the transport.
 
-On revision skew: the spec now carries a formal feature lifecycle, so a deprecated feature stays in the specification for at least twelve months before it becomes eligible for removal, or at least ninety days under the expedited exception reserved for an active security risk. That window is what lets you carry several client revisions at once instead of cutting anyone off on release day.
+On revision skew: the spec now carries a formal feature lifecycle (active, deprecated, removed), with at least twelve months between deprecation and the earliest possible removal. Sampling, roots and logging, all deprecated in 2026-07-28, are on that clock now. That window is what lets you carry several client revisions at once instead of cutting anyone off on release day.
 
 **Follow-ups:** Why was mandatory long-lived SSE a problem for serverless deployments? How does session state work over Streamable HTTP if the server is stateless? You maintain an MCP server with clients on three different revisions. How do you handle negotiation and deprecation?
 
 </details>
 
-### 26. What are the security risks of connecting a third-party MCP server, and how do you mitigate them?
+### 27. What are the security risks of connecting a third-party MCP server, and how do you mitigate them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -771,7 +794,7 @@ Connecting a third-party MCP server does two dangerous things at once: it inject
 
 </details>
 
-### 27. How do you evaluate an agent? Compare trajectory evals and final-outcome evals.
+### 28. How do you evaluate an agent? Compare trajectory evals and final-outcome evals.
 
 <details><summary><b>Answer</b></summary>
 
@@ -787,7 +810,7 @@ A sane maturity path: (1) 20-50 realistic tasks with programmatic outcome checks
 
 </details>
 
-### 28. Explain pass@k vs pass^k. Why does the distinction matter for production agents?
+### 29. Explain pass@k vs pass^k. Why does the distinction matter for production agents?
 
 <details><summary><b>Answer</b></summary>
 
@@ -803,7 +826,7 @@ Practical note: measure it by running each eval task k times (τ-bench used k up
 
 </details>
 
-### 29. What guardrails does a production agent loop need?
+### 30. What guardrails does a production agent loop need?
 
 <details><summary><b>Answer</b></summary>
 
@@ -847,7 +870,7 @@ flowchart TD
 
 </details>
 
-### 30. You've connected six MCP servers. There are now 130 tool definitions and ~45k tokens of schema in context before the user says a word. What do you do?
+### 31. You've connected six MCP servers. There are now 130 tool definitions and ~45k tokens of schema in context before the user says a word. What do you do?
 
 <details><summary><b>Answer</b></summary>
 
@@ -884,7 +907,7 @@ flowchart LR
 
 </details>
 
-### 31. Your agent needs to remember things across sessions. Would you use a vector store or rolling summarisation? Defend the choice.
+### 32. Your agent needs to remember things across sessions. Would you use a vector store or rolling summarisation? Defend the choice.
 
 <details><summary><b>Answer</b></summary>
 
@@ -909,7 +932,7 @@ Describing this as tiered (always-in-context core, searchable recall, archival s
 
 </details>
 
-### 32. Your agent's prompt cache hit rate is 20% when you expected 90%. Walk me through the debugging.
+### 33. Your agent's prompt cache hit rate is 20% when you expected 90%. Walk me through the debugging.
 
 <details><summary><b>Answer</b></summary>
 
@@ -921,7 +944,7 @@ The usual culprits, roughly by frequency:
 2. **Non-deterministic tool definition ordering.** Serialising tools from a dict or set can reorder them between calls. Identical in meaning, different in bytes. Sort them.
 3. **Compaction.** The big structural one. The moment you summarise turns 1 to 20 and replace them, you have rewritten the prefix and everything after is a miss. Compaction is still worth it, but budget for a cache reset at each boundary, which argues for compacting rarely and in large chunks rather than trimming a little every turn.
 4. **Clearing stale tool results in place.** Same problem, sneakier, because it feels like a small edit. Editing turn 3's tool result invalidates turns 4 onward.
-5. **Cache TTL expiry.** Caches live on the order of minutes on most providers. An agent that waits twenty minutes on a human approval comes back to a cold cache. If you have long human-in-the-loop pauses, that gap is your miss.
+5. **Cache TTL expiry.** Default cache lifetimes are short, often around five minutes, and longer retention is an opt-in that some providers charge extra for. An agent that waits twenty minutes on a human approval comes back to a cold cache unless you chose the longer TTL. If you have long human-in-the-loop pauses, that gap is your miss.
 6. **Provider mechanics.** Some providers cache automatically on prefix match; others require explicit cache breakpoints and enforce a minimum cacheable length. Below the minimum, or with breakpoints in the wrong place, you get nothing.
 
 The fix that covers most of it: treat context as an append-only log, put everything volatile at the tail, and make serialization deterministic. Then verify with the cached-token counts the API returns per call rather than trusting the design.
@@ -941,7 +964,7 @@ flowchart LR
 
 </details>
 
-### 33. How do you test an agent in CI? Not evals - CI, on every pull request, in under five minutes.
+### 34. How do you test an agent in CI? Not evals - CI, on every pull request, in under five minutes.
 
 <details><summary><b>Answer</b></summary>
 
@@ -973,7 +996,7 @@ The full eval suite (trajectory judging, pass^k over a real task set) runs night
 
 </details>
 
-### 34. You're splitting a research agent into an orchestrator and subagents. Design the interface: what exactly crosses the boundary in each direction?
+### 35. You're splitting a research agent into an orchestrator and subagents. Design the interface: what exactly crosses the boundary in each direction?
 
 <details><summary><b>Answer</b></summary>
 
@@ -998,7 +1021,7 @@ Default to a single agent until it demonstrably fails on context, not on vibes.
 
 </details>
 
-### 35. Design the human approval flow for an agent that files expense reports. Where do the gates go, and how do you stop people from clicking through them?
+### 36. Design the human approval flow for an agent that files expense reports. Where do the gates go, and how do you stop people from clicking through them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1037,7 +1060,7 @@ flowchart TD
 
 </details>
 
-### 36. What are MCP's sampling and elicitation primitives for, and why does hardly anyone use them?
+### 37. What are MCP's sampling and elicitation primitives for, and why does hardly anyone use them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1049,17 +1072,19 @@ Both are **client** primitives: capabilities the host offers back to the server,
 
 Why adoption is thin, which is the part that shows you have actually built something:
 
-- **Host support is optional and patchy.** Both are negotiated during initialisation. Most hosts implement tools and stop. A server depending on sampling simply does not work in most clients, so authors avoid it and ship a hardcoded model client instead. Chicken and egg.
+- **Host support is optional and patchy.** Both are capabilities the client must declare: in the `initialize` handshake up to revision 2025-11-25, in per-request `_meta` from 2026-07-28. Most hosts implement tools and stop. A server depending on sampling simply does not work in most clients, so authors avoid it and ship a hardcoded model client instead. Chicken and egg.
 - **Sampling is a trust and cost inversion.** The host pays for tokens a third-party server requested, on a prompt the host did not write. That is uncomfortable to implement and a plausible abuse vector, so hosts are slow to enable it.
-- **Elicitation breaks the execution model.** It requires suspending a tool call, surfacing UI, and resuming. Any host treating tool execution as a synchronous function call must restructure to support it. It also arrived after the original spec, so many hosts had already shipped without it.
+- **Elicitation broke the execution model.** As first specified it meant suspending a tool call on a live connection, surfacing UI, and resuming. Any host treating tool execution as a synchronous function call had to restructure to support it. It also arrived after the original spec, so many hosts had already shipped without it.
 
-The practical takeaway: know them, but do not build a server that requires them. Check the negotiated capabilities and degrade gracefully, falling back to a tool argument when elicitation is unavailable.
+**What the 2026-07-28 revision did with them.** Sampling is deprecated, with the guidance that servers call model APIs directly: the adoption verdict written into the spec. Elicitation survives, reworked for a protocol with no sessions. A server may only ask while it is handling a client request, and does so as a multi round-trip request: it returns an input-required result carrying its questions plus opaque request state, the client collects answers and re-issues the original call with the responses and that state echoed back, so any server instance can pick up the retry.
+
+The practical takeaway: do not build a server that depends on sampling at all, and treat elicitation as optional. Check what the client declared and degrade gracefully, falling back to a tool argument when elicitation is unavailable.
 
 **Follow-ups:** You are writing a host. Would you enable sampling for third-party servers, and what controls would you put on it? How does elicitation interact with prompt injection risk?
 
 </details>
 
-### 37. Your agent platform's bill jumped from $8k to $40k in a month. Nobody knows why. How do you find out, and how do you make sure this never happens blind again?
+### 38. Your agent platform's bill jumped from $8k to $40k in a month. Nobody knows why. How do you find out, and how do you make sure this never happens blind again?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1083,7 +1108,7 @@ The cultural point: cost is a product metric the team owns, not a finance surpri
 
 </details>
 
-### 38. What are Agent Skills, and when do you package knowledge as a skill rather than a tool, an MCP server, or retrieval?
+### 39. What are Agent Skills, and when do you package knowledge as a skill rather than a tool, an MCP server, or retrieval?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1107,9 +1132,69 @@ The security point is where interviewers push. A skill is executable instruction
 
 </details>
 
+### 40. What are MCP Apps, and what do they change about an MCP server's security model?
+
+<details><summary><b>Answer</b></summary>
+
+MCP Apps is an official MCP extension that lets a server ship interactive UI alongside its tools. A tool declares a UI resource, an HTML template. When the tool runs, the host renders that template in a sandboxed iframe inside the conversation and hands it the tool result. The UI talks to the host over `postMessage` using JSON-RPC, so a button can ask the host to call a tool or add a message to the conversation, but it never reaches the server or the model directly. It standardised a pattern that MCP-UI and OpenAI's Apps SDK had already shown people wanted.
+
+Why it exists: some results are bad as text. A seat map, a chart you want to filter, a twelve-field form, a diff to approve line by line. Text-only tools force the model to describe what the user should simply see and click.
+
+What changes for security is that a server now ships code that runs inside your host, in front of your user. The controls a host needs:
+
+- **Sandbox the iframe hard.** Separate origin, restrictive CSP, network access only to domains the server declared up front. Undeclared egress is an exfiltration channel.
+- **Review templates, not just tools.** Templates are declared ahead of time, so a host can fetch, cache and inspect them before rendering. A template that changes after approval is the UI version of a rug pull.
+- **Route every UI action through the normal consent path.** A tool call triggered by a button gets the same approval gate as one the model proposed, or the UI becomes a way around your permissions.
+- **Keep trusted chrome outside the iframe.** A server's UI can draw something that looks exactly like your approval dialog. Approvals and credential prompts must render where the iframe cannot imitate or overlay them.
+- **Treat UI-originated messages as untrusted content.** Text the UI sends into the conversation is injection surface, same as a tool result.
+
+The design point candidates miss is the two audiences. What the user sees and what the model sees are now different, and the model cannot act on a filter the user applied unless the UI reports it back. Decide explicitly what flows to the model, and keep a text fallback for hosts without Apps support.
+
+**Follow-ups:** The user filters a chart in the UI and then asks the model about "these results". How does the model know what they are? Would you let a third-party server's UI trigger a write tool without a fresh approval?
+
+</details>
+
+### 41. The user hits Stop while your agent is in the middle of a tool call. What should happen, and how do you design streaming and cancellation for an agent UI?
+
+<details><summary><b>Answer</b></summary>
+
+Stop is a state transition with a defined outcome, not a killed process. The model stream ends at once, each in-flight tool call is resolved according to its side-effect class, and the result is recorded honestly so the next turn starts from the truth.
+
+By class:
+
+- **Reads:** abort and discard. Nothing to undo.
+- **Writes not yet committed:** cancel through the executor. Long-running remote work gets an explicit cancel on its task handle, and over MCP that means the protocol's own cancellation for the request or task.
+- **Irreversible and already dispatched:** an email that has left, a payment submitted. You cannot un-send it. Let it finish, record the real outcome, and tell the user what actually happened.
+
+Then repair the transcript. Provider APIs expect every tool call to have a matching tool result, so a dangling call breaks the next request. Write a synthetic result: "cancelled by user before completion", or "cancelled, but the write completed: invoice 4412 sent". On the next turn the model knows the true state, so it neither repeats a side effect nor assumes one happened.
+
+Cancellation must propagate. A cancel token flows from the UI through the runtime to tool executors and subagents, so stopping the orchestrator stops its children instead of leaving them burning tokens. Handle the race where a tool finishes just as the cancel arrives: the recorded outcome wins, not the user's intent.
+
+Streaming has its own trap. Tool arguments stream as partial JSON, which is fine to render as "searching for..." but must never be executed until the block is complete and validated. Show tool activity as it happens, since perceived latency drops even when total time does not, and mark interrupted assistant text as interrupted so the model does not later treat a half-sentence as its considered answer.
+
+Tokens generated before Stop are still billed, so count cancelled runs in cost per task.
+
+**Worth sketching.** Branching on side-effect class, then converging on one transcript repair, is the whole design.
+
+```mermaid
+flowchart TD
+    A["User hits Stop"] --> B["End the model stream"]
+    B --> C{"In-flight tool:<br/>side-effect class?"}
+    C -->|"read"| D["Abort and discard"]
+    C -->|"write, not committed"| E["Cancel via the executor"]
+    C -->|"irreversible, already sent"| F["Let it finish,<br/>record the real outcome"]
+    D --> G["Synthetic tool result<br/>for every open call"]
+    E --> G
+    F --> G
+```
+
+**Follow-ups:** The user hits Stop, then types "actually, carry on". What does the agent do with the half-finished work? How would you test cancellation behaviour in CI?
+
+</details>
+
 ## Advanced
 
-### 39. Walk me through the compounding-error math for agents, and what it implies for design.
+### 42. Walk me through the compounding-error math for agents, and what it implies for design.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1140,7 +1225,7 @@ flowchart LR
 
 </details>
 
-### 40. How does prompt injection work against agents via tool results, and what actually mitigates it?
+### 43. How does prompt injection work against agents via tool results, and what actually mitigates it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1171,7 +1256,7 @@ flowchart LR
 
 </details>
 
-### 41. What is the "lethal trifecta," and how do you design agent systems around it?
+### 44. What is the "lethal trifecta," and how do you design agent systems around it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1200,7 +1285,7 @@ flowchart TD
 
 </details>
 
-### 42. How do you sandbox a code-executing agent?
+### 45. How do you sandbox a code-executing agent?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1219,7 +1304,7 @@ Layers, from inside out:
 
 </details>
 
-### 43. Why are computer-use / browser agents so much harder to make reliable than API-based agents?
+### 46. Why are computer-use / browser agents so much harder to make reliable than API-based agents?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1228,7 +1313,7 @@ Because they replace a crisp, structured interface with pixels and coordinates, 
 - **Perception is lossy.** The model must locate a button by sight, read small text from a screenshot, infer state from visual cues. Misreads that would be impossible with a JSON response ("is this dropdown open?") happen constantly.
 - **Actions are fragile.** Clicking coordinates on a page that just reflowed, typing into a field that lost focus, scrolling past a lazy-loaded target. There's no schema validation for a click - the environment silently accepts wrong actions.
 - **State verification is hard.** An API returns success/failure; a GUI requires another screenshot and another inference to know whether the action worked. Feedback loops are slow (screenshot → upload → inference per step) and themselves error-prone.
-- **The chains are long.** "Book this flight" is dozens of micro-actions. Even at 98% per action, 50 actions is ~36% end-to-end - the compounding math at its cruelest, which is why benchmarks like OSWorld still show a wide human - agent gap on routine desktop workflows.
+- **The chains are long.** "Book this flight" is dozens of micro-actions. Even at 98% per action, 50 actions is ~36% end-to-end - the compounding math at its cruelest, and why a strong OSWorld-style benchmark score still says little about reliability on a long workflow in an unfamiliar enterprise app.
 - **The environment is adversarial and shifting.** Popups, cookie banners, A/B-tested layouts, CAPTCHAs (which agents must not solve - that's a hard policy line), and web content that is *definitionally* untrusted - every rendered page is a prompt-injection surface aimed at an agent that may hold your logged-in sessions.
 
 Engineering responses: prefer APIs or DOM/accessibility-tree interfaces whenever they exist and reserve pixels for the long tail; decompose into short verifiable segments with checkpoints; verify state after each critical action; gate irreversible clicks (purchase, send) on human approval.
@@ -1237,7 +1322,7 @@ Engineering responses: prefer APIs or DOM/accessibility-tree interfaces whenever
 
 </details>
 
-### 44. How do you build agents that survive long-horizon tasks - hours or days of execution?
+### 47. How do you build agents that survive long-horizon tasks - hours or days of execution?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1268,7 +1353,7 @@ flowchart LR
 
 </details>
 
-### 45. How do you engineer an agent for cost and latency without wrecking quality?
+### 48. How do you engineer an agent for cost and latency without wrecking quality?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1277,7 +1362,7 @@ Optimise the trajectory, not the call - the metric that matters is **cost per su
 The levers, roughly by impact:
 
 - **Model tiering per step.** Frontier model for planning, ambiguous decisions, and final synthesis; a small fast model for mechanical steps - routing, extraction, summarising tool results, compaction. Many trajectories are 20% hard steps and 80% mechanical ones; tiering routinely cuts spend severalfold. Subagents make this natural: workers on cheaper models, orchestrator on a strong one.
-- **Prompt caching.** Agent loops are the ideal caching workload: system prompt + tool definitions + growing history prefix are identical on every iteration; only the tail changes. Cache reads are ~90% cheaper than regular input tokens on Anthropic (with a modest write premium) and ~50% on OpenAI's automatic caching - on a 20-iteration loop this is the single largest cost lever, often bigger than model choice. Structure prompts stable-prefix-first so appends don't invalidate the cache.
+- **Prompt caching.** Agent loops are the ideal caching workload: system prompt + tool definitions + growing history prefix are identical on every iteration; only the tail changes. Cached input is billed at a steep discount, commonly 50-90% off uncached input depending on provider and model (some providers add a cache-write premium, others cache automatically) - on a 20-iteration loop this is the single largest cost lever, often bigger than model choice. Structure prompts stable-prefix-first so appends don't invalidate the cache.
 - **Context discipline.** Every retained token is re-billed each iteration (cached or not, it's still latency and attention). Token-efficient tool results, clearing stale results, and compaction compound across iterations.
 - **Fewer iterations.** Consolidated tools and parallel tool calls collapse round trips; deterministic glue in code instead of model steps removes them entirely. Each avoided iteration saves a whole context replay.
 - **Latency-specific moves:** parallelize independent tool executions; stream partial output and show tool activity so perceived latency drops even when total time doesn't; overlap tool execution with speculation cautiously; keep hot paths on faster models.
@@ -1289,7 +1374,7 @@ Guard the quality side with your eval suite: tiering and compaction changes are 
 
 </details>
 
-### 46. What does good observability look like for an agent system?
+### 49. What does good observability look like for an agent system?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1307,7 +1392,7 @@ Full-fidelity traces at the unit of a *run*, with metrics aggregated above them 
 
 </details>
 
-### 47. Your agent gets stuck in loops or gives up too early. Diagnose and fix both.
+### 50. Your agent gets stuck in loops or gives up too early. Diagnose and fix both.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1327,7 +1412,7 @@ Both directions need eval coverage: seed tasks that require persistence, and imp
 
 </details>
 
-### 48. What is tool-call hallucination, and how do you defend against it?
+### 51. What is tool-call hallucination, and how do you defend against it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1346,7 +1431,7 @@ Defences, in layers:
 
 </details>
 
-### 49. What is context pollution in agents, and how do you deal with it?
+### 52. What is context pollution in agents, and how do you deal with it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1368,7 +1453,7 @@ Countermeasures:
 
 </details>
 
-### 50. Should you build your agent on a framework or roll the loop yourself? Defend a position.
+### 53. Should you build your agent on a framework or roll the loop yourself? Defend a position.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1384,7 +1469,7 @@ The synthesis interviewers reward: the *loop* is trivial; the *harness* (state, 
 
 </details>
 
-### 51. A customer reports the agent did something wrong three days ago. You have the trace. Can you reproduce it? How do you build a system where the answer is yes?
+### 54. A customer reports the agent did something wrong three days ago. You have the trace. Can you reproduce it? How do you build a system where the answer is yes?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1418,7 +1503,7 @@ flowchart LR
 
 </details>
 
-### 52. You're building a multi-tenant agent platform. Tenants bring their own MCP servers and their own data. What isolates them?
+### 55. You're building a multi-tenant agent platform. Tenants bring their own MCP servers and their own data. What isolates them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1440,7 +1525,7 @@ The dangerous framing is treating this as a normal multi-tenant web app with an 
 
 </details>
 
-### 53. You want to change your agent's system prompt. How do you ship it without finding out from customers that you broke something?
+### 56. You want to change your agent's system prompt. How do you ship it without finding out from customers that you broke something?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1473,7 +1558,7 @@ flowchart LR
 
 </details>
 
-### 54. Define SLOs for a customer support agent. Every span returns 200 and latency is fine. What do you actually alert on?
+### 57. Define SLOs for a customer support agent. Every span returns 200 and latency is fine. What do you actually alert on?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1501,7 +1586,7 @@ The cultural point: alert on trends in the leading indicators, page on user-visi
 
 </details>
 
-### 55. Your agent handles multi-turn conversations where users change their minds. Static test cases can't cover that. Build me an evaluation environment.
+### 58. Your agent handles multi-turn conversations where users change their minds. Static test cases can't cover that. Build me an evaluation environment.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1536,11 +1621,11 @@ flowchart LR
 
 </details>
 
-### 56. Design the memory and personalisation layer for an assistant serving millions of users. What do you store, when do you summarise versus retrieve, and how do you evaluate memory quality?
+### 59. Design the memory and personalisation layer for an assistant serving millions of users. What do you store, when do you summarise versus retrieve, and how do you evaluate memory quality?
 
 <details><summary><b>Answer</b></summary>
 
-This is now named directly in applied-AI job descriptions (Perplexity calls it the "context layer"; Anthropic lists context engineering as an advisory area), so treat it as a system design question with four parts.
+Memory now appears by name in applied-AI job descriptions, often framed as a "context layer" or as context engineering, so treat it as a system design question with four parts.
 
 **What to store.** Split memory by type. Working memory is the current conversation and lives in the context window. Episodic memory is what happened: past sessions, compacted into structured summaries at session end. Semantic memory is what is durably true about the user: stated preferences, entities, decisions, extracted as small structured facts rather than transcript blobs. Store facts with provenance (which conversation, when) so they can be corrected or expired.
 
@@ -1568,7 +1653,7 @@ flowchart LR
 
 </details>
 
-### 57. MCP connects an agent to tools. What does A2A solve that MCP does not, and how do the two compose?
+### 60. MCP connects an agent to tools. What does A2A solve that MCP does not, and how do the two compose?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1602,7 +1687,7 @@ flowchart TD
 
 </details>
 
-### 58. You're exposing one of your agents to another company's agent. What crosses the boundary, and what do you refuse to expose?
+### 61. You're exposing one of your agents to another company's agent. What crosses the boundary, and what do you refuse to expose?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1612,7 +1697,7 @@ What never crosses: the system prompt, the tool manifest, tool-call arguments, r
 
 **Authentication and authorisation are separate problems.** Authentication is declared in the card and should be server-to-server: OAuth 2.0 client credentials or mutual TLS, credentials issued per peer, never a shared token. Authorisation is the harder half, because the peer authenticates as a company while acting for one of its end users. You want dual-principal identity on every task - which peer, acting for which subject, with which scopes - and per-peer capability downscoping, so peer X can invoke skill A and not skill B, only for the tenants it is entitled to.
 
-**Treat the peer's output as untrusted content.** It is the same channel as injection via tool results (Q39). A real counterparty with a real contract does not make their agent trustworthy: their agent reads web pages and tickets and can be injected. Carry the taint across the hop, never let a peer's artifact select your tools or reach a sink unreviewed, and never let a returned artifact be read as instructions.
+**Treat the peer's output as untrusted content.** It is the same channel as injection via tool results (Q40). A real counterparty with a real contract does not make their agent trustworthy: their agent reads web pages and tickets and can be injected. Carry the taint across the hop, never let a peer's artifact select your tools or reach a sink unreviewed, and never let a returned artifact be read as instructions.
 
 **Cost and rate control, because denial of wallet is the likely incident.** A peer that loops, or two agents that call each other, burns your inference budget quietly and legitimately. Per-peer quotas and concurrency caps, a per-task token and wall-clock budget, task depth limits so delegation cannot recurse, and a circuit breaker you can trip per peer without a deploy.
 
@@ -1624,7 +1709,7 @@ The half that senior candidates raise unprompted: what you are contractually all
 
 </details>
 
-### 59. Instead of exposing 130 tools as function definitions, you expose them as a code API the agent writes scripts against. Walk me through the tradeoffs.
+### 62. Instead of exposing 130 tools as function definitions, you expose them as a code API the agent writes scripts against. Walk me through the tradeoffs.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1638,10 +1723,10 @@ Two wins, then the costs, which are the real content.
 
 Now the costs:
 
-- **You need a genuine sandbox.** Resource limits, wall-clock timeouts, default-deny egress, no ambient credentials (Q41). Arbitrary code moves the enforcement boundary from a tool dispatcher you wrote to a runtime you now have to operate.
+- **You need a genuine sandbox.** Resource limits, wall-clock timeouts, default-deny egress, no ambient credentials (Q42). Arbitrary code moves the enforcement boundary from a tool dispatcher you wrote to a runtime you now have to operate.
 - **Approval gates get harder.** Per-action approval was easy when the unit was a typed tool call. A script is one approval for an opaque sequence, and no operator can code-review it at speed. Keep the gate at the capability layer instead: the API functions the script calls go through a broker that enforces policy per operation, so approval and rate limiting happen where the side effect happens, not where the script is submitted.
 - **Errors arrive as stack traces.** A TypeError twelve frames deep is a far worse recovery signal than "invalid status, valid values: open, closed" (Q15), so wrap and re-shape errors deliberately.
-- **Traces become programs.** "Which tool did it call at step 12" now needs instrumentation inside the sandbox: emit a span per brokered call, not just the script text. Replay means re-running code against a world that may have moved, a weaker guarantee than replaying a rendered prompt (Q45, Q50).
+- **Traces become programs.** "Which tool did it call at step 12" now needs instrumentation inside the sandbox: emit a span per brokered call, not just the script text. Replay means re-running code against a world that may have moved, a weaker guarantee than replaying a rendered prompt (Q46, Q51).
 
 Where I draw the line: a code API for large tool surfaces, large results and batch work; direct function calls for a small tool set, latency-sensitive turns, and single irreversible actions I want gated individually.
 
@@ -1660,7 +1745,7 @@ flowchart LR
 
 </details>
 
-### 60. Your agent solves the same class of task 500 times a week and never gets better at it. How would you make it learn, without fine-tuning?
+### 63. Your agent solves the same class of task 500 times a week and never gets better at it. How would you make it learn, without fine-tuning?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1675,7 +1760,7 @@ It never improves because it has no procedural memory. Every run rediscovers the
 Then the parts that make this a senior question:
 
 - **Validation before trust.** A candidate procedure is a hypothesis. Replay it against the eval set for that task class, or canary it on a traffic slice, and promote only if success rate and step count both improve. Promoting on one good run is how you learn a coincidence.
-- **Versioning and rollback.** Procedures are artifacts with versions, provenance back to the runs that produced them, and an owner. Ship them like prompt changes (Q52) and bisect the same way.
+- **Versioning and rollback.** Procedures are artifacts with versions, provenance back to the runs that produced them, and an owner. Ship them like prompt changes (Q53) and bisect the same way.
 - **Poisoning.** Self-write memory is a persistence channel for injection: content that arrived as an untrusted tool result comes back as "your own procedure" and gets trusted (memory poisoning, safety bank). Do not write procedures from runs that touched untrusted content without review, never let a learned procedure grant capability rather than order steps within capability the agent already has, and keep procedures human-readable and diffable.
 - **Consolidation.** 500 runs a week generates near-duplicates that fragment retrieval. A periodic merge, dedupe and expire pass with usage counters ages dead procedures out.
 - **Measurement.** Aggregate improvement is unattributable, because models, prompts and traffic all move. Run a holdout slice with memory disabled and compare success rate, steps and cost per successful task on the same task mix. If you cannot switch memory off, you cannot prove it helps.
@@ -1694,5 +1779,88 @@ flowchart TD
 ```
 
 **Follow-ups:** How would you stop two learned procedures from contradicting each other? What would make you delete a procedure that is still being retrieved and still succeeding?
+
+</details>
+
+### 64. How does authorisation work for a remote MCP server, and what do teams get wrong when they implement it?
+
+<details><summary><b>Answer</b></summary>
+
+A remote MCP server is an OAuth 2.1 resource server. The client discovers who issues tokens, obtains one scoped to this specific server on behalf of this specific user, and presents it on every request. The server validates it and never forwards it anywhere. stdio servers sit outside this model and take credentials from their environment.
+
+The flow:
+
+1. The client calls without a token and gets a 401 whose `WWW-Authenticate` header points to Protected Resource Metadata (RFC 9728), which names the authorisation server.
+2. The client reads that server's metadata, identifies itself (pre-registration, a client ID metadata document, or dynamic registration as a fallback), and runs authorization code with PKCE in the user's browser.
+3. The token request carries a `resource` parameter (RFC 8707) naming the MCP server, binding the token's audience to it.
+4. The server checks signature, expiry, scopes and audience on every request.
+
+What teams get wrong:
+
+- **Token passthrough.** The server forwards the user's token to GitHub or an internal API. The spec forbids it: upstream calls use a token the server obtains for that upstream, or audience checks, rate limits and audit trails all break.
+- **Skipping the audience check.** Accepting any valid token from your identity provider means a token minted for a low-risk server unlocks a high-risk one.
+- **One shared service credential.** A remote server holding a single API key for every user is a confused deputy: a prompt-injected session for user A reaches whatever the key reaches. Per-user tokens make the downstream system enforce authorisation for you.
+- **Static client IDs at proxies.** A server proxying to a third-party OAuth provider under one static client ID can let an earlier consent be replayed for a malicious client. Require per-client consent at the proxy.
+- **Scopes as an afterthought.** Request the minimum and step up when a write tool is first needed.
+
+Worth naming: recent revisions push towards centrally managed enterprise authorisation, where the identity provider decides which users may reach which servers instead of each user clicking through consent per server.
+
+**Worth sketching.** The audience binding and the separate upstream token are the two arrows people leave out.
+
+```mermaid
+sequenceDiagram
+    participant C as MCP client
+    participant S as MCP server
+    participant A as Auth server
+    participant U as Upstream API
+    C->>S: tools/call, no token
+    S->>C: 401 with resource metadata URL
+    C->>A: auth code + PKCE, resource = server URL
+    A->>C: token, audience = this server
+    C->>S: tools/call with bearer token
+    S->>S: check signature, expiry, scope, audience
+    S->>U: its own upstream token, never the client's
+```
+
+**Follow-ups:** Your MCP server needs to call three upstream SaaS APIs for the user. How do you obtain and store those tokens? An agent runs unattended overnight and a token expires mid-run. What happens?
+
+</details>
+
+### 65. A tool call takes twenty minutes, or needs the user's answer halfway through. How do you model that over MCP now that the protocol is stateless?
+
+<details><summary><b>Answer</b></summary>
+
+Two problems, two mechanisms, and the stateless 2026-07-28 revision shapes both: with no session, nothing can live in one server instance's memory between requests.
+
+**Needs input halfway: a multi round-trip request.** The server does not hold the call open. It returns an input-required result carrying its questions and an opaque request state. The client asks the user, then re-issues the original call with the answers and the echoed state, and any instance behind the load balancer can finish it. The engineering lands in that state blob. It round-trips through the client, so sign or encrypt it, bind it to the user and the original arguments, and give it an expiry. Unsigned state lets a client forge the server's progress.
+
+**Takes twenty minutes: a task.** Tasks arrived as an experimental feature in 2025-11-25 and became an extension in 2026-07-28. The server accepts the work and returns a durable task handle immediately. The client polls for status, fetches the result later, or cancels. A task can also pause in an input-required state, which combines the two patterns.
+
+What makes the server side correct:
+
+- **Durable task store, not memory.** The status poll may land on a different instance from the one that started the work.
+- **Idempotent creation.** A client that times out and retries the create call must not start the job twice. Key it.
+- **Task IDs are capabilities.** Bind each to the principal that created it and make it unguessable, or polling becomes a way to read someone else's results.
+- **Result retention.** Results expire on a declared TTL so the store does not grow forever.
+
+On the agent side, never let the model block. The harness either returns a tool result saying "task started, check back with this ID" and lets the agent keep working, or checkpoints the run and resumes on completion, the same suspend-and-resume shape as a human approval gate. Budget for a cold prompt cache when it comes back.
+
+**Worth sketching.** The retry landing on a different instance is the whole point of carrying state in the payload.
+
+```mermaid
+sequenceDiagram
+    participant H as Host
+    participant P as User
+    participant A as Server instance A
+    participant B as Server instance B
+    H->>A: tools/call book_trip
+    A->>H: input required, questions + signed state
+    H->>P: which seat class?
+    P->>H: economy
+    H->>B: same call + answers + echoed state
+    B->>H: result, no session needed
+```
+
+**Follow-ups:** The user answers the elicitation an hour later and the signed state has expired. What should the server do? How does the agent decide between waiting on a task and continuing with other work?
 
 </details>

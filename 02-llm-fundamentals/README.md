@@ -6,18 +6,18 @@ This is the single most heavily tested topic in AI Engineer interviews: every fr
 
 ### The decoder-only transformer, top to bottom
 
-Modern LLMs (GPT, Claude, Llama, Gemini, DeepSeek) are **decoder-only transformers**: a token embedding layer, a stack of N identical **decoder blocks**, a final norm, and an **LM head** (linear projection to vocab logits, often weight-tied to the embedding matrix). Each block does two things - mix information *across positions* (attention) and transform information *at each position* (MLP) - with residual connections around both:
+Modern LLMs (GPT, Claude, Llama, Gemini, DeepSeek, Qwen) are **decoder-only transformers**: a token embedding layer, a stack of N **decoder blocks**, a final norm, and an **LM head** (linear projection to vocab logits, weight-tied to the embedding matrix in many small models, untied in most large ones). Each block does two things - mix information *across positions* (attention) and transform information *at each position* (MLP) - with residual connections around both:
 
 ```mermaid
-flowchart TB
+flowchart TD
     X["hidden states from previous block (n_tokens × d_model)"] --> N1["RMSNorm"]
     N1 --> ATT["masked multi-head self-attention<br/>Q/K/V projections + RoPE, softmax(QKᵀ/√d_k)V, output proj"]
     ATT --> A1(("＋"))
-    X -- "residual" --> A1
+    X -->|"residual"| A1
     A1 --> N2["RMSNorm"]
-    N2 --> MLP["MLP (SwiGLU FFN)<br/>up-project ~3-4× d_model, gate, down-project"]
+    N2 --> MLP["MLP (SwiGLU FFN)<br/>gate and up-project to ~2.7-3.5× d_model, down-project"]
     MLP --> A2(("＋"))
-    A1 -- "residual" --> A2
+    A1 -->|"residual"| A2
     A2 --> OUT["to next block"]
 ```
 
@@ -54,7 +54,8 @@ def causal_self_attention(X, Wq, Wk, Wv):
 The pressure that reshaped attention is the **KV cache** (below): its size scales with the number of KV heads.
 
 - **MQA (multi-query)**: all query heads share *one* K/V head → cache shrinks ~h×, some quality loss.
-- **GQA (grouped-query)**: groups of query heads share a KV head (e.g. 64 query heads, 8 KV heads) → ~8× cache reduction at near-MHA quality. The modern default (Llama 2/3 70B, Mistral, most 2024+ models). DeepSeek's MLA goes further by low-rank-compressing the KV cache.
+- **GQA (grouped-query)**: groups of query heads share a KV head (e.g. 64 query heads, 8 KV heads) → ~8× cache reduction at near-MHA quality. The modern default (Llama 2/3 70B, Mistral, most 2024+ models).
+- **MLA (multi-head latent attention, DeepSeek-V2/V3, also used by Kimi K2)**: cache one low-rank latent vector per token per layer and up-project it to per-head K/V at attention time, cutting the cache below GQA levels while keeping per-head keys and values distinct.
 
 ### KV cache
 
@@ -72,15 +73,26 @@ Attention computes an n×n score matrix: **O(n²) time and (naively) memory** in
 
 **FlashAttention** doesn't approximate anything - it's an **IO-aware exact** implementation. Insight: on a GPU, attention is bottlenecked by reads/writes to HBM, not FLOPs. So: **tile** Q/K/V into blocks that fit in on-chip SRAM, compute attention block-by-block with an **online (streaming) softmax** that maintains running max and normalizer, and **never materialise the n×n matrix** (recompute it in the backward pass). Result: exact attention with O(n) memory and large wall-clock speedups. It's standard in every serving stack.
 
+### Beyond full attention
+
+Full attention in every layer is no longer a given. Four variations come up in interviews:
+
+- **Sliding-window (local) attention**: each token sees only the last w tokens, so that layer's KV cache is capped at w. Hybrid local/global stacks interleave many local layers with a few full-attention ones (Gemma 3: five 1024-token local layers per global layer, gpt-oss alternates banded-window and dense layers).
+- **Attention sinks**: softmax has to put its probability mass somewhere, so models learn to dump attention on the first few tokens. Evict those from a rolling cache and quality collapses, which is why streaming caches keep them pinned (and why some models, gpt-oss included, add an explicit learned sink).
+- **Learned sparse attention**: a cheap indexer scores past positions and each query attends only to the top ones (DeepSeek-V3.2's DeepSeek Sparse Attention).
+- **Hybrid linear/SSM stacks**: most layers carry a fixed-size recurrent state (Mamba-style or linear attention) and roughly one layer in every 4 to 10 keeps full attention for exact recall (Jamba, Nemotron-H, Qwen3-Next, Kimi Linear).
+
+The common thread: a few exact layers do long-range retrieval, many cheap layers do the bulk of the work, and only a fraction of the stack has a cache that grows with context.
+
 ### Positional information
 
 Attention is permutation-invariant - position must be injected.
 
 - **Sinusoidal** (original transformer): fixed sin/cos of geometrically spaced frequencies added to embeddings. No learned params.
 - **Learned absolute** (GPT-2, BERT): an embedding per position index. Simple, but hard-capped at trained length.
-- **RoPE** (rotary, the modern default - Llama, Qwen, most open models): instead of adding position vectors, *rotate* each 2D pair of Q/K dimensions by an angle proportional to position, with per-pair frequencies. The dot product between a query at position m and key at position n then depends only on **m − n**: relative position, encoded multiplicatively, no extra params.
+- **RoPE** (rotary, the modern default - Llama, Qwen, most open models): instead of adding position vectors, *rotate* each 2D pair of Q/K dimensions by an angle proportional to position, with per-pair frequencies. The dot product between a query at position m and key at position n then depends only on **m − n**: relative position, encoded multiplicatively, no extra params. Some recent models interleave RoPE layers with **NoPE** layers that use no positional encoding at all (Llama 4's iRoPE) to help length generalisation.
 - **ALiBi**: no position embeddings at all; add a linear penalty −slope·|i−j| to attention scores (per-head slopes). Biases toward recency, extrapolates to longer sequences than trained.
-- **Context extension**: naively running RoPE past trained length fails (unseen rotation angles). **Position interpolation** rescales positions to fit inside the trained range plus a short fine-tune; **YaRN** interpolates frequency bands unevenly (preserve high-frequency/local resolution, interpolate low-frequency) with an attention-temperature tweak - much less fine-tuning needed. This is how 8k-trained models became 128k+ models.
+- **Context extension**: naively running RoPE past trained length fails (unseen rotation angles). **Position interpolation** rescales positions to fit inside the trained range plus a short fine-tune; **YaRN** interpolates frequency bands unevenly (preserve high-frequency/local resolution, interpolate low-frequency) with an attention-temperature tweak - much less fine-tuning needed. The other standard lever is raising RoPE's base frequency θ during long-context continued pretraining (Llama 3 uses 500,000 versus the original 10,000). These are how 8k-trained models became 128k+ models.
 
 ### Tokenization
 
@@ -89,9 +101,9 @@ Models see **token IDs**, not characters. Subwords are the compromise between wo
 - **BPE**: start from bytes/characters, repeatedly merge the most frequent adjacent pair into a new token until vocab size is reached. Merges are learned once; at inference they're applied deterministically.
 - **Byte-level BPE** (GPT-2 onward): base alphabet is 256 bytes → *no* out-of-vocabulary strings, ever.
 - **WordPiece** (BERT): like BPE but merges the pair that maximises training-data likelihood, not raw frequency.
-- **SentencePiece**: a library (implementing BPE or unigram-LM) that treats raw text as a stream - spaces become a meta-symbol (▁) - so it's language-agnostic and needs no pre-tokenization; standard for multilingual/open models.
+- **SentencePiece**: a library (implementing BPE or unigram-LM) that treats raw text as a stream - spaces become a meta-symbol (▁) - so it's language-agnostic and needs no pre-tokenization; widely used in multilingual and open models (T5, Llama 2, Gemma), though Llama 3 moved to a tiktoken-style byte-level BPE.
 
-**Why classic failures are tokenizer failures:** "strawberry" is one or two tokens - the model never sees its letters, so counting r's requires memorised spelling knowledge, not perception. Arithmetic suffers because numbers chunk inconsistently ("1234" vs "12"+"34"). Non-Latin-script languages fragment into many more tokens per sentence → higher cost, less effective context, worse quality. Code models depend on whitespace-run tokens for indentation. **Vocab size tradeoff**: bigger vocab (Llama 2's 32k → Llama 3's 128k → ~200k in GPT-4o's tokenizer) = fewer tokens per text (cheaper, longer effective context) but a larger embedding matrix and rarer, under-trained tail tokens (glitch-token failure modes).
+**Why classic failures are tokenizer failures:** "strawberry" is two or three tokens (e.g. "str" + "aw" + "berry") - the model never sees its letters, so counting r's requires memorised spelling knowledge, not perception. Arithmetic suffers when numbers chunk inconsistently ("1234" vs "12"+"34"), which is why many tokenizers now split digits individually or into fixed groups of three. Non-Latin-script languages fragment into many more tokens per sentence → higher cost, less effective context, worse quality. Code models depend on whitespace-run tokens for indentation. **Vocab size tradeoff**: bigger vocab (Llama 2's 32k → Llama 3's 128k → ~200k in OpenAI's o200k tokenizer and ~262k in Gemma 3) = fewer tokens per text (cheaper, longer effective context) but a larger embedding matrix and rarer, under-trained tail tokens (glitch-token failure modes).
 
 ### Architectures and objectives
 
@@ -104,29 +116,31 @@ Models see **token IDs**, not characters. Subwords are the compromise between wo
 1. **Pretraining**: next-token prediction on trillions of tokens of web/code/books data. Produces a raw completion model - capable, not steerable.
 2. **Mid-training / continued pretraining**: high-quality curated data, domain injection (code, math), context-length extension, data-mix annealing toward instruction-like formats.
 3. **SFT**: supervised fine-tuning on (prompt, response) demonstrations → follows instructions, adopts chat format.
-4. **RL from feedback**: RLHF with a learned reward model (PPO), or direct methods (**DPO**), or RL on *verifiable* rewards (**RLVR/GRPO** - math answers, passing tests) which is what trains reasoning models. Aligns behaviour with preferences and sharpens capabilities SFT can't reach.
+4. **Preference optimisation and RL**: RLHF with a learned reward model (PPO), offline direct methods (**DPO**, which needs no reward model or rollouts), and RL on *verifiable* rewards (**RLVR**, typically with GRPO-family algorithms - math answers, passing tests), which is what trains reasoning models. Aligns behaviour with preferences and sharpens capabilities SFT can't reach.
 
 ### Scaling laws
 
-**Kaplan et al. (2020)**: loss falls as a power law in compute; implied you should grow *parameters* much faster than data. **Chinchilla (Hoffmann et al., 2022)** corrected this: compute-optimal training scales params and tokens roughly equally, ~**20 tokens per parameter** (Chinchilla-70B on 1.4T tokens beat Gopher-280B on 300B). But compute-optimal ≠ deployment-optimal: **training cost is paid once, inference forever**, so modern models train far past Chinchilla (Llama 3 8B saw ~15T tokens ≈ ~1,900 tokens/param) to buy a smaller, cheaper-to-serve model at the same quality. **Emergent abilities** (sharp capability jumps with scale) are partly a measurement artifact - the "mirage" critique shows smooth improvement under continuous metrics - but the practical experience of thresholds remains real for discontinuous tasks.
+**Kaplan et al. (2020)**: loss falls as a power law in compute; implied you should grow *parameters* much faster than data. **Chinchilla (Hoffmann et al., 2022)** corrected this: compute-optimal training scales params and tokens roughly equally, ~**20 tokens per parameter** (Chinchilla-70B on 1.4T tokens beat Gopher-280B on 300B). But compute-optimal ≠ deployment-optimal: **training cost is paid once, inference forever**, so modern models train far past Chinchilla (Llama 3 8B saw ~15T tokens ≈ ~1,900 tokens/param) to buy a smaller, cheaper-to-serve model at the same quality. **Emergent abilities** (sharp capability jumps with scale) are partly a measurement artefact - the "mirage" critique shows smooth improvement under continuous metrics - but the practical experience of thresholds remains real for discontinuous tasks.
 
 ### Mixture-of-Experts (MoE)
 
-Replace each MLP with E expert MLPs plus a learned **router** that sends each token to the top-k experts (e.g. Mixtral: 8 experts, top-2, ~47B total / ~13B active params; DeepSeek-V3: 671B total / ~37B active). You buy **more capacity per FLOP**: quality of a much larger dense model at a fraction of the compute per token. Costs: routing must be **load-balanced** (auxiliary losses, router z-loss) or experts collapse; training is less stable; and at inference **all experts must sit in memory** - you pay memory for total params, FLOPs for active params, so MoE favours large, batched, memory-rich serving over single-GPU deployment.
+Replace each MLP with E expert MLPs plus a learned **router** that sends each token to the top-k experts (e.g. Mixtral: 8 experts, top-2, ~47B total / ~13B active params; DeepSeek-V3: 671B total / ~37B active). You buy **more capacity per FLOP**: quality of a much larger dense model at a fraction of the compute per token, which is why MoE is now the norm for frontier-scale open-weight models (DeepSeek-V3, Qwen3-235B-A22B, Kimi K2 at ~1T total / 32B active, gpt-oss). The current recipe is **fine-grained** experts plus an always-on **shared expert** (DeepSeek-V3: 256 routed experts, top-8, plus one shared). Costs: routing must be **load-balanced** (auxiliary losses, router z-loss, or DeepSeek-V3's auxiliary-loss-free per-expert bias) or experts collapse; training is less stable; and at inference **all experts must sit in memory** - you pay memory for total params, FLOPs for active params, so MoE favours large, batched, memory-rich serving over single-GPU deployment.
 
 ### Decoding & sampling
 
-The model outputs logits z; sampling shapes them. **Temperature** rescales before softmax: p_i = exp(z_i/T) / Σ_j exp(z_j/T). T→0 is greedy (argmax); T>1 flattens. **Top-k** keeps the k highest tokens; **top-p (nucleus)** keeps the smallest set with cumulative probability ≥ p (adapts to confidence); **min-p** keeps tokens with p ≥ min_p × p_max (adapts even better at high temperature). **Repetition/frequency/presence penalties** damp loops. **Beam search** maximises sequence likelihood - good for translation/ASR, degenerate (repetitive, bland) for open-ended generation. **Logprobs** from the API are your tool for confidence scoring, classification, perplexity evals, and hallucination heuristics.
+The model outputs logits z; sampling shapes them. **Temperature** rescales before softmax: p_i = exp(z_i/T) / Σ_j exp(z_j/T). T→0 is greedy (argmax); T>1 flattens. **Top-k** keeps the k highest tokens; **top-p (nucleus)** keeps the smallest set with cumulative probability ≥ p (adapts to confidence); **min-p** keeps tokens with p ≥ min_p × p_max (adapts even better at high temperature). **Repetition/frequency/presence penalties** damp loops. **Beam search** maximises sequence likelihood - good for translation/ASR, degenerate (repetitive, bland) for open-ended generation. **Logprobs** are your tool for confidence scoring, classification, perplexity evals, and hallucination heuristics - but check the endpoint: many hosted reasoning models fix temperature and top-p and return no logprobs, and some providers expose no logprobs on any model. Confirm support before designing around them, or self-host when you need them.
+
+**Speculative decoding** speeds up generation without changing the output distribution: a cheap draft (a small model, extra prediction heads, or the model's own multi-token-prediction head) proposes several tokens, the target model verifies them in one forward pass, and a rejection-sampling rule accepts a prefix so the final distribution is exactly the target model's. It pays off because decode is memory-bandwidth bound, so verifying k tokens costs about the same as generating one.
 
 ### Long context, hallucination, reasoning models
 
 - **Long context ≠ retrieval.** "Lost in the middle": accuracy on facts placed mid-context is systematically worse than at the start/end. A 1M-token window is not a database; RAG and context curation still matter.
 - **Hallucination** is structural: the objective rewards plausible next tokens, not truth, and standard training/evals reward guessing over calibrated abstention. Mitigations: grounding (RAG + citations), tool use, abstention training, logprob/self-consistency confidence signals, verification layers - reduction, not elimination.
-- **Reasoning models** (o1/R1-style) are trained with RL on verifiable rewards to emit long chains of thought, converting **test-time compute** into accuracy on math/code/planning. Tradeoff: 10-100× more output tokens, higher latency and cost. Use them for hard multi-step problems; use standard models for extraction, classification, and latency-sensitive paths. **Distillation** (training a small model on a large model's outputs or logits) is how reasoning behaviour gets compressed into cheap models.
+- **Reasoning models** (the lineage that started with OpenAI's o1 and DeepSeek-R1) are trained with RL on verifiable rewards to emit long chains of thought, converting **test-time compute** into accuracy on math/code/planning. Most frontier models now ship reasoning as a mode on the same model, controlled by a thinking budget or reasoning-effort setting, rather than as a separate model. Tradeoff: often several to tens of times more output tokens, higher latency and cost. Spend reasoning on hard multi-step problems; turn it down or off for extraction, classification, and latency-sensitive paths. **Distillation** (training a small model on a large model's outputs or logits) is how reasoning behaviour gets compressed into cheap models.
 
 ## Interview questions
 
-**[questions.md](questions.md)** - 41 questions with answers: 13 basic, 16 intermediate, 12 advanced.
+**[questions.md](questions.md)** - 65 questions with answers: 13 basic, 16 intermediate, 12 advanced.
 
 ## Red flags interviewers watch for
 
@@ -147,5 +161,6 @@ The model outputs logits z; sampling shapes them. **Temperature** rescales befor
 - [FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness (Dao et al., 2022)](https://arxiv.org/abs/2205.14135)
 - [RoFormer: Enhanced Transformer with Rotary Position Embedding (Su et al., 2021)](https://arxiv.org/abs/2104.09864) - RoPE.
 - [Training Compute-Optimal Large Language Models (Hoffmann et al., 2022)](https://arxiv.org/abs/2203.15556) - Chinchilla.
+- [DeepSeek-V3 Technical Report (DeepSeek-AI, 2024)](https://arxiv.org/abs/2412.19437) - MLA, fine-grained MoE with auxiliary-loss-free balancing, multi-token prediction and FP8 training in one place.
 - [Lost in the Middle: How Language Models Use Long Contexts (Liu et al., 2023)](https://arxiv.org/abs/2307.03172)
 - [Are Emergent Abilities of Large Language Models a Mirage? (Schaeffer et al., 2023)](https://arxiv.org/abs/2304.15004)

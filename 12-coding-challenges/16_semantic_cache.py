@@ -2,10 +2,11 @@
 
 PROBLEM
 -------
-Model calls are slow and metered and real query traffic is Zipfian, so a cache
-in front of the model is one of the cheapest wins available. A *semantic*
-cache goes further than a hash map: it serves a stored response when a new
-query is close enough to one already answered. Implement:
+Model calls are slow and metered, and query traffic for support or FAQ-style
+products is often heavy-tailed, with a head of near-identical questions. That
+makes a cache in front of the model one of the cheapest wins available. A
+*semantic* cache goes further than a hash map: it serves a stored response
+when a new query is close enough to one already answered. Implement:
 
     SemanticCache(embedder, threshold=0.92, capacity=128, ttl=None,
                   clock=time.monotonic)
@@ -46,8 +47,13 @@ A strong solution demonstrates:
   encoder changes: cosine scales differ between embedding models.
 - Both tiers must share one store. Deleting from the exact map while leaving
   the vector in the search index is how expired and invalidated answers keep
-  getting served, the bug that kills naive semantic caches in RAG. The TTL and
-  invalidation tests probe with a paraphrase for exactly that reason.
+  getting served, the classic bug in naive semantic caches for RAG. The TTL
+  and invalidation tests probe with a paraphrase for exactly that reason.
+- Knowing what this is NOT. Provider prompt caching reuses the KV cache of a
+  repeated prompt prefix: it cuts input cost and time to first token but
+  still decodes a fresh answer, drawn from the same distribution an uncached
+  call would use. A response cache skips the model entirely and can be wrong.
+  Most stacks want both.
 - Eviction by recency of *use*, not of insertion: an OrderedDict plus
   move_to_end on every hit and every write is the whole trick.
 - Never cache across tenants, or across system-prompt and model versions.
@@ -60,8 +66,10 @@ A strong solution demonstrates:
   (model, prompt version, tenant) makes a version bump a namespace drop.
 Common mistakes: unbounded growth; expiry checked only on the exact path;
 caching a streamed response before the stream completes; caching errors and
-refusals; embedding before the exact tier is checked, which bills an embedding
-on every request; a threshold copied from a blog post.
+refusals; serving a cached answer where the product promises variety, such as
+a regenerate button; caching answers that depend on per-user context or live
+tool results; embedding before the exact tier is checked, which bills an
+embedding on every request; a threshold copied from a blog post.
 Follow-ups: in-process L1 plus shared Redis L2 and the coherence problem
 between them; writing the new query in as an alias of the entry that served
 it; negative caching; an ANN index sharded by namespace; reporting money saved

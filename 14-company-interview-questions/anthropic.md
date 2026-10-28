@@ -1,6 +1,6 @@
 # 🧭 Anthropic - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -10,10 +10,11 @@
 - The **values/culture round is where many otherwise-strong candidates fail**, per multiple public reports. Some version of "Why Anthropic?" reportedly comes up in nearly every round - a generic answer is a failure mode.
 - AI-use policy (official, published): refine your application with Claude after drafting it yourself; **no AI in take-homes or live interviews unless they explicitly say otherwise**. Some take-homes (e.g., performance engineering) explicitly allow it - read the instructions for your loop.
 - The exception is growing: some MLE loops now include a round where you are **given Claude and graded on how effectively you collaborate with it** - directing it, verifying its output, knowing when not to use it. (reported, varies by role)
+- 2026 third-party guides describe that AI-collaborative coding round spreading into general engineering loops, graded on decomposition, prompt clarity, verification, and integration. The official candidate guidance (last updated July 2025) still says no AI in live rounds unless you are told otherwise, so the written instructions for your specific round decide it (reported, varies).
 
 ## Company context
 
-Anthropic builds Claude (the model family), Claude Code, and the Claude API/enterprise platform, with an explicitly safety-first research agenda (Constitutional AI, interpretability, RSP). Engineers want in because it's one of two or three places where model, product, and safety research sit in the same building - and their careers page says it directly: "engineers here do lots of research, and researchers do lots of engineering." "AI engineer" at Anthropic mostly means building on top of Claude - agent harnesses, evals, inference and serving infrastructure, and customer-facing applied work - rather than pretraining, which is a smaller, separate slice.
+Anthropic builds Claude (the model family), Claude Code, and the Claude API/enterprise platform, with an explicitly safety-first research agenda (Constitutional AI, interpretability, RSP). In January 2026 it published a rewritten constitution for Claude that explains the reasoning behind its values and sets a priority order, rather than listing standalone principles. Engineers want in because it's one of two or three places where model, product, and safety research sit in the same building - and their careers page says it directly: "engineers here do lots of research, and researchers do lots of engineering." "AI engineer" at Anthropic mostly means building on top of Claude - agent harnesses, evals, inference and serving infrastructure, and customer-facing applied work - rather than pretraining, which is a smaller, separate slice.
 
 ## Roles & titles they hire
 
@@ -52,7 +53,7 @@ Reported end-to-end timelines vary widely - from about three weeks to a couple o
 - **"Do the simple thing that works."** An explicit company value. In coding and design rounds, empirical, pragmatic solutions beat clever architecture. Premature abstraction in the progressive-spec coding problem is a known way to run out of time.
 - **Evals as an engineering discipline.** Their engineering blog and product culture are eval-heavy; expect design questions to probe how you'd measure a system, not just build it.
 - **Capability over credentials.** They say publicly that plenty of technical staff never went to college and half had no ML background. Independent projects, open source, and thoughtful writing carry real weight.
-- **Collaborating with AI - inside the published rules.** They want people who work well with Claude, and their candidate guidance encourages using it for prep. Using it where prohibited (most live rounds, most take-homes) is a reported disqualifier. Their take-home design is an arms race with their own model - a performance-team lead publicly wrote that Claude Opus 4.5 matched their best human candidates, forcing a redesign.
+- **Collaborating with AI - inside the published rules.** They want people who work well with Claude, and their candidate guidance encourages using it for prep. Using it where prohibited (most live rounds, most take-homes) is a reported disqualifier. Their take-home design is an arms race with their own model - a performance-team lead publicly wrote in January 2026 that Claude Opus 4.5 matched their best human candidates, and the test has had to be redesigned repeatedly as models improve.
 - **Communication while coding.** Live rounds weight verbal reasoning alongside correctness; silent perfect code underperforms narrated good code.
 
 ## Representative questions
@@ -304,6 +305,28 @@ This is reported MLE-round territory: tool and MCP schema design as an engineeri
 
 </details>
 
+### 13. Anthropic's 2026 constitution moved Claude from a list of principles towards explained reasoning with a priority order. What does that shift change, and how would you test whether it worked?
+
+<details><summary><b>Answer</b></summary>
+
+Rules are easy to audit and brittle out of distribution. Explained values generalise better to situations nobody wrote a rule for, but are harder to verify. The shift trades auditability for generalisation, and most of the engineering work moves into evaluation.
+
+Why reasons generalise: a rule like "refuse dosing questions" gets applied by surface pattern, which produces over-refusal (a nurse asking something routine) and under-refusal (the same request rephrased). A model that understands why the caution exists - risk to a vulnerable user, missing context - can weigh those features in a case the rule writer never saw. The published document pairs this with a priority order for conflicts (broadly safe, then broadly ethical, then compliant with Anthropic's guidelines, then helpful) and a short list of hard constraints that are not weighed at all, such as serious uplift towards weapons of mass destruction. Judgement almost everywhere, a few bright lines: that is the design.
+
+What changes for a builder: system prompts work better when they supply context and reasons ("users are hospital clinicians, so dosing questions are routine") than when they stack prohibitions, because the model is reasoning about the situation rather than matching keywords.
+
+How to test it:
+
+- **Out-of-distribution suites:** scenarios deliberately unlike training-style examples, scored on whether behaviour follows the stated reasoning.
+- **Conflict probes:** cases where helpfulness and a higher priority pull apart, checking the order holds and the explanation given is honest.
+- **Paired over- and under-refusal sets,** because judgement fails in both directions and a single refusal rate hides which.
+- **Consistency under paraphrase and persona changes:** an internalised value should give stable answers when only the surface changes.
+- **Hard-constraint red-teaming as a separate, zero-tolerance gate,** never averaged into the judgement metrics.
+
+**Follow-ups:** Where would you still choose a hard rule over judgement in your own product, and why? How would you detect a model producing good-sounding reasons that do not actually drive its behaviour?
+
+</details>
+
 ## How to prepare
 
 **Topic directories to go deep on, in priority order:**
@@ -322,12 +345,14 @@ This is reported MLE-round territory: tool and MCP schema design as an engineeri
 - **Read their official candidate AI-usage guidance** (anthropic.com/candidate-ai-guidance) and follow it to the letter - draft applications yourself then refine with Claude; no AI in take-homes or live rounds unless your instructions explicitly allow it. Candidates have reportedly been dropped for violating this.
 - **Read their engineering blog** (anthropic.com/engineering) - especially "Building effective agents" and the Claude Code best-practices material. Design-round answers that align with their published architecture opinions (simple composable loops, evals over vibes) are effectively answers in their house style.
 - **Use Claude Code seriously for a week** on a real project. "I built X with it, here's where the harness helped and where it fell over" is an outstanding, verifiable talking point for both product and values conversations.
-- **Prepare the values round like a technical round.** Read "Core Views on AI Safety" and the Responsible Scaling Policy; write down where you agree, where you're uncertain, and one thing you'd push back on. Expect some version of "Why Anthropic?" throughout the loop.
+- **Prepare the values round like a technical round.** Read "Core Views on AI Safety", the Responsible Scaling Policy, and the January 2026 constitution for Claude; write down where you agree, where you're uncertain, and one thing you'd push back on. Expect some version of "Why Anthropic?" throughout the loop.
 - **Prep your project deep dive as a deliverable**: pick the project, build the two-level-deep answer for every major decision, and rehearse a 20-minute walkthrough. Compensation data is public on [levels.fyi](https://www.levels.fyi/companies/anthropic) if you need calibration.
 
 ## Sources
 
-- [Anthropic - Guidance on Candidates' AI Usage](https://www.anthropic.com/candidate-ai-guidance) (official policy; fetched July 2026)
+- [Anthropic - Guidance on Candidates' AI Usage](https://www.anthropic.com/candidate-ai-guidance) (official policy; fetched October 2026, page dated July 2025)
+- [Anthropic - Claude's new constitution (January 2026)](https://www.anthropic.com/news/claude-new-constitution) (official; reasons over rules, priority order, hard constraints)
+- [techinterview.org - Anthropic interview process deep dive (2026)](https://www.techinterview.org/post/3233474914/anthropic-interview-process-ai-collaborative-2026/) (third-party; AI-collaborative coding round and grading dimensions)
 - [Anthropic - Careers](https://www.anthropic.com/careers) (official; values, hiring approach, interview logistics)
 - [interviewing.io - Anthropic's Interview Process & Questions](https://interviewing.io/anthropic-interview-questions) (detailed loop breakdown from candidate data)
 - [TechCrunch - Anthropic has to keep revising its technical interview test (Jan 2026)](https://techcrunch.com/2026/01/22/anthropic-has-to-keep-revising-its-technical-interview-test-so-you-cant-cheat-on-it-with-claude/) (performance-eng take-home, AI-allowed policy for that test)

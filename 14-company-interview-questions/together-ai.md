@@ -1,6 +1,6 @@
 # 🤝 Together AI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,15 +8,16 @@
 - Coding skews **applied ML-systems**, not pure LeetCode: attention primitives, streaming generation, request batching - though some candidates report standard DS&A mediums too. Language is Python, C++, or CUDA depending on the role.
 - The centre of gravity is **inference performance and economics**: KV-cache math, continuous batching, speculative decoding, quantization, and what a token actually costs on an H100/B200. Their whole business is serving open models faster and cheaper than you could yourself.
 - System design rounds reportedly use their real problems: serving 100+ open models on a shared GPU fleet, multi-tenant LoRA, speculative-decoding pipelines. Interviewers reward concrete numbers (GPU memory capacities, KV-cache footprints) over hand-waving.
-- Public interview info is **moderate, not deep** - a handful of Glassdoor/Blind reports plus third-party prep guides. Treat stage-level details as "reported, varies" and confirm with your recruiter.
+- Public interview info is **moderate, not deep** - a handful of Glassdoor/Blind reports plus third-party prep guides. Treat stage-level details as "reported, varies" and confirm with your recruiter. 2026 prep guides describe the same shape, with the applied ML-systems round reportedly including KV-cache management logic and design prompts on LoRA-adapter fine-tuning services (reported, varies).
+- Context for "why Together": an $800M Series C at a reported ~$8.3B valuation (July 2026) is funding a large capacity build-out, so GPU-cloud, data-centre and inference-infrastructure hiring is heavy, and rack-scale Blackwell serving of large open MoE models is the live engineering problem.
 
 ## Company context
 
-Together AI is an "AI-native cloud": a serverless inference API over 100+ open models (Llama, Qwen, DeepSeek, Kimi, MiniMax lines), dedicated endpoints, a fine-tuning/post-training platform, and raw GPU clusters (including on-demand B200s). Their stated mission is to lower the cost of modern AI by co-designing software, hardware, algorithms, and models - and they have the research pedigree to mean it: Tri Dao (FlashAttention) is chief scientist, and the company ships work like FlashAttention-3, the Together Kernel Collection, and adaptive speculative decoding (ATLAS) directly into its serving stack. "AI engineer" here spans that whole stack: CUDA kernels, inference engines, serving platforms, GPU-cloud infrastructure, and customer-facing forward-deployed work - this is a place where the model is the workload, and performance engineering *is* the product.
+Together AI is an "AI-native cloud": a serverless inference API over 100+ open models (Llama, Qwen, DeepSeek, Kimi, MiniMax lines), dedicated endpoints, a fine-tuning/post-training platform, and raw GPU clusters (including on-demand B200s). Their stated mission is to lower the cost of modern AI by co-designing software, hardware, algorithms, and models - and they have the research pedigree to mean it: Tri Dao (FlashAttention) is chief scientist, the FlashAttention line continued with the Blackwell-targeted FlashAttention-4 paper in March 2026, and the company ships work like FlashAttention-3, the Together Kernel Collection, and adaptive speculative decoding (ATLAS) directly into its serving stack. "AI engineer" here spans that whole stack: CUDA kernels, inference engines, serving platforms, GPU-cloud infrastructure, and customer-facing forward-deployed work - this is a place where the model is the workload, and performance engineering *is* the product.
 
 ## Roles & titles they hire
 
-From their public Greenhouse board and job postings (July 2026):
+From their public Greenhouse board and job postings (July 2026, rechecked October 2026; openings rotate quickly):
 
 - **LLM Inference Frameworks and Optimization Engineer** - the kernels/engine core (SF, Amsterdam, Singapore)
 - **AI Researcher, Core ML (Turbo)** - research on inference speedups shipped to production
@@ -26,7 +27,8 @@ From their public Greenhouse board and job postings (July 2026):
 - **Senior/Staff Machine Learning Engineer & Platform Engineer, Voice AI** - a newer product area
 - **Platform Engineer, Model Shaping** - the fine-tuning/post-training product
 - **Forward Deployed Engineer (Inference & Post-Training)** - hands-on technical partner to strategic customers; posting asks for expert-level experience with vLLM, TensorRT-LLM, or SGLang
-- Plus data platform, observability, product engineering, and network engineering roles
+- **Senior Software Engineer, Infra Agent Systems** and **Software Engineer, AI Compute (Together Cloud)** - newer postings in the October 2026 check, alongside a GPU-cluster customer-success track and a Mandarin-speaking FDE variant
+- Plus data platform, observability, product engineering, network engineering, and data-centre operations roles
 
 Compensation data points exist on [levels.fyi](https://www.levels.fyi/jobs/company/together-ai).
 
@@ -63,7 +65,7 @@ Reported timeline: roughly 2-6 weeks; Glassdoor's average is around 16 days. Can
 
 <details><summary><b>Answer</b></summary>
 
-At batch size 1, generating one token requires reading every weight once: for a 70B-parameter model at FP8, that's ~70 GB of HBM traffic per forward pass. An H100 SXM has ~3.35 TB/s of HBM bandwidth, so the hard ceiling is ~3350/70 ≈ 48 tokens/s - regardless of FLOPs, which sit mostly idle. Each weight byte read supports only ~2 FLOPs per sequence (one multiply-accumulate), while the GPU's roofline ridge point is roughly 989 TFLOPS ÷ 3.35 TB/s ≈ 300 FLOPs/byte. You'd need on the order of 150+ sequences sharing each weight read before compute becomes the bottleneck.
+At batch size 1, generating one token requires reading every weight once: for a 70B-parameter model at FP8, that's ~70 GB of HBM traffic per forward pass. An H100 SXM has ~3.35 TB/s of HBM bandwidth, so the hard ceiling is ~3350/70 ≈ 48 tokens/s - regardless of FLOPs, which sit mostly idle. Each weight byte read supports only ~2 FLOPs per sequence (one multiply-accumulate), while the GPU's roofline ridge point is roughly 989 TFLOPS (dense BF16) ÷ 3.35 TB/s ≈ 300 FLOPs/byte. You'd need on the order of 150+ sequences sharing each weight read before compute becomes the bottleneck - and roughly double that if the matmuls also run in FP8, since FP8 tensor-core peak is about 2× BF16.
 
 That single observation drives most of the inference-serving playbook:
 
@@ -133,7 +135,7 @@ It optimizes **memory movement, not arithmetic**. Standard attention materialize
 
 FlashAttention is IO-aware: it tiles Q, K, V into blocks that fit in SRAM (~hundreds of KB per SM vs tens of GB of HBM, with ~10× higher bandwidth), computes attention block-by-block, and never writes the N×N matrix to HBM. The enabling trick is **online softmax**: you can compute a numerically stable softmax incrementally, maintaining a running max and running sum per row, rescaling previously accumulated output as new blocks arrive. The backward pass recomputes attention blocks in SRAM instead of storing them - spending FLOPs (which are idle anyway) to save bandwidth (which is scarce). Memory drops from O(N²) to O(N), and wall-clock speed improves severalfold despite marginally *more* FLOPs.
 
-The lineage matters at a company whose chief scientist wrote it: FlashAttention-2 reworked parallelization and warp partitioning to cut non-matmul overhead; FlashAttention-3 targets Hopper - warp specialisation, TMA async copies, and FP8 support, overlapping data movement with tensor-core work. Same algorithm family, each generation re-tuned to the hardware's actual bottleneck.
+The lineage matters at a company whose chief scientist wrote it: FlashAttention-2 reworked parallelization and warp partitioning to cut non-matmul overhead; FlashAttention-3 targets Hopper - warp specialisation, TMA async copies, and FP8 support, overlapping data movement with tensor-core work. FlashAttention-4 (2026) targets Blackwell, where tensor-core throughput grew much faster than shared-memory bandwidth and the exponential units, so the bottleneck moved to softmax: it uses fully asynchronous MMAs with larger tiles, software-emulated exponentials, conditional rescaling, and tensor memory. Same algorithm family, each generation re-tuned to the hardware's actual bottleneck.
 
 **Follow-ups:** Why does the backward pass recompute instead of caching? What changes about the tiling strategy for decode (one query token) vs prefill - and what does a decode-specific kernel like FlashDecoding parallelize over instead?
 
@@ -240,7 +242,7 @@ Decision axes: performance ceiling, workload shape, model/hardware flexibility, 
 
 - **vLLM** - the default. Broadest model support, fastest to adopt new architectures, huge community, PagedAttention/continuous batching built in, Python-extensible. Choose it when the customer iterates across models, needs day-one support for new releases, or lacks a dedicated inference team. Ceiling is high but not maximal.
 - **SGLang** - strongest when the workload has **structure**: heavy shared prefixes (agents, multi-turn chat, batch eval over one system prompt) exploit RadixAttention automatic prefix caching; constrained/JSON decoding is fast. Choose it for agentic pipelines, high prefix reuse, or heavy structured output. Ecosystem is smaller than vLLM's but performance on those shapes is often materially better.
-- **TensorRT-LLM** - peak performance on NVIDIA when the deployment is **static**: fixed model, fixed hardware, engine compiled ahead of time, tightest kernel selection and FP8/FP4 paths. Cost: build complexity, slower support for brand-new architectures, less runtime flexibility. Choose it when the customer owns one model at very large scale and single-digit-percent efficiency is worth engineering time.
+- **TensorRT-LLM** - peak performance on NVIDIA when the deployment is **static**: fixed model, fixed hardware, tightest kernel selection and FP8/FP4 paths. It was historically built around ahead-of-time compiled engines; newer releases have shifted towards a PyTorch-based runtime that cuts much of that build friction, but it remains the most NVIDIA-specific option. Cost: more tuning effort, often slower support for brand-new architectures, less portability. Choose it when the customer owns one model at very large scale and single-digit-percent efficiency is worth engineering time.
 
 The FDE-shaped answer adds the meta-point: benchmark on the *customer's* traffic - their sequence-length distribution, prefix-reuse ratio, and latency SLO - not on marketing numbers, because ranking flips with workload shape. Then be honest about when managed serving (i.e., the thing Together sells) beats self-hosting: below a utilization threshold, dedicated GPUs sit idle and per-token pricing wins; above it, dedicated capacity wins. Knowing where that crossover sits for the customer is the actual job.
 
@@ -298,6 +300,40 @@ Then fix in that order - hardware first, placement second, overlap third - and r
 
 </details>
 
+### 13. Serve a DeepSeek-V3-class open MoE model (671B total parameters, ~37B active per token) on Blackwell. How do you lay it out, and why does expert parallelism change the economics?
+
+<details><summary><b>Answer</b></summary>
+
+Separate memory from compute. Every expert must be resident, so FP8 weights alone are ~671 GB: one 8×B200 node (~180 GB each, ~1.4 TB total) holds them with room for KV cache, 8×H100 does not. Per-token compute is set by the ~37B active parameters, so decode FLOPs look like a mid-size dense model while memory looks like a giant one.
+
+The trap is arithmetic intensity per expert. Each token picks 8 of 256 routed experts per layer, so with a global batch of B tokens each expert sees roughly B/32. At batch 64, every expert's weights are read to serve about two tokens: pure bandwidth-bound decode. Reaching the ~150-300 tokens per weight read the roofline wants means thousands of concurrent tokens per step. Hence **wide expert parallelism**: spread experts across many GPUs, aggregate a very large batch, and move tokens to experts rather than weights to tokens.
+
+Communication becomes the bottleneck. Each MoE layer does an all-to-all dispatch and an all-to-all combine. A rack-scale NVLink domain (GB200 NVL72 puts 72 GPUs on one fabric) keeps that off InfiniBand, and libraries such as DeepEP plus two-micro-batch overlap hide it behind compute.
+
+Decisions to defend:
+
+- **Attention parallelism.** MLA's latent KV cache is small, but tensor-parallel attention replicates it on every rank, so data-parallel attention with expert-parallel FFNs is the usual pairing.
+- **Load balance.** Routing is skewed and shifts with traffic, and a hot expert stalls the whole step. Replicate hot experts and re-place them from observed routing statistics.
+- **Disaggregation.** Prefill and decode want different parallelism, so run separate pools and ship KV between them over RDMA.
+
+The economics: wide EP pays off only with large aggregate traffic, which suits a shared serverless pool. A low-traffic dedicated endpoint is better on one 8-GPU node with tensor plus expert parallelism, accepting lower utilisation.
+
+**Worth sketching.** One decode step, showing that the expensive hop is moving tokens between GPUs, not loading weights.
+
+```mermaid
+flowchart LR
+    A["Request router"] --> B["Prefill pool"]
+    B -->|"KV transfer (RDMA)"| C["Decode pool<br/>DP attention"]
+    C --> D["Gate: top-8 of 256 experts"]
+    D -->|"all-to-all dispatch"| E["Expert GPUs<br/>(EP across the rack)"]
+    E -->|"all-to-all combine"| F["Next layer or<br/>sample token"]
+    F --> C
+```
+
+**Follow-ups:** A large coding customer onboards and the routing histogram shifts sharply - what happens to p99 inter-token latency, and how do you respond? How does the layout change for a ~1T-parameter model with 384 experts?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -315,7 +351,7 @@ Then fix in that order - hardware first, placement second, overlap third - and r
 2. Use the product seriously: run the serverless API across 2-3 models, measure TTFT and tokens/s yourself, try a fine-tuning job. "I benchmarked your API and noticed X" is a strong signal for FDE and platform roles.
 3. Know the OSS engine landscape hands-on - the FDE posting names vLLM, TensorRT-LLM, and SGLang explicitly. Read the vLLM PagedAttention paper and SGLang's RadixAttention design; be ready to compare them on a real workload.
 4. Drill the napkin math until it's reflexive: H100/B200 memory and bandwidth, KV-cache per token for a model you know, cost per million tokens from GPU rental prices. Multiple reports say interviewers reward specific numbers.
-5. For research roles: know Tri Dao's line of work (FlashAttention 1-3, Mamba) and Together's public releases (RedPajama, speculative-decoding work) well enough to discuss trade-offs and propose experiments - a paper walk-through round is reported.
+5. For research roles: know Tri Dao's line of work (FlashAttention 1-4, Mamba) and Together's public releases (RedPajama, speculative-decoding work) well enough to discuss trade-offs and propose experiments - a paper walk-through round is reported.
 
 ## Sources
 
@@ -328,4 +364,7 @@ Then fix in that order - hardware first, placement second, overlap third - and r
 - [Blind - TogetherAI data engineering round](https://www.teamblind.com/post/togetherai-data-engineering-round-gvvgf0nh)
 - [levels.fyi - Together AI](https://www.levels.fyi/jobs/company/together-ai)
 - VentureBeat coverage of Together AI's ATLAS adaptive speculative decoding (surfaced via search; site blocks automated fetch)
+- [BigDATAwire - Together AI raises $800M at $8.3B valuation (July 2026)](https://www.hpcwire.com/bigdatawire/this-just-in/together-ai-raises-800m-at-8-3b-valuation-to-make-frontier-ai-accessible-to-all/)
+- [FlashAttention-4: Algorithm and Kernel Co-Design for Blackwell GPUs (arXiv:2603.05451)](https://arxiv.org/abs/2603.05451)
+- [techinterview.org - How Together AI interviews backend and infra engineers](https://www.techinterview.org/post/3233475437/together-ai-engineering-interview/) (2026 third-party guide)
 

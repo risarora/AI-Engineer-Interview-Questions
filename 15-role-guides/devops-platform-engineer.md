@@ -7,12 +7,15 @@ You're not being hired to design model architectures. You're being hired to run 
 ## How this role's interviews changed (2024 → 2026)
 
 - **"Design our deployment pipeline" became "design our LLM serving platform."** The flagship system-design round is now some variant of: run open-weight models on a shared GPU cluster for N internal teams, or build the gateway that fronts external providers. You're expected to reason about GPU scheduling, autoscaling with multi-minute cold starts, and token-denominated quotas the way you used to reason about pods and CPU requests.
-- **GPU economics is a standing interview topic.** Spot vs reserved capacity, bin-packing fractional workloads onto expensive cards, quota systems that stop one team from squatting the fleet, per-team cost attribution. Interviewers ask for numbers: what does an idle H100 cost you, what utilization do you target, when does self-hosting beat API spend.
+- **GPU economics is a standing interview topic.** Spot vs reserved capacity, bin-packing fractional workloads onto expensive cards, quota systems that stop one team from squatting the fleet, per-team cost attribution. Interviewers ask for numbers: what does an idle H100 cost you, what utilisation do you target, when does self-hosting beat API spend.
 - **CI/CD questions grew an eval stage.** "How do you gate a deploy?" now includes prompts and model versions as deployable artifacts. Pipelines that run eval suites as merge gates - with pass/fail thresholds, golden sets, and canary comparisons - are expected vocabulary, the way test coverage gates were in 2020.
 - **Incident-response scenarios changed shape.** Less "the API is returning 500s," more "the provider silently updated the model and our refusal rate tripled," "a fine-tune rollout tanked answer quality with zero infra alerts," or "the provider is down - execute failover." Rollback questions now include artifacts that take 10 minutes to load and behaviour that isn't captured by any health check.
-- **Observability rounds expect LLM-native metrics.** TTFT, tokens/sec, KV-cache utilization, queue depth, cost per request, refusal rate - alongside the classic RED/USE metrics. "GPU utilization was 95% so we were fine" is now a trap answer interviewers deliberately set.
+- **Observability rounds expect LLM-native metrics.** TTFT, tokens/sec, KV-cache utilisation, queue depth, cost per request, refusal rate - alongside the classic RED/USE metrics. "GPU utilisation was 95% so we were fine" is now a trap answer interviewers deliberately set.
 - **A platform-as-product framing is probed explicitly.** Can you design rate limits, budgets, key management, model routing, and fallbacks as a *self-serve internal product* for dozens of teams - not a bespoke integration per team? This is where staff-level candidates separate.
-- **De-emphasised:** Kubernetes trivia for its own sake (CKA-style API minutiae), classic "design a CI system for microservices" with no AI twist, and deep ML theory - nobody asks a platform engineer to derive attention. Terraform/K8s fluency is assumed as a floor, not tested as a ceiling.
+- **Kubernetes grew native vocabulary for inference.** Dynamic Resource Allocation (stable since Kubernetes 1.34) for GPU claims, the Gateway API Inference Extension for model-aware routing, and llm-d or NVIDIA Dynamo for disaggregated prefill/decode now come up by name. Nobody expects API-level detail, but "I'd write a custom scheduler" when the ecosystem already ships one reads as out of date.
+- **The platform team now owns AI developer tooling.** Rolling coding agents out to the whole engineering org, running them unattended in CI, keeping an approved list of MCP servers, and attributing their spend is a new design prompt. Expect "what can an agent touch, with whose credentials, and who reviews what it merges?"
+- **AI-assisted coding rounds arrived, and AI-tool fluency is graded.** Meta piloted an AI-enabled coding round in October 2025 and expanded it through 2026, typically alongside one classic no-AI round. Google began piloting a Gemini-assisted round for some SWE roles in 2026, and Amazon has added an AI-assisted repository task to some online assessments (all reported, varies by team). For infra candidates the task is often a repo with a broken Terraform module, Helm chart or CI workflow. You're judged on how precisely you direct the tool and whether you catch what it gets wrong: wildcard IAM policies, a plan that destroys and recreates a stateful resource, hallucinated flags, deprecated API versions. Ask the recruiter which rounds allow assistants and practise both modes.
+- **De-emphasised:** Kubernetes trivia for its own sake (CKA-style API minutiae), classic "design a CI system for microservices" with no AI twist, and deep ML theory - nobody asks a platform engineer to derive attention. Terraform/K8s fluency is assumed as a floor, not tested as a ceiling, and with an assistant in the room the bar on how much you finish rises with it.
 
 ---
 
@@ -22,7 +25,7 @@ You're not being hired to design model architectures. You're being hired to run 
 
 Expected - and probed hard:
 
-- **GPU infrastructure:** scheduling and bin-packing on Kubernetes (device plugins, node pools, topology), quotas and fair-share across teams, spot vs reserved vs on-demand economics, why fleet utilization is the metric your CFO sees.
+- **GPU infrastructure:** scheduling and bin-packing on Kubernetes (device plugins, node pools, topology), quotas and fair-share across teams, spot vs reserved vs on-demand economics, why fleet utilisation is the metric your CFO sees.
 - **Serving operations:** what vLLM (or an equivalent) actually does - continuous batching, PagedAttention, KV cache - at the level of *which metrics it exposes and how you autoscale on them*. Cold-start realities: multi-GB image pulls, minutes of weight loading, and what that does to HPA assumptions.
 - **LLM-aware traffic management:** why least-connections load balancing is wrong for inference, KV-cache/prefix-aware routing, draining nodes with 10-minute streams open.
 - **Gateway/platform design:** API-key issuance, per-team budgets and token-denominated rate limits, model routing config, provider fallbacks, chargeback dashboards.
@@ -57,7 +60,7 @@ If you can run stateful, expensive, slow-starting workloads and speak tokens as 
 | [09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/) | 🟢 deep | You enforce the controls: key management, data retention, PII redaction in logs, guardrail services, audit trails, tenant isolation. Compliance lands on the platform. |
 | [10-multimodal](../10-multimodal/) | ⚪ skim | Operational context only - image tokens cost more, bigger payloads, GPU memory pressure. Rarely a dedicated question. |
 | [11-ai-system-design](../11-ai-system-design/) | 🟢 deep | Your main round: design the serving platform, the gateway, the eval pipeline. Practice these end to end with numbers. |
-| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Expect practical exercises: token-bucket rate limiter, cost-attribution script, a deployment manifest review. Python fluency assumed. |
+| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Expect practical exercises: token-bucket rate limiter, cost-attribution script, a deployment manifest review. Python fluency assumed, and practise some of them with an AI assistant, since several companies now run assisted rounds. |
 | [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Have incident stories ready: a GPU capacity crunch, a bad model rollout you caught (or didn't), a cost blowup you fixed. |
 
 ---
@@ -72,9 +75,9 @@ Start by splitting the workload classes, because they want opposite things. **In
 
 Mechanics on Kubernetes: GPU device plugin + node pools per GPU type; a quota layer (Kueue, Volcano, or YuniKorn-style) giving each team a guaranteed floor and a borrowable ceiling - team quotas that hard-partition the cluster waste it, because someone is always idle. Batch jobs run preemptible: when the owning team reclaims its floor, the borrower's job is evicted, which only works if training jobs checkpoint (make that a platform requirement, not a suggestion). Gang scheduling matters for multi-GPU training - an 8-GPU job that gets 6 GPUs deadlocks the cluster; it must be all-or-nothing.
 
-Bin-packing: schedule to *consolidate* - pack small jobs onto shared nodes and keep whole nodes free for multi-GPU jobs; fragmentation is the silent killer of GPU fleets. For sub-GPU workloads (small models, dev notebooks), MIG partitioning or time-slicing raises utilization at some isolation cost.
+Bin-packing: schedule to *consolidate* - pack small jobs onto shared nodes and keep whole nodes free for multi-GPU jobs; fragmentation is the silent killer of GPU fleets. For sub-GPU workloads (small models, dev notebooks), MIG partitioning or time-slicing raises utilisation at some isolation cost.
 
-Report utilization per team weekly and price it via showback/chargeback - quota fights end when idle reservations show up on someone's budget. Target fleet utilization realistically: 60-80% is healthy; 95% means you have no failover headroom.
+Report utilisation per team weekly and price it via showback/chargeback - quota fights end when idle reservations show up on someone's budget. Target fleet utilisation realistically: 60-80% is healthy; 95% means you have no failover headroom.
 
 **Follow-ups:** A team requests 16 GPUs "for a deadline" and uses 3 - what does the system do about it? How do you handle a multi-node training job on spot capacity?
 
@@ -98,9 +101,9 @@ The trap answer interviewers listen for: putting latency-SLO production inferenc
 
 <details><summary><b>Answer</b></summary>
 
-CPU-based HPA fails twice: the bottleneck is the GPU (CPU sits near-idle while the GPU saturates), and the scaling signal you need is *demand pressure*, which CPU doesn't reflect. GPU "utilization" percentage is also misleading - decode is memory-bandwidth-bound, so the GPU can report high utilization while having batch headroom, or look busy while throughput has collapsed.
+CPU-based HPA fails twice: the bottleneck is the GPU (CPU sits near-idle while the GPU saturates), and the scaling signal you need is *demand pressure*, which CPU doesn't reflect. GPU "utilisation" percentage is also misleading - decode is memory-bandwidth-bound, so the GPU can report high utilisation while having batch headroom, or look busy while throughput has collapsed.
 
-Scale on serving-level metrics vLLM exposes: **queue depth** (`num_requests_waiting`) is the primary signal - sustained waiting requests mean you're saturated; **KV-cache utilization** (`gpu_cache_usage_perc`) tells you when new requests will trigger preemption/recompute; and **TTFT p95** is the SLO backstop. KEDA or an HPA on custom metrics wired to these works; scale up aggressively, scale down slowly.
+Scale on serving-level metrics vLLM exposes: **queue depth** (`vllm:num_requests_waiting`) is the primary signal - sustained waiting requests mean you're saturated; **KV-cache utilisation** (`vllm:gpu_cache_usage_perc`; metric names shift between releases, so read them off your version's `/metrics`) tells you when new requests will trigger preemption/recompute; and **TTFT p95** is the SLO backstop. KEDA or an HPA on custom metrics wired to these works; scale up aggressively, scale down slowly.
 
 Then the hard part: **cold starts are minutes, not seconds.** A new replica must schedule onto a GPU node (possibly wait for cluster-autoscaler to provision one: 5-10+ min), pull a multi-GB image, load tens of GB of weights, and warm up. So reactive autoscaling alone can't handle spikes. Mitigations, in order of impact: keep a warm pool / overprovision with low-priority placeholder pods that get preempted by real replicas; cut weight-load time (bake weights into node-local NVMe or use a streaming loader like a tensorizer-style path from object storage, rather than pulling through the container image); predictive scaling on traffic patterns (business hours are predictable); and scale-to-zero only for genuinely idle internal models where a 10-minute first-request penalty is acceptable - never for anything with a latency SLO.
 
@@ -114,7 +117,7 @@ Then the hard part: **cold starts are minutes, not seconds.** A new replica must
 
 Three properties break classic load balancing. **Requests are wildly heterogeneous** - a 100-token completion and an 8k-token-context, 2k-token-output request differ by orders of magnitude in cost, so round-robin and least-connections produce hot spots; "connections" is the wrong unit. **Replicas are stateful in performance terms** - each holds a KV/prefix cache, and a request whose prompt prefix is already cached on replica A (shared system prompt, multi-turn conversation, agent loop re-sending history) gets dramatically better TTFT there than on replica B, where the prefill runs from scratch. **Streams are long-lived** - minutes-long SSE responses mean naive draining kills in-flight generations on every deploy.
 
-A good routing layer (this is what llm-d, AIBrix, and gateway-inference-extension-style projects formalise): routes on *engine state* - queue depth, KV-cache utilization, and prefix-cache affinity - not connection counts. Prefix-aware routing hashes the prompt prefix (or session/conversation ID as a proxy) to prefer the replica holding that cache, falling back to least-loaded when the preferred replica is saturated; the win is real because prefill is the expensive, compute-bound phase you're skipping. Load estimation uses *tokens*, not requests: pending prefill tokens per replica is the honest queue metric.
+A good routing layer (this is what llm-d, AIBrix, and gateway-inference-extension-style projects formalise): routes on *engine state* - queue depth, KV-cache utilisation, and prefix-cache affinity - not connection counts. Prefix-aware routing hashes the prompt prefix (or session/conversation ID as a proxy) to prefer the replica holding that cache, falling back to least-loaded when the preferred replica is saturated; the win is real because prefill is the expensive, compute-bound phase you're skipping. Load estimation uses *tokens*, not requests: pending prefill tokens per replica is the honest queue metric.
 
 Operationally: connection draining must wait out streams - set termination grace periods to your max generation time (minutes), stop routing new requests early, and let in-flight ones finish. And per-request timeouts should split TTFT from total stream duration, because a healthy long generation and a hung one look identical to a single timeout.
 
@@ -126,7 +129,7 @@ Operationally: connection draining must wait out streams - set termination grace
 
 <details><summary><b>Answer</b></summary>
 
-Sizing first: 70B parameters at FP16 is ~140GB of weights alone - that doesn't fit one 80GB card, so you're tensor-parallel across 2 GPUs minimum, realistically 4 to leave KV-cache room for real batch sizes. Or quantize (INT8/FP8 ≈ ~70GB, 4-bit ≈ ~35-40GB) and trade a small quality tax for half the hardware - say which you'd pick and why, and note that quantized variants must pass the same eval gate before serving.
+Sizing first: 70B parameters at FP16 is ~140GB of weights alone - that doesn't fit one 80GB card, so you're tensor-parallel across 2 GPUs minimum, realistically 4 to leave KV-cache room for real batch sizes. Or quantize (INT8/FP8 ≈ ~70GB, 4-bit ≈ ~35-40GB) and trade a small quality tax for half the hardware - say which you'd pick and why, and note that quantized variants must pass the same eval gate before serving. Newer cards move the line: an FP8 70B fits on a single 141GB H200 or ~180GB B200-class GPU with KV-cache room to spare, which removes tensor parallelism from the problem entirely.
 
 What breaks on vanilla Kubernetes:
 
@@ -218,7 +221,7 @@ Four layers, top to bottom.
 
 **Traffic/latency:** TTFT p50/p95/p99 and inter-token latency, *separately* from total duration - for streaming, TTFT is what users feel, and total duration is dominated by output length, so p99 total latency alone is noise. Request rate and *token* throughput in/out (tokens are the capacity unit), error rates split by class: 429 vs 5xx vs content-filter vs context-length, because each has a different runbook.
 
-**Engine/GPU (self-hosted):** queue depth (`num_requests_waiting` - the primary saturation and autoscaling signal), KV-cache utilization, preemption/recompute counts, batch size, and GPU memory. Plain GPU-utilization percentage is the famous trap: decode is memory-bandwidth-bound, so "95% util" coexists with terrible throughput - track tokens/sec/GPU as the honest efficiency number.
+**Engine/GPU (self-hosted):** queue depth (`num_requests_waiting` - the primary saturation and autoscaling signal), KV-cache utilisation, preemption/recompute counts, batch size, and GPU memory. Plain GPU-utilisation percentage is the famous trap: decode is memory-bandwidth-bound, so "95% util" coexists with terrible throughput - track tokens/sec/GPU as the honest efficiency number.
 
 **Cost:** spend per feature/team/model, cached-vs-uncached token ratio, cost per request trend. Alert on anomalies (2× hourly baseline) exactly like error budgets - a mis-looping agent or retry storm is a cost incident with a latency signature of zero.
 
@@ -256,7 +259,7 @@ Show the method; the numbers are assumptions to state out loud.
 
 **Throughput:** with continuous batching, a 13B on one H100-class card plausibly sustains a few thousand output tokens/sec at healthy batch sizes - but *measure it*; the honest answer is "benchmark with our real prompt/output distribution, because prefill-heavy traffic and decode-heavy traffic size differently." At ~2.5k output tokens/sec/GPU, 10k output tokens/sec peak ≈ 4 GPUs, plus headroom for prefill bursts and TTFT SLO → 6, plus N+1 and deploy surge → **~8 GPUs peak**, scaled down off-peak.
 
-**Then the question behind the question:** at this volume, compare against API pricing - utilization is the whole game. 8 GPUs at ~30% average utilization often loses to a provider; at 70%+ it usually wins. Quantizing to FP8/INT8 roughly halves the fleet if quality passes the eval gate. State that you'd present both options with cost curves, not a single answer.
+**Then the question behind the question:** at this volume, compare against API pricing - utilisation is the whole game. 8 GPUs at ~30% average utilisation often loses to a provider; at 70%+ it usually wins. Quantizing to FP8/INT8 roughly halves the fleet if quality passes the eval gate. State that you'd present both options with cost curves, not a single answer.
 
 **Follow-ups:** Traffic is 80% one shared system prompt - how does prefix caching change the math? What breaks in this sizing when someone adds a 32k-context feature?
 
@@ -272,9 +275,63 @@ Show the method; the numbers are assumptions to state out loud.
 
 **Logs and retention - the trap topic:** prompts and completions are the most sensitive data your observability stack has ever touched; full-payload logging collides with GDPR/CCPA immediately. Pattern: metadata and token counts retained long-term; payloads sampled, PII-redacted at ingestion, access-controlled and audit-logged, short retention (days-to-weeks), per-tenant opt-out for regulated customers. Deletion requests must reach *everywhere* payloads land: traces, eval datasets, fine-tuning corpora, caches - enumerate those sinks in the design or the DSR process fails an audit.
 
-**Audit:** every request attributable to team/user/key/model-version; every config change (routing, budgets, approved models) in an immutable change log. SOC 2 and AI-specific reviews (EU AI Act readiness) increasingly ask for exactly these trails.
+**Audit:** every request attributable to team/user/key/model-version; every config change (routing, budgets, approved models) in an immutable change log. SOC 2, ISO/IEC 42001 audits and EU AI Act readiness reviews increasingly ask for exactly these trails.
 
 **Follow-ups:** A developer pasted a customer's PII into a prompt that's now in your trace store and an eval set - walk through remediation. How do you prove to an auditor which model version handled a given request last March?
+
+</details>
+
+### 14. Most of your inference traffic is now agents, not chat: long sessions, 50k-token contexts re-sent every step, bursty tool loops. What changes in the serving stack?
+
+<details><summary><b>Answer</b></summary>
+
+The unit of work changes from a request to a run, and the dominant cost shifts from decode to repeated prefill. A 30-step agent run re-sends a growing context on every step, so if each step pays full prefill, most of your GPU time goes to recomputing tokens you computed seconds ago. Prefix-cache hit rate becomes the efficiency number that matters most, ahead of batch size.
+
+Concrete changes:
+
+- **Route for affinity.** Route by run or session ID with prefix-aware fallback, so step N lands on the replica holding step N-1's KV cache. A cache-blind balancer turns every step into a cold prefill.
+- **Tier the KV cache.** HBM can't hold thousands of sessions that are idle while a tool call runs. Offload KV blocks to CPU memory or local NVMe (LMCache, or vLLM's KV connector path) and reload on the next step, which is far cheaper than recomputing a 50k-token prefill.
+- **Disaggregate prefill and decode at scale.** Long prefills stall co-batched decodes and wreck inter-token latency. Separate pools (llm-d, NVIDIA Dynamo, SGLang) let you size and scale each on its own signal, at the cost of shipping KV cache across the network, so it only pays off with fast interconnect and enough traffic.
+- **SLOs and limits per run.** Track end-to-end task latency and cost per completed task alongside TTFT. Enforce step caps and per-run token budgets at the gateway: a looping agent is a capacity incident as well as a cost one.
+- **Plan capacity in sessions.** Concurrency becomes active runs times context size, and tool waits mean sessions hold cache while generating nothing.
+
+For provider-hosted models the same logic shows up as prompt-caching discounts and cache TTLs, so the platform should keep prefixes byte-stable across steps.
+
+The tradeoff to name: affinity and offload raise hit rate but make load uneven, so you need a spill threshold where a saturated replica gives up affinity and takes the cold prefill.
+
+**Follow-ups:** Prefix hit rate fell from 80% to 30% after an app release with no infra change - what do you look for first? When is disaggregated serving not worth the operational cost?
+
+</details>
+
+### 15. Leadership wants coding agents running unattended in CI: fixing flaky tests, bumping dependencies, drafting PRs from tickets. You own the platform. What guardrails do you build?
+
+<details><summary><b>Answer</b></summary>
+
+Treat every agent run as untrusted code execution driven by untrusted input, because that's what it is: the agent reads issues, logs and dependencies that outsiders can influence, then runs shell commands. Least privilege plus a human merge gate covers most of the design.
+
+- **Isolation.** Each run gets an ephemeral sandbox (a gVisor container or a Firecracker-style microVM) destroyed afterwards. No shared runners with cached credentials, no Docker socket, no routes to production networks.
+- **Identity.** The agent has its own bot identity, never a human's token. Credentials are short-lived and repo-scoped, issued per run via OIDC federation, and cloud access is limited to a read-only test account. Every push is attributable to a run.
+- **Egress.** Default-deny outbound, with allowlists for the model gateway, the package registry proxy and the git host. This is the main defence against prompt-injected exfiltration, such as a poisoned issue telling the agent to post environment variables somewhere. The registry proxy also blocks hallucinated or typosquatted package names.
+- **Model access through the gateway.** Per-run token budgets, step caps, and spend attributed to the requesting team, like any other consumer.
+- **Merge policy.** Agents open PRs and never merge. Branch protection, CODEOWNERS and required review apply unchanged, and changes to workflow files, CI config or CODEOWNERS go through a stricter review path, because that's how an agent escalates its own privileges.
+- **Audit.** Log every command, tool call and MCP server used per run, and pull the agent's own telemetry (many coding agents can export OpenTelemetry) into the existing stack.
+
+The surprise is capacity: agent-generated PRs can multiply CI load, so meter it and give agents a lower-priority runner pool.
+
+**Worth sketching.** Where each control sits on the path from task to merge.
+
+```mermaid
+flowchart LR
+    T["Task from ticket or schedule"] --> S["Ephemeral sandbox<br/>no prod credentials"]
+    S -->|"model calls"| G["LLM gateway<br/>budget per run"]
+    S -->|"packages"| P["Registry proxy<br/>allowlist"]
+    S --> PR["Pull request<br/>bot identity"]
+    PR --> CI["CI and policy checks"]
+    CI --> H["Human review<br/>CODEOWNERS"]
+    H --> M["Merge"]
+```
+
+**Follow-ups:** An on-call team wants the agent to read production logs while debugging incidents - how do you grant that? How do you measure whether agent PRs are worth the review time they consume?
 
 </details>
 
@@ -286,12 +343,12 @@ Show the method; the numbers are assumptions to state out loud.
 - **An LLM gateway with budgets and chargeback.** A proxy fronting 2+ providers: virtual keys, token-denominated rate limits, per-team budget enforcement, routing config as data, fallback chains, and a cost-attribution dashboard (Grafana screenshot in the README). *Demonstrates:* platform-as-product thinking - the exact artifact the staff design round asks you to whiteboard.
 - **A CI pipeline with an eval gate.** GitHub Actions that treats a prompt file as a deployable: PR triggers a golden-set eval run, posts per-case diffs as a PR comment, blocks merge on regression beyond threshold, and canaries on merge. *Demonstrates:* you can extend deployment discipline to artifacts whose failures are semantic, not syntactic.
 - **An incident runbook + game-day writeup for a provider outage.** A short doc: detection (synthetic probes), circuit breaking, pre-evaluated failover, tiered degradation, staged failback - plus notes from actually running the drill against your own gateway. *Demonstrates:* SRE instincts applied to AI dependencies; almost no candidate brings evidence of having *practised* this.
-- **A GPU cost/utilization analysis.** A writeup (real cluster or honest simulation): bin-packing fragmentation, spot-interruption handling with checkpoint/resume for a fine-tuning job, and a self-host vs API break-even curve at several utilization levels. *Demonstrates:* fleet economics fluency - the topic your interviewer's CFO is currently asking them about.
+- **A GPU cost/utilisation analysis.** A writeup (real cluster or honest simulation): bin-packing fragmentation, spot-interruption handling with checkpoint/resume for a fine-tuning job, and a self-host vs API break-even curve at several utilisation levels. *Demonstrates:* fleet economics fluency - the topic your interviewer's CFO is currently asking them about.
 
 ## Red flags interviewers see from this role
 
 - **Autoscaling answers that ignore cold starts.** Proposing standard HPA-on-CPU or scale-to-zero for latency-SLO inference without mentioning multi-minute weight loading signals zero hands-on time with model serving.
-- **"GPU utilization was high, so the fleet was efficient."** Not knowing that decode is memory-bandwidth-bound - and that tokens/sec/GPU, queue depth, and KV-cache pressure are the honest metrics - is the fastest credibility loss in the observability round.
+- **"GPU utilisation was high, so the fleet was efficient."** Not knowing that decode is memory-bandwidth-bound - and that tokens/sec/GPU, queue depth, and KV-cache pressure are the honest metrics - is the fastest credibility loss in the observability round.
 - **Health-check thinking for quality failures.** Treating model rollbacks as purely an availability problem, with no answer for "all probes are green but the answers are wrong" - no eval gates, no refusal-rate monitoring, no canary-on-quality.
 - **Kubernetes-reflex answers with no LLM adaptation.** Rolling deploys that kill 10-minute streams, liveness probes that crash-loop loading pods, 140GB weights baked into container images, least-connections load balancing for inference.
 - **No token vocabulary in capacity or cost discussions.** Sizing fleets in requests/sec without token math, rate-limiting internal teams by request count, or having no answer for per-team cost attribution.

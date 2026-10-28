@@ -1,6 +1,6 @@
 # ⚖️ Harvey - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -9,10 +9,11 @@
 - The paired coding round is reported to be AI-flavoured rather than pure algorithms - tokenization, vector storage, retrieval plumbing - and candidates report being allowed to use their normal tools including LLM assistants, with the interviewer offering few hints. Autonomy under mild pressure is part of the signal.
 - Technical centre of gravity: **retrieval over very long legal documents, citation grounding, and evaluation without ground truth**. Harvey publishes BigLaw Bench, its own answer/source scoring rubrics, and hallucination-rate measurements, so these are not abstract interests.
 - Public loop information is **moderate and inconsistent between sources**: several third-party guides describe slightly different stage sets (some list a classic phone screen plus a 4-5 round onsite instead of take-home plus paired coding). Treat every stage row below as "reported, varies" and confirm with your recruiter.
+- A newer shape appears in an August 2026 candidate report for an agent-focused role: a three-round final of system design, a project deep dive, and a coding round that builds a bare-bones embedding and RAG pipeline in a notebook. It was scheduled at an office, but the interviewers joined by video, so ask whether "onsite" means in the room (reported, varies).
 
 ## Company context
 
-Harvey builds domain-specific AI for legal and professional services: an assistant grounded in a firm's own documents, Vault for storing and bulk-analysing large document sets, Knowledge for research across case law and regulatory sources, Contract Intelligence, an agent builder, and deep integrations into Word and the document management systems lawyers already live in. Their own materials describe 1,500+ customers across 60+ countries, including large law firms and in-house legal teams. Engineers want in because the constraints are genuinely hard: a 200-page credit agreement whose defined terms sit 150 pages from the clause you care about, an answer that is worthless unless every assertion links to a verifiable passage, and a client base for whom a confidentiality breach is a regulatory event. "AI engineer" here means applied LLM systems work - retrieval, agents, evals, inference plumbing, and the enterprise security envelope around them - in close partnership with in-house lawyers who write the rubrics and grade the outputs.
+Harvey builds domain-specific AI for legal and professional services: an assistant grounded in a firm's own documents, Vault for storing and bulk-analysing large document sets, Knowledge for research across case law and regulatory sources, Contract Intelligence, an agent builder, and deep integrations into Word and the document management systems lawyers already live in. Their own materials describe 1,500+ customers across 60+ countries, including large law firms and in-house legal teams. In May 2026 Harvey reported 500+ prebuilt use-case agents live across practice areas, with Agent Builder in early access so firms can tailor those agents to their own knowledge and processes, and agents that output Word, PowerPoint, and Excel files rather than chat replies. Engineers want in because the constraints are genuinely hard: a 200-page credit agreement whose defined terms sit 150 pages from the clause you care about, an answer that is worthless unless every assertion links to a verifiable passage, and a client base for whom a confidentiality breach is a regulatory event. "AI engineer" here means applied LLM systems work - retrieval, agents, evals, inference plumbing, and the enterprise security envelope around them - in close partnership with in-house lawyers who write the rubrics and grade the outputs.
 
 ## Roles & titles they hire
 
@@ -410,6 +411,39 @@ flowchart TD
 
 </details>
 
+### 13. Firms can now take Harvey's prebuilt agents and customise them, and one firm has built 400 of its own. You cannot hand-grade them all. How do you keep a bad customer-built agent from reaching a client?
+
+<details><summary><b>Answer</b></summary>
+
+Treat a customer-built agent as customer-authored software running on your platform. You will never review each one, so quality has to come from three layers: invariants the platform enforces regardless of what the agent says, evals the builder is required to supply, and production telemetry that catches what both miss.
+
+**Platform invariants.** These sit outside the agent's instructions, so a lawyer cannot configure them away: claim-level citation verification before output ships (Q2), retrieval filtered by matter access and ethical walls (Q5), tools scoped per agent, and validators on generated files. A .docx with broken tracked changes or an .xlsx with misaligned rows fails here, not in front of a partner.
+
+**Builder-supplied evals.** Promotion from personal draft to firm-wide use requires a small eval set: a handful of real inputs plus must-do and must-avoid rubric items written by the lawyer who built it. An agent customised from a prebuilt one also inherits its parent's suite, so a tweak cannot silently break the base behaviour. Make this cheap or nobody will do it: propose test cases from the agent's first runs and let the lawyer accept and label them.
+
+**Versioning and model pinning.** Every agent version records its instructions, knowledge sources, and model. A model upgrade or a playbook change re-runs every affected agent's evals and shows regressions to the owner before anything switches, per Q10.
+
+**Production signals per agent.** Edit acceptance, re-run rate, abandonment, and unsupported-claim rate, compared against the parent agent and peer agents. Outliers go to a sampled human review queue.
+
+The trade-off to name is friction against adoption. Each gate slows builders, so put the strict gates on firm-wide promotion and client-facing output, not on private drafts.
+
+**Worth sketching.** The loop shows that edits, model upgrades, and production regressions all route through the same eval gate.
+
+```mermaid
+flowchart TD
+    A["Lawyer edits agent"] --> B["Agent evals plus<br/>inherited parent suite"]
+    F["Model or playbook<br/>change"] --> B
+    B --> C{"Platform gates and<br/>rubric pass?"}
+    C -->|"no"| A
+    C -->|"yes"| D["Versioned release,<br/>model pinned"]
+    D --> E["Per-agent production<br/>telemetry"]
+    E -->|"regression"| A
+```
+
+**Follow-ups:** An agent passes its own evals because the evals are weak. How would you detect a low-quality eval set automatically? How do you move thousands of customer agents to a new model without switching a firm mid-matter?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -444,8 +478,10 @@ flowchart TD
 - [Harvey - Introducing BigLaw Bench: Research](https://www.harvey.ai/blog/introducing-big-law-bench-research) (agentic legal research, usefulness threshold)
 - [Harvey - Building an Agent for Complex Document Drafting and Editing](https://www.harvey.ai/blog/building-an-agent-for-complex-document-drafting-and-editing) (OOXML representation, typed edit tools, self-review, reported acceptance-rate gain)
 - [Harvey - Introducing Agent Builder](https://www.harvey.ai/blog/introducing-agent-builder)
+- [Harvey - Built by Lawyers, Tailored by You](https://www.harvey.ai/blog/built-by-lawyers-tailored-by-you) (May 2026: 500+ use-case agents, Agent Builder early access, Word/PowerPoint/Excel outputs)
 - [Harvey - Improved Word Experience](https://www.harvey.ai/blog/improved-word-experience)
 - [Exponent - Harvey ML Operations Engineer interview guide](https://www.tryexponent.com/guides/harvey-ml-operations-engineer-interview) (take-home, paired coding, architecture presentation, director round; stage details marked "reported" above)
 - [techinterview.org - Harvey interview guide](https://www.techinterview.org/companies/harvey-ai-interview-guide/) (alternative loop shape, timeline, technical focus areas)
 - [NoraHQ - Harvey AI software engineer interview guide](https://interview.norahq.com/interview-guides/harvey-ai-software-engineer-interview-guide-2026) (third-party guide; round-by-round table and candidate quotes)
+- [PracHub - Harvey AI agent interview experience](https://prachub.com/interview-experiences/harvey-ai-agent-interview-experience-three-rounds-and-a-frustrating-empty-office) (single candidate report, August 2026: three-round final, notebook RAG coding round, remote interviewers at an office booking)
 - [Harvey - Legal Engineer posting](https://www.harvey.ai/company/careers/3fc0953f-8a03-46f2-8f4b-d12cf95f2800) (legal-domain hiring bar)

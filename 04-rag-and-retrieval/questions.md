@@ -1,6 +1,6 @@
 # RAG & Retrieval - Interview Questions
 
-55 questions: 14 basic, 22 intermediate, 19 advanced.
+60 questions: 15 basic, 23 intermediate, 22 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -155,7 +155,7 @@ flowchart LR
 
 <details><summary><b>Answer</b></summary>
 
-A bi-encoder runs query and document through the same (or paired) transformer encoders **independently**, pooling each into a single fixed-size vector (typically 384-3072 dims). Training is contrastive: positive query-document pairs are pulled together, negatives (especially hard negatives) pushed apart, usually with an InfoNCE-style loss, so that semantic relevance ≈ cosine similarity / dot product in the shared space.
+A bi-encoder runs query and document through the same (or paired) transformer encoders **independently**, pooling each into a single fixed-size vector (typically 384-4096 dims). Training is contrastive: positive query-document pairs are pulled together, negatives (especially hard negatives) pushed apart, usually with an InfoNCE-style loss, so that semantic relevance ≈ cosine similarity / dot product in the shared space.
 
 The independence is the entire point operationally: document vectors are computed **once at index time**, and at query time you embed only the query (one forward pass, ~10-50ms) and run nearest-neighbour search over millions of precomputed vectors. That's what makes retrieval scale.
 
@@ -189,7 +189,7 @@ Use **MTEB** (Massive Text Embedding Benchmark) to build a shortlist, then decid
 
 MTEB aggregates dozens of tasks (retrieval, clustering, classification, STS) across many datasets and is the de facto public leaderboard. Its limits are serious: (1) **contamination/overfitting** - the benchmark is public, and models are increasingly trained on or tuned toward it, so top ranks partly measure benchmark-fitting; (2) **domain mismatch** - your legal contracts, Slack threads, or log lines aren't represented, and rank order genuinely reshuffles on private domains; (3) **the average hides your task** - a model great at clustering may be mediocre at retrieval, so look at the retrieval subset, not the headline number; (4) it says nothing about the operational factors that decide production fit.
 
-Those operational factors: **dimensionality** (RAM and search latency scale with it; Matryoshka-style models let you truncate), **max sequence length** (512-token models force small chunks; 8k-token models enable late chunking), **latency and deployment** (API - OpenAI, Cohere, Voyage, Gemini - vs self-hosted open weights like BGE/GTE/E5/Qwen-Embedding for data residency and cost control), **cost** (API embedding is cheap per token, but re-embedding 100M chunks when you switch models is not), **multilingual needs**, and **licence**.
+Those operational factors: **dimensionality** (RAM and search latency scale with it; Matryoshka-style models let you truncate), **max sequence length** (512-token models force small chunks; 8k-token models enable late chunking), **latency and deployment** (API - OpenAI, Cohere, Voyage, Gemini - vs self-hosted open weights like BGE/GTE/E5/Qwen3-Embedding for data residency and cost control), **cost** (API embedding is cheap per token, but re-embedding 100M chunks when you switch models is not), **multilingual needs**, and **licence**.
 
 The deciding step: collect 100-500 real or realistic queries with labelled relevant chunks from *your* corpus, measure recall@k and nDCG for 2-4 shortlisted models, and pick on that. This costs a day and routinely contradicts the leaderboard. Also plan for model migration up front - store raw text, version your embeddings, and assume you'll re-embed everything at least once.
 
@@ -223,7 +223,7 @@ Dense embeddings compress text into a semantic vector - great for paraphrase ("l
 
 Fusion is usually **Reciprocal Rank Fusion**: each document scores Σ 1/(k + rankᵢ) across the result lists (k≈60), which sidesteps the fact that BM25 scores and cosine similarities live on incomparable scales. Rank in both lists → strong fused score; even top-3 in just one list still surfaces.
 
-In practice hybrid is one of the highest-value, lowest-effort upgrades in RAG: BM25 comes nearly free in Elasticsearch/OpenSearch/Vespa, and Postgres full-text search approximates it alongside pgvector. Anthropic's contextual-retrieval results are a good citation here: adding (contextual) BM25 to contextual embeddings measurably cut retrieval failures versus embeddings alone. Also mention the modern middle path - **learned sparse retrieval** like SPLADE, where a transformer produces weighted term expansions, capturing some semantics while keeping an inverted-index footprint.
+In practice hybrid is one of the highest-value, lowest-effort upgrades in RAG: BM25 comes nearly free in Elasticsearch/OpenSearch/Vespa, and in Postgres you either approximate it with built-in full-text ranking (which is not BM25) or add a BM25 extension such as ParadeDB's pg_search alongside pgvector. Anthropic's contextual-retrieval results are a good citation here: adding (contextual) BM25 to contextual embeddings measurably cut retrieval failures versus embeddings alone. Also mention the modern middle path - **learned sparse retrieval** like SPLADE, where a transformer produces weighted term expansions, capturing some semantics while keeping an inverted-index footprint.
 
 **Worth sketching.** Two legs and one fusion step is the entire answer, and labelling what each leg is good at saves a paragraph of explanation.
 
@@ -352,9 +352,31 @@ Two cautions. Metadata is not free: high-cardinality filters interact badly with
 
 </details>
 
+### 15. Many embedding models tell you to prefix queries and documents differently, or to pass a task instruction. Why, and what goes wrong if you ignore it?
+
+<details><summary><b>Answer</b></summary>
+
+Because retrieval is asymmetric, and these models learned it with the markers present. A query is short, question-shaped and underspecified; a passage is long and declarative. A model trained contrastively with a side marker uses it to decide how to encode the text, so the marker is part of the model, not a formatting nicety.
+
+Conventions differ by family. E5-style models expect `query: ` and `passage: ` prefixes. Instruction-tuned embedders such as Qwen3-Embedding put a task description on the query side only, in an `Instruct:` line before the query. Hosted APIs usually expose it as an input-type or task-type parameter set to query or document, and some have no switch at all. Read the model card every time, because the rules do not transfer between families.
+
+If you ignore it, nothing errors. Results still look plausible, just measurably worse, and every published number for that model assumed the convention, so you are no longer running the model you evaluated. Short keyword queries tend to suffer most: without the query marker they get encoded like tiny documents and match titles and fragments rather than answering passages.
+
+The bugs I see in practice:
+
+- **Index and query disagree.** Someone swaps the embedding wrapper and the document prefix silently disappears at ingest, or the query prefix at serve time.
+- **Wrong convention for symmetric tasks.** Deduplication and clustering compare documents with documents, and the model card usually prescribes one marker for both sides.
+- **Treating the instruction as free text.** If it sits on the document side, changing it means re-embedding the corpus.
+
+Two habits prevent this. Store the prefix or instruction next to the embedding model version in chunk metadata, and add a test that embeds a fixed query and passage and asserts the similarity matches a recorded value. Then use the upside: a query-side instruction is a tuning knob you can A/B on the golden set without touching the index.
+
+**Follow-ups:** How would you detect, from production data alone, that the index was built without the document prefix? If the instruction lives only on the query side, what can you tune without reindexing, and how would you test it?
+
+</details>
+
 ## Intermediate
 
-### 15. Everyone focuses on retrieval algorithms - what's actually the hardest part of building RAG over enterprise documents?
+### 16. Everyone focuses on retrieval algorithms - what's actually the hardest part of building RAG over enterprise documents?
 
 <details><summary><b>Answer</b></summary>
 
@@ -384,7 +406,7 @@ flowchart TD
 
 </details>
 
-### 16. Explain contextual retrieval. What problem does it solve, and how does late chunking relate?
+### 17. Explain contextual retrieval. What problem does it solve, and how does late chunking relate?
 
 <details><summary><b>Answer</b></summary>
 
@@ -412,7 +434,7 @@ flowchart TD
 
 </details>
 
-### 17. What are the tradeoffs of embedding dimensionality, and what are Matryoshka embeddings?
+### 18. What are the tradeoffs of embedding dimensionality, and what are Matryoshka embeddings?
 
 <details><summary><b>Answer</b></summary>
 
@@ -428,7 +450,7 @@ Decision guidance: pick dimensionality by measuring recall@k on your own eval se
 
 </details>
 
-### 18. When would you fine-tune your embedding model, and how would you actually do it?
+### 19. When would you fine-tune your embedding model, and how would you actually do it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -444,7 +466,7 @@ Operational costs people forget, and interviewers probe: fine-tuning couples you
 
 </details>
 
-### 19. Explain how HNSW works, and what the M and ef parameters control.
+### 20. Explain how HNSW works, and what the M and ef parameters control.
 
 <details><summary><b>Answer</b></summary>
 
@@ -475,7 +497,7 @@ flowchart TD
 
 </details>
 
-### 20. Compare HNSW, IVF, and product quantization - what are the recall/latency/memory tradeoffs?
+### 21. Compare HNSW, IVF, and product quantization - what are the recall/latency/memory tradeoffs?
 
 <details><summary><b>Answer</b></summary>
 
@@ -483,7 +505,7 @@ They're different tools, and PQ isn't even an index - it's a compression scheme 
 
 **HNSW** (graph): best recall-latency frontier for most workloads - 95-99% recall at millisecond latency. Costs: highest memory (all full-precision vectors + graph edges in RAM), slower to build, awkward deletes (tombstones, periodic rebuild). Incremental inserts are natural. Default choice when the corpus fits in RAM.
 
-**IVF** (inverted file / clustering): k-means the corpus into `nlist` cells (~√N is the classic heuristic); at query time probe only the `nprobe` nearest cells. Simpler and cheaper to build than HNSW, memory-light (just cluster assignments over your vector storage), and cell lists map naturally to disk or object storage - which is why disk-based and serverless vector stores lean on IVF-style partitioning. Weaknesses: needs a training pass (cluster quality decays if data drifts - plan re-clustering), and recall suffers on **boundary cases** - a query near a cell edge misses neighbours in unprobed cells, so you raise nprobe and pay linearly in latency.
+**IVF** (inverted file / clustering): k-means the corpus into `nlist` cells (a small multiple of √N is the usual starting heuristic); at query time probe only the `nprobe` nearest cells. Simpler and cheaper to build than HNSW, memory-light (just cluster assignments over your vector storage), and cell lists map naturally to disk or object storage - which is why disk-based and serverless vector stores lean on IVF-style partitioning. Weaknesses: needs a training pass (cluster quality decays if data drifts - plan re-clustering), and recall suffers on **boundary cases** - a query near a cell edge misses neighbours in unprobed cells, so you raise nprobe and pay linearly in latency.
 
 **PQ** (product quantization): chop each vector into m subvectors, k-means each subspace into 256 centroids, store each subvector as a 1-byte code → a 768-dim float32 vector (3KB) becomes e.g. 96 bytes, a 10-50× compression. Distances are computed on codes via lookup tables - fast and tiny, but **lossy**: recall drops, so production setups rescore the top candidates with full-precision vectors ("refinement"). The classic large-scale combo is **IVF+PQ** (FAISS's IVFPQ): partition to prune the search space, quantize to fit a billion vectors in memory. Simpler cousins - scalar int8 quantization (4×) and binary quantization (32×) - are increasingly used with HNSW too.
 
@@ -505,7 +527,7 @@ flowchart TD
 
 </details>
 
-### 21. How do you choose a vector database? pgvector vs dedicated vector stores vs search engines.
+### 22. How do you choose a vector database? pgvector vs dedicated vector stores vs search engines.
 
 <details><summary><b>Answer</b></summary>
 
@@ -513,7 +535,7 @@ Lead with the heuristic: **"use pgvector until it hurts"** - then show you know 
 
 **pgvector** (Postgres extension, HNSW and IVF support): your chunks' metadata is probably already in Postgres, so you get joins, transactions, backups, row-level security, and one operational system instead of two. Vectors live next to the data they describe - no sync pipeline between an OLTP store and a vector store, no consistency bugs where a deleted document still surfaces from a stale index. For the majority of products - up to single-digit millions of vectors and moderate QPS - this is simply the right call, and interviewers respect candidates who don't reach for exotic infra by default.
 
-Where it hurts: very large scale (roughly 50-100M+ vectors, where index build times, RAM, and single-node limits bite), high-QPS vector workloads competing with your transactional load, heavy **filtered-ANN** queries (dedicated engines have smarter filter-aware graph traversal), and missing niceties (built-in hybrid fusion, multi-vector/ColBERT support, quantization options).
+Where it hurts: very large scale (roughly 50-100M+ vectors, where index build times, RAM, and single-node limits bite), high-QPS vector workloads competing with your transactional load, heavy **filtered-ANN** queries (pgvector 0.8's iterative index scans fixed the worst over-filtering starvation, but dedicated engines still have more filter-aware graph traversal), and thinner niceties (no built-in hybrid fusion or native multi-vector/ColBERT support, and quantization limited to half-precision and binary rather than PQ).
 
 **Dedicated vector stores** (Qdrant, Milvus, Weaviate, Pinecone, Turbopuffer, Vespa): built for exactly those pains - horizontal sharding, tunable quantization, good filtered search, hybrid search built in, disk-backed or serverless economics for huge corpora. Cost: another stateful system to operate (or a vendor bill), plus a data-sync pipeline from your source of truth, which is a chronic source of staleness bugs.
 
@@ -525,7 +547,7 @@ Decision criteria to enumerate: current and 2-year vector count, QPS, filter sel
 
 </details>
 
-### 22. How does metadata filtering interact with ANN indexes? Explain pre- vs post-filtering.
+### 23. How does metadata filtering interact with ANN indexes? Explain pre- vs post-filtering.
 
 <details><summary><b>Answer</b></summary>
 
@@ -557,7 +579,7 @@ flowchart TD
 
 </details>
 
-### 23. How does reciprocal rank fusion work, and why fuse by rank instead of by score?
+### 24. How does reciprocal rank fusion work, and why fuse by rank instead of by score?
 
 <details><summary><b>Answer</b></summary>
 
@@ -584,7 +606,7 @@ Limitations to name: RRF throws away score *magnitude* - a maximally confident d
 
 </details>
 
-### 24. Explain the retrieval-architecture spectrum: bi-encoders, cross-encoders, and late interaction (ColBERT).
+### 25. Explain the retrieval-architecture spectrum: bi-encoders, cross-encoders, and late interaction (ColBERT).
 
 <details><summary><b>Answer</b></summary>
 
@@ -594,7 +616,7 @@ The spectrum is defined by **when query and document interact**, which dictates 
 
 **Cross-encoder** (full interaction): concatenate query+document, run a full transformer, output a relevance score. Every query token attends to every document token - the quality ceiling of the three, and its scores are meaningful enough to threshold on. But nothing is precomputable: one forward pass **per candidate per query**, so it only works as a reranker over ~50-200 candidates (50-300ms typical), never as first-stage retrieval over millions.
 
-**Late interaction - ColBERT** (deferred token-level interaction): encode documents into **per-token embedding matrices** offline; at query time, encode the query into token vectors and score via **MaxSim** - for each query token take its max similarity over all document tokens, then sum. You get token-level matching (a rare term in the query can find its exact counterpart) while document encoding stays precomputable and the scoring op is cheap enough to serve at scale with specialized indexes (PLAID-style). The price is storage: hundreds of vectors per chunk instead of one - 10-100× even after aggressive compression - plus less off-the-shelf infra support, though multi-vector support has been appearing in mainstream engines.
+**Late interaction - ColBERT** (deferred token-level interaction): encode documents into **per-token embedding matrices** offline; at query time, encode the query into token vectors and score via **MaxSim** - for each query token take its max similarity over all document tokens, then sum. You get token-level matching (a rare term in the query can find its exact counterpart) while document encoding stays precomputable and the scoring op is cheap enough to serve at scale with specialized indexes (PLAID-style). The price is storage: hundreds of vectors per chunk instead of one - 10-100× even after aggressive compression - plus thinner infra support, though several mainstream engines (Vespa, Qdrant and Weaviate among them) now ship native multi-vector fields.
 
 Production answer: bi-encoder (+BM25) for recall → cross-encoder for precision covers most systems. Reach for ColBERT when first-stage recall is the bottleneck on token-sensitive corpora (code, technical docs) and reranking can't fix what never got retrieved.
 
@@ -602,7 +624,7 @@ Production answer: bi-encoder (+BM25) for recall → cross-encoder for precision
 
 </details>
 
-### 25. What query understanding techniques would you apply before retrieval, and when is each worth it?
+### 26. What query understanding techniques would you apply before retrieval, and when is each worth it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -637,7 +659,7 @@ flowchart LR
 
 </details>
 
-### 26. How do you handle retrieval in a multi-turn conversation?
+### 27. How do you handle retrieval in a multi-turn conversation?
 
 <details><summary><b>Answer</b></summary>
 
@@ -669,7 +691,7 @@ flowchart TD
 
 </details>
 
-### 27. How do you make a RAG system produce trustworthy citations?
+### 28. How do you make a RAG system produce trustworthy citations?
 
 <details><summary><b>Answer</b></summary>
 
@@ -687,7 +709,7 @@ Design details that bite: cite at the **chunk or span level**, not document leve
 
 </details>
 
-### 28. How do you keep a RAG index fresh as documents change?
+### 29. How do you keep a RAG index fresh as documents change?
 
 <details><summary><b>Answer</b></summary>
 
@@ -720,7 +742,7 @@ flowchart LR
 
 </details>
 
-### 29. How do you make tables and charts in documents actually retrievable and answerable?
+### 30. How do you make tables and charts in documents actually retrievable and answerable?
 
 <details><summary><b>Answer</b></summary>
 
@@ -742,7 +764,7 @@ For heavy numeric work, the better architecture is often not RAG: load the table
 
 </details>
 
-### 30. How would you implement sub-question decomposition, and when does it make things worse?
+### 31. How would you implement sub-question decomposition, and when does it make things worse?
 
 <details><summary><b>Answer</b></summary>
 
@@ -787,11 +809,11 @@ flowchart TD
 
 </details>
 
-### 31. What is learned sparse retrieval, SPLADE-style, and when would you pick it over BM25 or a dense retriever?
+### 32. What is learned sparse retrieval, SPLADE-style, and when would you pick it over BM25 or a dense retriever?
 
 <details><summary><b>Answer</b></summary>
 
-Learned sparse retrieval produces a sparse vector over the vocabulary, like BM25, but the weights are learned by a transformer rather than counted. SPLADE runs text through a masked-language-model head, gets a distribution over vocabulary for every position, pools it, and applies a sparsity regularizer so most entries go to zero. What survives is a bag of weighted terms that includes words never in the original text.
+Learned sparse retrieval produces a sparse vector over the vocabulary, like BM25, but the weights are learned by a transformer rather than counted. SPLADE runs text through a masked-language-model head, gets a weight for every vocabulary term at every position (a log-saturated ReLU of the logits), max-pools across positions, and trains with a sparsity regularizer so most entries go to zero. What survives is a bag of weighted terms that includes words never in the original text.
 
 That expansion is the whole point. A document about 'myocardial infarction' picks up nonzero weight on 'heart attack'. So you get semantic matching, but the output is still sparse, which means you serve it from an ordinary inverted index with the same query machinery you already run for BM25.
 
@@ -808,7 +830,7 @@ When I would reach for it: you already run Elasticsearch or OpenSearch, you need
 
 </details>
 
-### 32. Your corpus is full of near-duplicates: doc versions, boilerplate, quoted email threads. How do you handle deduplication?
+### 33. Your corpus is full of near-duplicates: doc versions, boilerplate, quoted email threads. How do you handle deduplication?
 
 <details><summary><b>Answer</b></summary>
 
@@ -836,7 +858,7 @@ The misconception is that dedup is an ingest-time problem you solve once. Overla
 
 </details>
 
-### 33. How do you handle time in retrieval - 'latest' queries, superseded documents, and questions about the past?
+### 34. How do you handle time in retrieval - 'latest' queries, superseded documents, and questions about the past?
 
 <details><summary><b>Answer</b></summary>
 
@@ -864,7 +886,7 @@ The evaluation trap: golden sets go stale. A question whose correct answer was t
 
 </details>
 
-### 34. How does retrieval over a codebase differ from retrieval over prose?
+### 35. How does retrieval over a codebase differ from retrieval over prose?
 
 <details><summary><b>Answer</b></summary>
 
@@ -899,7 +921,7 @@ flowchart LR
 
 </details>
 
-### 35. Your corpus is multilingual and users query in several languages. What breaks, and how do you fix it?
+### 36. Your corpus is multilingual and users query in several languages. What breaks, and how do you fix it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -929,7 +951,7 @@ Evaluate per language pair. An aggregate number will look fine while Japanese-to
 
 </details>
 
-### 36. Explain self-RAG and corrective RAG. Do they earn their complexity in production?
+### 37. Explain self-RAG and corrective RAG. Do they earn their complexity in production?
 
 <details><summary><b>Answer</b></summary>
 
@@ -965,9 +987,45 @@ flowchart TD
 
 </details>
 
+### 38. Some questions are answered by your data warehouse, some by documents, and some need both. How do you design retrieval across structured and unstructured data?
+
+<details><summary><b>Answer</b></summary>
+
+Route by what the answer is made of. Counts, filters, aggregates and exact figures ("how many enterprise renewals slipped last quarter") belong to text-to-SQL, because a vector index cannot count and arithmetic in token space is unreliable. Policy, procedure and explanation belong to RAG. Mixed questions ("why did EMEA renewals slip, and what does the playbook say to do") run both paths and join at synthesis.
+
+The pieces:
+
+1. **A multi-label router**: a classifier or small-LLM call that emits sql, docs or both. Log every decision, because a misroute looks like a retrieval failure in end-to-end metrics.
+2. **Retrieve the schema, not just documents.** A warehouse with thousands of tables does not fit in a prompt, so index table and column descriptions, metric definitions and known-good example queries, and retrieve the relevant slice per question. This is RAG over metadata, and it is usually where text-to-SQL quality is won or lost.
+3. **Prefer a semantic layer when one exists.** If revenue is defined once in a metrics layer, have the model pick metrics and dimensions instead of writing raw joins. Fewer invented joins, one definition of each number.
+4. **Execute defensively.** Read-only role, the requesting user's row-level security, a statement timeout and a row cap. Generated SQL never runs with more privilege than the user has.
+5. **Cite both kinds of evidence.** Pass the small result table and its SQL alongside the retrieved chunks into one generation, and show the SQL as the citation for any number.
+
+Evaluate the paths separately: execution accuracy for SQL, comparing result sets rather than SQL strings, recall@k for documents, then end-to-end on a mixed slice.
+
+The trap worth naming is a figure answered from a PDF that quoted last year's number. If a number has a system of record, route there and treat document-sourced figures as stale by default.
+
+**Worth sketching.** One router feeding two evidence paths that rejoin at synthesis is the whole architecture.
+
+```mermaid
+flowchart TD
+    Q["User question"] --> R{"Router: what is<br/>the answer made of?"}
+    R -->|"counts, filters, figures"| S["Retrieve schema slice<br/>and metric definitions"]
+    S --> X["Generate SQL, run read-only<br/>under the user's row security"]
+    R -->|"policy, how-to, why"| D["Hybrid retrieval<br/>over documents"]
+    R -->|"both"| S
+    R -->|"both"| D
+    X --> G["Synthesise, citing the SQL<br/>and the chunks"]
+    D --> G
+```
+
+**Follow-ups:** How do you evaluate text-to-SQL when many different queries return the same correct result? A mixed question needs a warehouse figure and a reason from a ticket the user may not be allowed to see: where is access enforced on each path?
+
+</details>
+
 ## Advanced
 
-### 37. What is GraphRAG, and when is the knowledge-graph structure worth the complexity?
+### 39. What is GraphRAG, and when is the knowledge-graph structure worth the complexity?
 
 <details><summary><b>Answer</b></summary>
 
@@ -975,7 +1033,7 @@ GraphRAG augments (or replaces) chunk-vector retrieval with a **knowledge graph 
 
 It targets the two structural blind spots of vanilla RAG. First, **multi-hop relational questions**: "Which customers are affected by the outage in the datacentre that hosts service X?" - no single chunk contains the answer, and single-shot vector search retrieves fragments that don't compose. The graph makes the joins explicit. Second, **global/aggregate questions**: "What are the recurring themes across this quarter's incident reports?" - top-k similarity fundamentally can't answer whole-corpus questions, while pre-computed community summaries can.
 
-The costs are substantial and interviewers want you to weigh them honestly: index-time LLM extraction over every chunk is expensive (often dominating total system cost) and error-prone - entity resolution failures ("Bob Smith" vs "Robert Smith" vs "B. Smith") silently corrupt the graph; **incremental updates are hard** (a changed document means re-extraction plus re-communitising/re-summarising affected regions - much heavier than re-embedding chunks); and evaluation/debugging is murkier than vector retrieval's clean recall@k.
+The costs are substantial and interviewers want you to weigh them honestly: index-time LLM extraction over every chunk is expensive (often dominating total system cost) and error-prone - entity resolution failures ("Bob Smith" vs "Robert Smith" vs "B. Smith") silently corrupt the graph; **incremental updates are hard** (a changed document means re-extraction plus re-communitising/re-summarising affected regions - much heavier than re-embedding chunks); and evaluation/debugging is murkier than vector retrieval's clean recall@k. Microsoft's own follow-up, LazyGraphRAG, attacks the indexing bill by deferring most LLM work to query time, which is worth naming if the interviewer pushes on cost.
 
 Decision rule: your query log tells you. Mostly factoid lookup ("what's the parental-leave policy?") → vector+hybrid RAG wins on cost and simplicity, full stop. A meaningful share of relational or corpus-summarization questions over an entity-rich corpus (incidents, contracts, intelligence, biomedical literature) → graph structure earns its keep. Middle path worth naming: agentic RAG with iterative search covers many multi-hop cases without any graph infrastructure - try that first.
 
@@ -996,7 +1054,7 @@ flowchart TD
 
 </details>
 
-### 38. Compare single-shot RAG with agentic RAG. When does retrieval-as-a-tool win?
+### 40. Compare single-shot RAG with agentic RAG. When does retrieval-as-a-tool win?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1026,7 +1084,7 @@ flowchart TD
 
 </details>
 
-### 39. Your product has several distinct corpora - docs, tickets, code, CRM. How do you route queries?
+### 41. Your product has several distinct corpora - docs, tickets, code, CRM. How do you route queries?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1044,7 +1102,7 @@ Cross-cutting design points that score interview credit: per-corpus retrieval co
 
 </details>
 
-### 40. Design retrieval for a multi-tenant SaaS product where users have different document permissions.
+### 42. Design retrieval for a multi-tenant SaaS product where users have different document permissions.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1075,7 +1133,7 @@ flowchart LR
 
 </details>
 
-### 41. What retrieval metrics would you track - recall@k, MRR, nDCG - and what does each actually tell you?
+### 43. What retrieval metrics would you track - recall@k, MRR, nDCG - and what does each actually tell you?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1095,7 +1153,7 @@ One trap to name: optimising precision-flavoured metrics can quietly hurt RAG - 
 
 </details>
 
-### 42. How do you evaluate the generation side of RAG - faithfulness, relevance, and citation quality?
+### 44. How do you evaluate the generation side of RAG - faithfulness, relevance, and citation quality?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1117,7 +1175,7 @@ Operationally: this suite is slower and costlier than retrieval metrics, so run 
 
 </details>
 
-### 43. How do you build a golden evaluation set for RAG without months of labelling?
+### 45. How do you build a golden evaluation set for RAG without months of labelling?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1137,7 +1195,7 @@ A useful golden set is (query → relevant chunk IDs → optionally a reference 
 
 </details>
 
-### 44. A user reports the RAG assistant gave a wrong answer. Walk me through your triage.
+### 46. A user reports the RAG assistant gave a wrong answer. Walk me through your triage.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1149,7 +1207,7 @@ The discipline is a binary split first: **retrieval miss or generation miss?** E
 
 **If present → generation miss.** Sub-triage: model ignored the context (position issue - was the chunk buried mid-context among 20 others? Lost-in-the-middle; reduce k or reorder), misread it (chunk lacks surrounding context - consider parent-document retrieval or contextual enrichment), got contradicted by other retrieved chunks (stale duplicates - freshness/dedupe bug), or overrode context with parametric belief (prompt/grounding-instruction fix, or model upgrade). Reproduce by re-running generation with the same prompt; if it's intermittent, that points to sampling variance and prompt robustness.
 
-**Step 3 - generalise.** One report is a sample from a failure distribution: add the case to the golden set, search logs for similar queries, and check whether the class of failure (e.g., "all table-based answers fail") is systemic. In practice retrieval misses are the more common culprit, and "hallucination" complaints are very often retrieval failures wearing a costume - the model confabulated *because* the evidence wasn't there.
+**Step 2 - generalise.** One report is a sample from a failure distribution: add the case to the golden set, search logs for similar queries, and check whether the class of failure (e.g., "all table-based answers fail") is systemic. In practice retrieval misses are the more common culprit, and "hallucination" complaints are very often retrieval failures wearing a costume - the model confabulated *because* the evidence wasn't there.
 
 **Worth sketching.** Triage is a tree, and drawing it proves you have actually debugged one of these rather than read about it.
 
@@ -1169,7 +1227,7 @@ flowchart TD
 
 </details>
 
-### 45. What are the top failure modes of production RAG systems?
+### 47. What are the top failure modes of production RAG systems?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1191,7 +1249,7 @@ The meta-answer interviewers want: failures cluster in the *unglamorous* stages 
 
 </details>
 
-### 46. Break down the latency and cost budget of a RAG query. What do you optimise first?
+### 48. Break down the latency and cost budget of a RAG query. What do you optimise first?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1206,11 +1264,11 @@ Typical single-shot pipeline, per query:
 | Context assembly | ~1ms | - |
 | **LLM generation** | **~1-10s** | **~$0.005-0.05+** |
 
-The punchline: **generation dominates both budgets** - usually 70-90% of latency and a similar share of cost. So optimise there first: (1) **smaller/faster generator** where quality allows, or a model router sending easy queries to the cheap model; (2) **fewer, tighter chunks** - input tokens are the cost driver, and trimming k from 20 to 8 chunks often *improves* quality (less distraction) while cutting cost; (3) **streaming** - time-to-first-token is what users perceive; streaming makes a 6s generation feel like 500ms; (4) **prompt caching** - structure prompts so the static system prompt and stable prefix are cache hits (cached input tokens are steeply discounted - ~90% off on Anthropic, ~50-75% off on OpenAI/Google); with contextual/conversational reuse this is a major cost lever.
+The punchline: **generation dominates both budgets** - usually 70-90% of latency and a similar share of cost. So optimise there first: (1) **smaller/faster generator** where quality allows, or a model router sending easy queries to the cheap model; (2) **fewer, tighter chunks** - input tokens are the cost driver, and trimming k from 20 to 8 chunks often *improves* quality (less distraction) while cutting cost; (3) **streaming** - time-to-first-token is what users perceive; streaming makes a 6s generation feel like 500ms; (4) **prompt caching** - structure prompts so the static system prompt and stable prefix are cache hits (cached input tokens are steeply discounted, commonly ~75-90% off on current models from the major providers, though the exact rate, cache-write surcharges and TTLs vary, so check the price sheet); with contextual/conversational reuse this is a major cost lever.
 
 Pre-generation stages matter mainly for *perceived* latency stack-up before streaming starts: parallelize dense + BM25 (they're independent), run query rewrite concurrently with a provisional retrieval when feasible, use a small local embedder or cache query embeddings, and cap reranker candidates (100 → 50 halves that stage). Skip rewriting for queries that don't need it (a cheap classifier gates it).
 
-Offline costs people forget: **embedding the corpus** (cheap per token - small embedding models run ~$0.02/M tokens - but re-embedding 100M chunks on a model migration is a real bill), **contextual enrichment** (an LLM call per chunk - prompt caching cuts it dramatically), and index RAM (HNSW at high dimensionality is a standing hardware cost).
+Offline costs people forget: **embedding the corpus** (cheap per token - small API embedders have long cost cents per million tokens - but re-embedding 100M chunks on a model migration is a real bill), **contextual enrichment** (an LLM call per chunk - prompt caching cuts it dramatically), and index RAM (HNSW at high dimensionality is a standing hardware cost).
 
 For agentic RAG, multiply the generation line by the number of loop iterations - which is why cost telemetry per answer and search budgets are mandatory there.
 
@@ -1218,7 +1276,7 @@ For agentic RAG, multiply the generation line by the number of loop iterations -
 
 </details>
 
-### 47. What caching strategies apply to RAG systems, and what are the invalidation traps?
+### 49. What caching strategies apply to RAG systems, and what are the invalidation traps?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1228,7 +1286,7 @@ Four cache layers, in order of increasing risk:
 
 **Retrieval-result caches**: cache (normalized query → top-k chunk IDs) with a short TTL. Helps for head queries - most products have a Zipfian query distribution where the top few hundred queries are a large traffic share. Traps: must be keyed by the **permission context** (tenant + user entitlements), not just query text, or user A's result set leaks scope to user B; and it must be invalidated (or TTL'd aggressively) on index updates, or freshness work upstream never reaches users.
 
-**Prompt/prefix caches** (provider-level): structure prompts so the expensive static parts - system prompt, tool definitions, few-shot examples, and in conversational RAG the accumulated history - form a stable prefix; cached input tokens are steeply discounted (~90% off on Anthropic, ~50-75% off on OpenAI/Google) and TTFT drops substantially. Design consequence: put volatile content (retrieved chunks, current question) *last*, and keep the prefix byte-stable - a timestamp in the system prompt destroys the cache. Contextual retrieval's ingest-time LLM calls also lean on this: the full document is a shared cached prefix across its chunks' enrichment calls.
+**Prompt/prefix caches** (provider-level): structure prompts so the expensive static parts - system prompt, tool definitions, few-shot examples, and in conversational RAG the accumulated history - form a stable prefix; cached input tokens are steeply discounted (commonly ~75-90% off on current models, with provider-specific write surcharges and TTLs) and TTFT drops substantially. Design consequence: put volatile content (retrieved chunks, current question) *last*, and keep the prefix byte-stable - a timestamp in the system prompt destroys the cache. Contextual retrieval's ingest-time LLM calls also lean on this: the full document is a shared cached prefix across its chunks' enrichment calls.
 
 **Semantic answer caches** (riskiest, highest payoff): if a new query is sufficiently similar to a cached one (embedding similarity above a threshold), serve the cached answer - skipping the whole pipeline, ~100× cost and latency reduction on hits. Traps are the interview meat: **false positives** ("cancel my subscription" vs "renew my subscription" are embedding-close; a wrong-answer cache hit is worse than a slow answer - threshold conservatively and consider a fast verification step), **staleness** (key entries to document versions of the chunks that produced the answer; invalidate on their change), **permissions** (key by ACL context, accepting the hit-rate loss, or restrict semantic caching to public corpora), and **personalization** (answers that depend on the user's state must never be shared).
 
@@ -1253,7 +1311,7 @@ flowchart LR
 
 </details>
 
-### 48. "Long-context models made RAG obsolete." Argue both sides, then give your actual position.
+### 50. "Long-context models made RAG obsolete." Argue both sides, then give your actual position.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1267,7 +1325,7 @@ flowchart LR
 
 </details>
 
-### 49. A better embedding model ships. You have 400M chunks indexed. Walk me through the migration.
+### 51. A better embedding model ships. You have 400M chunks indexed. Walk me through the migration.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1303,7 +1361,7 @@ flowchart LR
 
 </details>
 
-### 50. When would you skip parsing entirely and retrieve over page images with a visual retriever like ColPali?
+### 52. When would you skip parsing entirely and retrieve over page images with a visual retriever like ColPali?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1323,7 +1381,7 @@ My actual position: it is a strong fit for visually complex, moderate-size corpo
 
 </details>
 
-### 51. Design a retrieval evaluation harness the team will actually use. What runs, when, and what blocks a merge?
+### 53. Design a retrieval evaluation harness the team will actually use. What runs, when, and what blocks a merge?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1351,7 +1409,7 @@ Start at 50 queries and grow. A small honest harness that runs beats a large one
 
 </details>
 
-### 52. You have thumbs-up/down and click logs from a live RAG product. How do you turn that into retrieval improvements?
+### 54. You have thumbs-up/down and click logs from a live RAG product. How do you turn that into retrieval improvements?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1377,7 +1435,7 @@ One guardrail: dwell time and clicks measure engagement, not correctness. A conf
 
 </details>
 
-### 53. Your index will not fit on one machine. How do you shard it, and what breaks?
+### 55. Your index will not fit on one machine. How do you shard it, and what breaks?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1417,7 +1475,7 @@ flowchart TD
 
 </details>
 
-### 54. Anyone can add documents to your corpus. How do you stop an attacker planting a document that hijacks the assistant?
+### 56. Anyone can add documents to your corpus. How do you stop an attacker planting a document that hijacks the assistant?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1453,7 +1511,7 @@ flowchart TD
 
 </details>
 
-### 55. You are exposing retrieval as a tool to an agent, over MCP. How does designing a tool interface differ from designing a retrieval API?
+### 57. You are exposing retrieval as a tool to an agent, over MCP. How does designing a tool interface differ from designing a retrieval API?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1471,14 +1529,14 @@ The consumer is a model with a token budget and no ability to read documentation
 
 **Determinism and idempotency.** The model will retry. Same query, same results.
 
-**The MCP-specific trap: identity.** An MCP server is a separate process. The retrieval tool must enforce the *end user's* permissions, not the server's service account, so identity has to propagate through the tool call. A retrieval tool with ambient service-account credentials means any user can exfiltrate any document by asking nicely. That is the failure I would review for first.
+**The MCP-specific trap: identity.** An MCP server is a separate process, often a remote service. The retrieval tool must enforce the *end user's* permissions, not the server's service account. For remote servers the MCP authorization spec builds on OAuth 2.1: the server validates an access token issued for it and derives the user from that token, and it never trusts a user ID the model wrote into the tool arguments, because the model controls those. The spec also forbids passing the client's token straight through to downstream APIs, so the server either obtains its own downstream credential for that user or applies the ACL filter itself. A retrieval tool with ambient service-account credentials means any user can exfiltrate any document by asking nicely. That is the failure I would review for first.
 
 **Worth sketching.** The two-step search-then-fetch, with identity entering at the tool boundary, is the whole design in one picture.
 
 ```mermaid
 flowchart LR
     M["Model"] -->|"search: query plus source enum"| T["Retrieval tool"]
-    T --> ID["Resolve the end user from the call,<br/>not the server service account"]
+    T --> ID["Resolve the end user from the<br/>validated access token, never a tool argument"]
     ID --> F["ACL-filtered retrieval"]
     F --> S["3-5 snippets<br/>with stable IDs"]
     S --> M
@@ -1488,5 +1546,111 @@ flowchart LR
 ```
 
 **Follow-ups:** How would you propagate and verify end-user identity through an MCP tool call to the retrieval filter? How do you evaluate a retrieval tool, given that the metric is now 'did the agent's task succeed' rather than recall@k?
+
+</details>
+
+### 58. Teams increasingly rerank with an LLM rather than a cross-encoder. How do pointwise, pairwise and listwise LLM reranking work, and when is the cost justified?
+
+<details><summary><b>Answer</b></summary>
+
+An LLM reranker asks a generative model to judge relevance, and it wins on queries that need reasoning or instruction-following, such as "clauses that conflict with our standard indemnity" or "only guidance that applies to EU customers". It typically costs an order of magnitude or more per query than a cross-encoder, so it earns its place on a narrow, hard slice of traffic or as a teacher for a cheaper model, rarely as the default.
+
+Three formulations:
+
+- **Pointwise**: score each query-passage pair independently, ideally from the probability of a "yes" token rather than a generated number, which drifts between calls. Parallel and easy to threshold. Several open-weight rerankers are now small decoder models fine-tuned to do exactly this, which blurs the line with cross-encoders.
+- **Pairwise**: ask which of two passages is more relevant. Accurate per decision, but the comparison count grows fast with list length, so it is rarely affordable online.
+- **Listwise**: put the query and ~20 candidates in one prompt and ask for a ranking, the RankGPT pattern. The model sees candidates side by side, so it can judge relative quality and spot duplicates. The costs: long lists need sliding windows, outputs can be malformed or truncated permutations, generating the ranking adds latency, and results shift with input order.
+
+How I would deploy it:
+
+1. Keep the cross-encoder stage and apply the LLM only to its top ~20, never to first-stage output.
+2. Gate by query class. Instruction-heavy and ambiguous queries go to the LLM, plain lookups go straight through.
+3. Control position bias. Shuffle input order, or aggregate over two orderings for high-stakes queries, so the bias does not just reproduce the first-stage ranking.
+4. Distil. Run the LLM reranker offline to label query-passage pairs, then fine-tune the cross-encoder on those labels. This usually recovers much of the gain at cross-encoder latency, and it is the answer interviewers are listening for.
+5. Prove it per slice: nDCG@10 and p95 latency on the golden set, and remove it if the gain only shows in the aggregate.
+
+In an agentic loop the agent already reranks what it reads, so stacking a second LLM reranker needs its own evidence.
+
+**Follow-ups:** How would you measure position bias in a listwise reranker on your own data? How many labelled pairs do you need to distil an LLM reranker into a cross-encoder, and how do you check the student did not simply inherit the teacher's biases?
+
+</details>
+
+### 59. A teammate wants to delete the vector index and give the agent grep, file reads and keyword search instead, the way coding agents work. Where are they right, and where does it break outside code?
+
+<details><summary><b>Answer</b></summary>
+
+Your teammate is right for small, well-organised corpora with a shared vocabulary and a generous per-query budget, and wrong for large, paraphrase-heavy, permissioned corpora behind a latency target. The idea worth keeping is the loop, not the deletion of embeddings.
+
+It works for code because identifiers are exact, the repository is a navigable structure of directories, imports and definitions, and the agent can grep, read and refine until it has the answer. There is no index to go stale, since every call reads the current tree.
+
+It transfers to a well-named policy folder, a markdown docs site or one customer's files. With list, keyword search and ranged read tools, the agent reformulates its way past most lexical misses.
+
+Where it breaks:
+
+- **Vocabulary mismatch at scale.** In two million support tickets, "laptop will not boot" and "notebook fails POST" share no words. The agent has to guess the corpus's vocabulary, and every guess is a round trip. A dense leg finds the paraphrase in one call.
+- **Scale.** Grep over millions of documents means building an inverted index anyway, so "no index" quietly becomes BM25 plus an agent.
+- **Latency and cost.** Five to twenty tool calls against one sub-second pipeline. Fine for a research task, wrong for a search box.
+- **Permissions.** A raw file tool must enforce ACLs on every call. A filtered index already did that work.
+- **Evaluation.** Trajectories vary run to run, so regressions are harder to catch than a drop in recall@k.
+
+My position: give the agent a hybrid search tool, BM25 plus dense with ACL filters, alongside read and list tools, and let it iterate. Then compare task success and tool calls per answer with and without the dense leg on the same golden set, and drop embeddings only if the data says they add nothing.
+
+**Worth sketching.** The latency budget picks the architecture first, and corpus shape picks the tools second.
+
+```mermaid
+flowchart TD
+    Q["Query arrives"] --> B{"Latency budget"}
+    B -->|"sub-second search box"| P["Single-shot<br/>hybrid pipeline"]
+    B -->|"seconds to minutes"| C{"Corpus shape"}
+    C -->|"small, well named"| G["Agent with list,<br/>grep and read tools"]
+    C -->|"large, paraphrase-heavy"| H["Agent with a hybrid<br/>search tool plus read"]
+    G --> L["Loop: search, read,<br/>refine, answer"]
+    H --> L
+```
+
+**Follow-ups:** How would you design the evaluation that decides whether the dense leg stays? What does an agent need in a search tool's results to reformulate well after a miss?
+
+</details>
+
+### 60. Your assistant must say "I don't know" when the corpus lacks the answer. How do you decide when to abstain, and how do you set the threshold?
+
+<details><summary><b>Answer</b></summary>
+
+Treat it as selective prediction: combine signals from several stages into one confidence decision, then pick an operating point on a risk-coverage curve built from labelled answerable and unanswerable questions. The product owner decides how much coverage to trade for fewer wrong answers; engineering makes that trade measurable.
+
+Signals, cheapest first:
+
+1. **Retrieval confidence**: the top reranker score and its margin over the next candidates. Cross-encoder scores are far more usable here than raw cosine, which is uncalibrated and shifts with every model change.
+2. **Evidence sufficiency**: a small grader judges whether the passages actually contain the answer, before you pay for generation.
+3. **Grounding after generation**: claim-level entailment against the cited spans. Unsupported claims downgrade the reply to a partial answer or an abstain.
+4. **Agreement across samples**: answers that disagree signal low confidence. Expensive, so keep it for high-stakes queries.
+
+Setting the threshold:
+
+- Seed the eval set with near-miss unanswerables, where the corpus covers the topic but not this fact. Off-topic questions are rejected trivially and teach you nothing.
+- Sweep thresholds and plot coverage (fraction answered) against risk (error rate among answered). A legal assistant may accept far lower coverage than an internal docs helper.
+- Fit per slice: corpus, language, query type. One global cutoff over-abstains on some slices and under-abstains on others.
+- Re-fit after any embedding, reranker or prompt change, because thresholds do not transfer across versions.
+
+Make the abstain useful: name the closest documents, give the partial answer the corpus supports, or hand off to a human. A flat refusal teaches users to stop asking.
+
+In production, watch the abstain rate per slice. A sudden jump usually means an ingestion or index fault, not harder questions.
+
+**Worth sketching.** Three gates feeding one abstain path show this is a pipeline decision, not one magic cutoff.
+
+```mermaid
+flowchart LR
+    Q["Query"] --> R["Retrieve and rerank"]
+    R --> S{"Top score above<br/>the slice threshold?"}
+    S -->|"no"| A["Abstain, name the<br/>closest sources"]
+    S -->|"yes"| E{"Evidence holds<br/>the answer?"}
+    E -->|"no"| A
+    E -->|"yes"| G["Generate"]
+    G --> V{"Claims entailed by<br/>cited spans?"}
+    V -->|"no"| A
+    V -->|"yes"| O["Answer with citations"]
+```
+
+**Follow-ups:** How would you build near-miss unanswerable questions without contaminating the corpus? The abstain rate doubled overnight with no deploy: what are your first three checks?
 
 </details>

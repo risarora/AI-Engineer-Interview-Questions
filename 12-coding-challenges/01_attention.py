@@ -37,8 +37,10 @@ values are silently wrong); forgetting the output projection w_o.
 
 Follow-up variations: why sqrt(d_k)? (dot-product variance grows with d_k,
 saturating softmax and killing gradients); grouped-query / multi-query
-attention (share K/V across heads to shrink the KV cache); FlashAttention
-(tiling + online softmax so the (T, T) matrix never materialises in HBM);
+attention (each group of query heads shares one K/V head, shrinking the KV
+cache by n_heads / n_kv_heads); multi-head latent attention (DeepSeek-V2/V3
+caches a low-rank latent instead of full K/V); FlashAttention (tiling +
+online softmax so the (T, T) matrix never materialises in HBM);
 cross-attention (K/V come from a different sequence than Q).
 """
 from __future__ import annotations
@@ -128,6 +130,9 @@ if __name__ == "__main__":
     vb = rng.normal(size=(2, 4, 7, 16))
     ob, wb = scaled_dot_product_attention(qb, kb, vb, mask=causal_mask(7))
     assert ob.shape == (2, 4, 7, 16) and wb.shape == (2, 4, 7, 7)
+    # each (batch, head) slice must equal the unbatched computation
+    o12, w12 = scaled_dot_product_attention(qb[1, 2], kb[1, 2], vb[1, 2], causal_mask(7))
+    assert np.allclose(ob[1, 2], o12) and np.allclose(wb[1, 2], w12)
 
     # --- multi-head with 1 head and identity w_o == single-head attention ---
     d_model = 8
@@ -146,5 +151,16 @@ if __name__ == "__main__":
     out2 = multi_head_attention(x2, w_q, w_k, w_v, w_o, n_heads=4)
     assert np.allclose(out1[:-1], out2[:-1]), "earlier positions saw the future"
     assert not np.allclose(out1[-1], out2[-1])
+
+    # --- multi-head: matches an explicit per-head loop (catches bad splits) ---
+    d_h = d_model // 4
+    heads = []
+    for h in range(4):
+        cols = slice(h * d_h, (h + 1) * d_h)
+        o_h, _ = scaled_dot_product_attention(
+            x @ w_q[:, cols], x @ w_k[:, cols], x @ w_v[:, cols], causal_mask(6)
+        )
+        heads.append(o_h)
+    assert np.allclose(out1, np.concatenate(heads, axis=-1) @ w_o)
 
     print("All tests passed.")

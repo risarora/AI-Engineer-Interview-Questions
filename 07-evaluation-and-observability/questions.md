@@ -1,6 +1,6 @@
 # Evals & Observability - Interview Questions
 
-50 questions: 13 basic, 23 intermediate, 14 advanced.
+55 questions: 14 basic, 24 intermediate, 17 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -77,7 +77,7 @@ flowchart TD
 
 The main families:
 
-- **Exact match** - output equals reference. Works for classification, multiple choice, canonicalized short answers. Brittle to formatting ("$4.50" vs "4.5 dollars"), so normalize first (case, whitespace, number parsing).
+- **Exact match** - output equals reference. Works for classification, multiple choice, canonicalised short answers. Brittle to formatting ("$4.50" vs "4.5 dollars"), so normalise first (case, whitespace, number parsing).
 - **Contains / regex** - the answer string appears somewhere; regex for structured patterns (dates, IDs). Prone to false positives ("the answer is not 42" contains "42") - anchor patterns and check for negations where it matters.
 - **Structural validation** - parse the output: valid JSON, conforms to a schema/Pydantic model, required fields present, enum values legal. This is the workhorse for tool-calling and extraction tasks.
 - **Numeric with tolerance** - extract the number, compare within epsilon; essential for math where formatting varies.
@@ -333,7 +333,7 @@ They are a standardised vocabulary for describing LLM operations in traces: agre
 
 Why care: it decouples instrumentation from backend. If your app emits standard OTel spans, you can point them at Langfuse, Phoenix, Datadog, Honeycomb or your own collector without touching application code. The alternative is a vendor SDK threaded through every call site, which quietly becomes the reason you cannot leave that vendor. It also means LLM spans sit in the same trace as your HTTP and database spans, so you can see that the 4 second p95 was 300ms of model and 3.7s of your own retrieval code. Many frameworks now emit compliant spans natively or through an instrumentation package, so you often get this close to free.
 
-Two caveats worth raising. First, as of 2026 much of the GenAI convention set is still marked experimental, so attribute names do shift between releases. Pin your instrumentation version and expect some churn rather than treating the names as stable forever.
+Two caveats worth raising. First, as of late 2026 the gen_ai.* conventions are still at Development stability (what OTel used to call experimental), not Stable, and the work has been moving into its own repository so it can iterate faster than the core conventions. Attribute names and span shapes can change between releases without a deprecation window. Pin your instrumentation version, read the changelog on upgrade, and expect churn rather than treating the names as settled.
 
 Second, and more important in interviews: the conventions cover mechanics, not quality. Tokens, models, parameters, latency, finish reasons. There is no standard for "was this answer correct" or "did this violate policy". Eval scores and safety verdicts are your own custom attributes layered on top. OTel gives you the skeleton and portability; the judgement is still yours to build.
 
@@ -355,9 +355,33 @@ flowchart LR
 
 </details>
 
+### 14. What makes a single eval case well specified, and what are the common ways individual cases go wrong?
+
+<details><summary><b>Answer</b></summary>
+
+A good case is one where two domain experts, reading it independently, would reach the same pass or fail verdict on any given output. Everything else follows from that test.
+
+Anatomy. Each case carries the input exactly as the system receives it (user message, conversation history, uploaded files, retrieved context if you are holding retrieval fixed); any environment state the task depends on (database seed, account tier, today's date); the expected behaviour, as a reference answer or a rubric saying what pass means; the grader that applies it; and metadata: slice tags (language, intent, difficulty), provenance (production trace ID, hand-written, synthetic) and the date it was added.
+
+How cases go wrong, roughly in order of frequency:
+
+- **Ambiguous task.** The input admits two reasonable readings and the reference picks one. The model takes the other and fails. Fix the input or accept both.
+- **Over-specified grading.** The reference says "96.12" and the grader string-matches, so "$96.12" fails. You are grading formatting, not the task. Normalise, or move to a tolerance check.
+- **Under-specified grading.** The rubric says "the answer is helpful", so the grader passes anything fluent.
+- **Unachievable expectation.** The reference depends on information the system never had: a document missing from the corpus, a fact after the knowledge cutoff, a tool it cannot call. Every model fails it forever.
+- **Stale reference.** The policy or price changed and the gold answer did not.
+
+The cheap diagnostic: a case that every candidate fails across many trials is more often broken than hard. Read it and check that a human with the same inputs could pass it. Equally, a case nothing ever fails is not testing anything at the current capability level.
+
+The senior habit is to produce a passing output for every case before admitting it, and run it through your own grader. If you cannot write one that passes, neither can the model.
+
+**Follow-ups:** Who should write reference answers in a domain where nobody on the team is an expert? A case passes 50% of the time across ten trials of the same config. Is it a good case or a broken one?
+
+</details>
+
 ## Intermediate
 
-### 14. Pointwise scoring vs pairwise comparison for LLM judges - which is more reliable, and why?
+### 15. Pointwise scoring vs pairwise comparison for LLM judges - which is more reliable, and why?
 
 <details><summary><b>Answer</b></summary>
 
@@ -376,7 +400,7 @@ Whichever you pick, force chain-of-thought before the verdict, pin the judge mod
 
 </details>
 
-### 15. What are the known biases of LLM judges, and how do you mitigate each?
+### 16. What are the known biases of LLM judges, and how do you mitigate each?
 
 <details><summary><b>Answer</b></summary>
 
@@ -406,7 +430,7 @@ flowchart TD
 
 </details>
 
-### 16. How do you decide whether to trust your LLM judge? Walk me through calibration.
+### 17. How do you decide whether to trust your LLM judge? Walk me through calibration.
 
 <details><summary><b>Answer</b></summary>
 
@@ -437,7 +461,7 @@ flowchart TD
 
 </details>
 
-### 17. How do you design a good rubric for model-graded evals, and where does chain-of-thought fit?
+### 18. How do you design a good rubric for model-graded evals, and where does chain-of-thought fit?
 
 <details><summary><b>Answer</b></summary>
 
@@ -456,7 +480,7 @@ Finally, structure the output (JSON with `reasoning` and `verdict` fields) so pa
 
 </details>
 
-### 18. What do MMLU, GSM8K, HumanEval, MT-Bench, and SWE-bench each measure - and why shouldn't you pick a model for your product based on them?
+### 19. What do MMLU, GSM8K, HumanEval, MT-Bench, and SWE-bench each measure - and why shouldn't you pick a model for your product based on them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -464,7 +488,7 @@ Finally, structure the output (JSON with `reasoning` and `verdict` fields) so pa
 - **GSM8K**: ~8.5k grade-school math word problems testing multi-step arithmetic reasoning. Also saturated at the frontier; contamination/overfitting is well documented - studies building fresh GSM8K-style problems (e.g., GSM1k) found several-point drops for some model families, i.e., part of the headline score was memorisation.
 - **HumanEval**: 164 hand-written Python function-completion problems, execution-graded, reported as pass@k. Tiny, Python-only, single-function scope - long saturated and unrepresentative of real software work.
 - **MT-Bench**: 80 multi-turn open-ended prompts graded by an LLM judge - measures conversational instruction-following, inherits all judge biases.
-- **SWE-bench**: real GitHub issues from popular Python repos; the agent must produce a patch that passes the repo's held-out tests. Still discriminative and the reference agentic-coding benchmark - but scores are strongly harness-dependent (scaffolding, retries, compute budget), so cross-model comparisons often measure the agent framework as much as the model. **SWE-bench Verified** is the human-validated 500-issue subset that removes broken/underspecified cases.
+- **SWE-bench**: real GitHub issues from popular Python repos; the agent must produce a patch that passes the repo's held-out tests. Scores are strongly harness-dependent (scaffolding, retries, compute budget), so cross-model comparisons often measure the agent framework as much as the model. **SWE-bench Verified** is the human-validated 500-issue subset that was meant to remove broken/underspecified cases, and it was the headline agentic-coding number through 2025. It has now gone the way of the others: in 2026 OpenAI stopped reporting it, citing flawed tests on many of the remaining hard tasks and signs that frontier models had memorised some fixes, and pointed to the harder SWE-bench Pro instead. Even a "verified" benchmark ages into saturation and contamination.
 
 Why they shouldn't drive product decisions: (1) **contamination** - public test sets leak into pretraining, so scores partly measure memorisation; (2) **saturation** - when everyone's at 90%+, ranking noise dominates; (3) **Goodhart** - labs explicitly optimise for headline benchmarks, so the metric's correlation with general quality degrades; (4) **distribution mismatch** - none of them contain your users, your domain, your tools, or your latency/cost constraints. A model two points "worse" on MMLU can be decisively better at your extraction task.
 
@@ -474,7 +498,7 @@ Right usage: coarse shortlisting and capability trend-watching. Then run the sho
 
 </details>
 
-### 19. What is benchmark contamination, and how would you detect or protect against it?
+### 20. What is benchmark contamination, and how would you detect or protect against it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -497,7 +521,7 @@ Protection, for your own evals:
 
 </details>
 
-### 20. How would you build an execution-based eval for a code-generation feature?
+### 21. How would you build an execution-based eval for a code-generation feature?
 
 <details><summary><b>Answer</b></summary>
 
@@ -516,7 +540,7 @@ Operational gotchas that bite in practice: **flaky tests** (time, randomness, or
 
 </details>
 
-### 21. How do you evaluate a RAG pipeline? Why evaluate components separately from the end-to-end system?
+### 22. How do you evaluate a RAG pipeline? Why evaluate components separately from the end-to-end system?
 
 <details><summary><b>Answer</b></summary>
 
@@ -550,7 +574,7 @@ flowchart LR
 
 </details>
 
-### 22. Which retrieval metrics would you use - recall@k, MRR, nDCG - and when does each matter?
+### 23. Which retrieval metrics would you use - recall@k, MRR, nDCG - and when does each matter?
 
 <details><summary><b>Answer</b></summary>
 
@@ -578,7 +602,7 @@ flowchart LR
 
 </details>
 
-### 23. How do you measure faithfulness - whether the model's answer is actually grounded in retrieved context?
+### 24. How do you measure faithfulness - whether the model's answer is actually grounded in retrieved context?
 
 <details><summary><b>Answer</b></summary>
 
@@ -615,7 +639,7 @@ flowchart TD
 
 </details>
 
-### 24. How do you wire evals into CI so that prompt or model changes can't silently regress quality?
+### 25. How do you wire evals into CI so that prompt or model changes can't silently regress quality?
 
 <details><summary><b>Answer</b></summary>
 
@@ -646,7 +670,7 @@ flowchart TD
 
 </details>
 
-### 25. How do you evaluate an LLM feature online? Design the A/B test and name the implicit feedback signals you'd use.
+### 26. How do you evaluate an LLM feature online? Design the A/B test and name the implicit feedback signals you'd use.
 
 <details><summary><b>Answer</b></summary>
 
@@ -686,14 +710,14 @@ flowchart TD
 
 </details>
 
-### 26. You have 500 production transcripts flagged as failures. Walk me through your error-analysis process.
+### 27. You have 500 production transcripts flagged as failures. Walk me through your error-analysis process.
 
 <details><summary><b>Answer</b></summary>
 
 The goal is to leave with a ranked list of failure *modes* and fix the biggest one - not to fix 500 individual bugs.
 
 1. **Read before you automate.** Personally read 30-50 transcripts end-to-end, including retrievals and tool calls, not just final answers. Write a one-line open-ended note per transcript ("ignored the second constraint in the request," "retrieval returned the 2023 policy doc"). Resist premature categories - open coding first, taxonomy second; predefined buckets make you blind to the failure modes you didn't anticipate.
-2. **Cluster into a taxonomy.** Group the notes into failure modes. An LLM can help cluster all 500 once you've hand-derived the taxonomy from your 50 - but validate its assignments on a sample; don't outsource the understanding step. Typical output: 5-10 modes like *retrieval miss*, *instruction partially followed*, *wrong tool arguments*, *format violation*, *user intent misread*, *not-actually-a-failure* (mislabeled feedback - always a nontrivial slice; thumbs-down often means "I didn't like the policy," not "the model failed").
+2. **Cluster into a taxonomy.** Group the notes into failure modes. An LLM can help cluster all 500 once you've hand-derived the taxonomy from your 50 - but validate its assignments on a sample; don't outsource the understanding step. Typical output: 5-10 modes like *retrieval miss*, *instruction partially followed*, *wrong tool arguments*, *format violation*, *user intent misread*, *not-actually-a-failure* (mislabelled feedback - always a nontrivial slice; thumbs-down often means "I didn't like the policy," not "the model failed").
 3. **Rank by frequency × severity × fixability.** A mode causing 30% of failures with a one-line prompt fix beats a 5% mode requiring a new model. Pareto is reliably your friend here: the top cluster is commonly a single prompt bug or retrieval gap.
 4. **Fix the top cluster, verify, repeat.** Before fixing, convert 10-20 exemplars of that cluster into eval cases - that's your regression test and your success measure for the fix. Apply the fix, run evals, confirm the cluster shrinks without others growing, ship, and re-run the analysis next cycle.
 
@@ -715,7 +739,7 @@ flowchart TD
 
 </details>
 
-### 27. How do you keep an eval set fresh over time, and how do you avoid overfitting to it?
+### 28. How do you keep an eval set fresh over time, and how do you avoid overfitting to it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -751,7 +775,7 @@ flowchart LR
 
 </details>
 
-### 28. How would you use synthetic data to build or extend an eval set, and what are the failure modes?
+### 29. How would you use synthetic data to build or extend an eval set, and what are the failure modes?
 
 <details><summary><b>Answer</b></summary>
 
@@ -775,7 +799,7 @@ Position synthetic data honestly: a bootstrap and gap-filler that production fai
 
 </details>
 
-### 29. How do you measure inter-annotator agreement on a human labelling effort, and what do you do when your annotators disagree a lot?
+### 30. How do you measure inter-annotator agreement on a human labelling effort, and what do you do when your annotators disagree a lot?
 
 <details><summary><b>Answer</b></summary>
 
@@ -793,7 +817,7 @@ The payoff matters for judges: human-human agreement is the ceiling. If humans h
 
 </details>
 
-### 30. You want to detect a 3-point improvement in pass rate. How many eval examples do you need, and how do you get that number down?
+### 31. You want to detect a 3-point improvement in pass rate. How many eval examples do you need, and how do you get that number down?
 
 <details><summary><b>Answer</b></summary>
 
@@ -801,7 +825,7 @@ Work backwards from the minimum detectable effect rather than picking a round nu
 
 For two independent proportions at ~80% power and 95% confidence, the required n per arm is approximately 2.5 / delta^2 when the base rate is around 80%. At delta = 0.03 that is roughly 2,800 examples per arm. At 2 points, ~6,300. At 7 points, ~500. This is the uncomfortable arithmetic behind most eval theatre: teams declare victory on 4-point deltas over 100 examples, where the noise floor is around 8 points.
 
-The lever is pairing. You are not running two random groups of users, you are running both variants over the identical examples, so use that. In a paired design only the discordant pairs carry signal: examples where A passed and B failed, or the reverse. Everything both got right or both got wrong contributes nothing. McNemar's test on the discordant counts, or a bootstrap over the per-example paired delta vector, buys roughly an order of magnitude in sample size, because you have removed example difficulty as a source of variance. Detecting a few points of net difference can drop into the hundreds rather than thousands.
+The lever is pairing. You are not running two random groups of users, you are running both variants over the identical examples, so use that. In a paired design only the discordant pairs carry signal: examples where A passed and B failed, or the reverse. Everything both got right or both got wrong contributes nothing. McNemar's test on the discordant counts, or a bootstrap over the per-example paired delta vector, typically cuts the required sample size several-fold, because you have removed example difficulty as a source of variance. The saving depends on how many examples flip: the fewer discordant pairs relative to the net delta, the bigger the win. Detecting a few points of net difference can drop into the hundreds rather than thousands.
 
 ```python
 import numpy as np
@@ -822,7 +846,7 @@ Two caveats. Sampling noise means you should average several runs per example, o
 
 </details>
 
-### 31. You are swapping the model behind a live feature. Walk me through shadow, canary and A/B. When do you use each?
+### 32. You are swapping the model behind a live feature. Walk me through shadow, canary and A/B. When do you use each?
 
 <details><summary><b>Answer</b></summary>
 
@@ -854,7 +878,7 @@ flowchart LR
 
 </details>
 
-### 32. How do you instrument cost and latency for an agentic feature, and what actually drives cost creep?
+### 33. How do you instrument cost and latency for an agentic feature, and what actually drives cost creep?
 
 <details><summary><b>Answer</b></summary>
 
@@ -872,7 +896,7 @@ Alert on distribution shape, not means. The mean step count is stable while a ru
 
 </details>
 
-### 33. Prompts and completions contain user data. How do you redact PII in traces without destroying your ability to debug?
+### 34. Prompts and completions contain user data. How do you redact PII in traces without destroying your ability to debug?
 
 <details><summary><b>Answer</b></summary>
 
@@ -890,7 +914,7 @@ Two things people forget. Index traces by user ID so a deletion request is a del
 
 </details>
 
-### 34. Design a human review queue for a production LLM feature. What gets reviewed, and how much?
+### 35. Design a human review queue for a production LLM feature. What gets reviewed, and how much?
 
 <details><summary><b>Answer</b></summary>
 
@@ -910,7 +934,7 @@ Most importantly, route the labels back: into the judge calibration set, into th
 
 </details>
 
-### 35. Your team ran a red-team exercise and found 30 ways to break the assistant. How do you turn that into something durable?
+### 36. Your team ran a red-team exercise and found 30 ways to break the assistant. How do you turn that into something durable?
 
 <details><summary><b>Answer</b></summary>
 
@@ -930,7 +954,7 @@ One caution: keep a private holdout and do not publish the whole set. A public a
 
 </details>
 
-### 36. Your judge model is being deprecated and you have to move to a new version. How do you keep your scores comparable?
+### 37. Your judge model is being deprecated and you have to move to a new version. How do you keep your scores comparable?
 
 <details><summary><b>Answer</b></summary>
 
@@ -961,9 +985,27 @@ flowchart TD
 
 </details>
 
+### 38. You add a router that sends easy queries to a cheap model and hard ones to a frontier model. How do you evaluate the router?
+
+<details><summary><b>Answer</b></summary>
+
+Evaluate it as a cost-quality tradeoff, not as a classifier. The router's job is not to label queries "hard" correctly, it is to buy the most quality per dollar, and the classification framing hides the one error that matters.
+
+Start by running both models on the whole eval set, so every example has a cheap-model outcome and a strong-model outcome. That gives you three reference points for free: always-cheap, always-strong, and the oracle router, which sends an example to the strong model only when the cheap one fails it. The oracle is your ceiling, and the gap between always-cheap and always-strong is the total quality at stake.
+
+Then sweep the router's threshold and plot quality against cost, or against the fraction of traffic sent to the strong model. A good router's curve bows upwards: most of the strong model's quality at a fraction of its cost. Compare it with a random router at the same strong-model fraction, which is the straight line between the two endpoints. A router that does not beat that line is adding latency and complexity for nothing. Report one or two operating points, such as quality retained at 30% strong-model traffic.
+
+The asymmetric error is the routed-down failure: an example the cheap model fails that the router sent to it anyway. Upward misroutes only cost money. Measure the routed-down failure rate per slice, because routers fail on exactly the segments that look easy and are not: short queries with hidden complexity, non-English inputs, long-tail domains.
+
+Two production details. The router's inputs drift like everything else, so monitor the strong-model fraction over time; a sudden jump means traffic changed or the router broke. And in production you only observe the model you actually called, so keep a small randomised slice where both models run. Without it you can never measure what the router is costing you in quality.
+
+**Follow-ups:** Your router cuts cost 60% and aggregate quality drops 1 point. What else do you check before shipping? How would you evaluate a cascade that tries the cheap model first and escalates on low confidence instead of routing up front?
+
+</details>
+
 ## Advanced
 
-### 37. How do you evaluate agents? Compare trajectory-based and outcome-based approaches.
+### 39. How do you evaluate agents? Compare trajectory-based and outcome-based approaches.
 
 <details><summary><b>Answer</b></summary>
 
@@ -991,19 +1033,19 @@ flowchart LR
 
 </details>
 
-### 38. How does Chatbot Arena - style evaluation work, and what are its strengths and limits?
+### 40. How does Chatbot Arena - style evaluation work, and what are its strengths and limits?
 
 <details><summary><b>Answer</b></summary>
 
-Chatbot Arena (now LMArena) crowdsources pairwise human preference: a visitor submits any prompt, two anonymous models answer side-by-side, the human votes for the better response (or tie), and votes across many users aggregate into a leaderboard. The ranking is fit with a **Bradley-Terry model** - each model gets a strength parameter, and P(A beats B) is modelled as a logistic function of the strength difference; the project moved from incremental Elo updates to BT maximum-likelihood fitting because Elo's order-dependence adds noise when model strengths are static over the estimation window. Confidence intervals come from bootstrapping the votes.
+Chatbot Arena (later LMArena, though most people still use the original name) crowdsources pairwise human preference: a visitor submits any prompt, two anonymous models answer side-by-side, the human votes for the better response (or tie), and votes across many users aggregate into a leaderboard. The ranking is fit with a **Bradley-Terry model** - each model gets a strength parameter, and P(A beats B) is modelled as a logistic function of the strength difference; the project moved from incremental Elo updates to BT maximum-likelihood fitting because Elo's order-dependence adds noise when model strengths are static over the estimation window. Confidence intervals come from bootstrapping the votes.
 
 Strengths: it measures **real human preference on an open prompt distribution** - no reference answers, no judge model biases; it's **contamination-resistant** (prompts are novel, live, and unbounded - you can't train on next week's questions); anonymity until after the vote suppresses brand bias; and it scales to fresh models cheaply.
 
 Limits - where strong candidates earn points:
 
-- **It measures preference, not correctness.** Voters reward confident, well-formatted, longer answers; they rarely verify facts. Verbosity and style effects are real, which is why **style control** (regressing out length and markdown effects in the BT model) was introduced - style-controlled and raw rankings visibly differ.
+- **It measures preference, not correctness.** Voters reward confident, well-formatted, longer answers; they rarely verify facts. Verbosity and style effects are real, which is why **style control** (regressing out length and markdown effects in the BT model) was introduced and became the default leaderboard view - style-controlled and raw rankings visibly differ.
 - **Population skew**: voters are AI enthusiasts; the prompt distribution over-represents casual chat, coding, and "test the model" prompts versus, say, enterprise document processing. Rankings may not transfer to your domain.
-- **One number for a multi-dimensional object**: per-category boards help, but a global Elo hides "great at code, weak at long documents."
+- **One number for a multi-dimensional object**: per-category boards help, but a global rating hides "great at code, weak at long documents."
 - **Goodhart pressure**: labs optimise for arena performance - tuning toward the voter population's taste (formatting, personality) rather than general quality; there's also documented concern about labs testing many private variants and releasing the best-scoring one, which inflates apparent rank.
 - **No cost/latency axis**: a 10× more expensive model sits beside a cheap one as peers.
 
@@ -1013,7 +1055,7 @@ Net: excellent for tracking the frontier and coarse shortlisting; never a substi
 
 </details>
 
-### 39. Your new prompt scores 78% vs the old prompt's 74% on a 100-example eval. Do you ship it?
+### 41. Your new prompt scores 78% vs the old prompt's 74% on a 100-example eval. Do you ship it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1042,15 +1084,15 @@ flowchart TD
 
 </details>
 
-### 40. Design the observability stack for a production LLM application. What does a good trace look like?
+### 42. Design the observability stack for a production LLM application. What does a good trace look like?
 
 <details><summary><b>Answer</b></summary>
 
 Model the system as **traces of spans**, exactly like distributed tracing - because an LLM request *is* a distributed computation. One user request = one trace; each unit of work = a span with start/end times, attributes, and parent links:
 
 ```mermaid
-flowchart TB
-    T["Trace: user request"] --> G[Span: input guardrail]
+flowchart TD
+    T["Trace: user request"] --> G["Span: input guardrail"]
     T --> R["Span: retrieval<br/>(query, top-k IDs, scores)"]
     T --> L1["Span: LLM call #1<br/>(model+version, params, tokens, TTFT)"]
     L1 --> TC["Span: tool execution<br/>(name, args, result, status)"]
@@ -1075,7 +1117,7 @@ Tooling: LangSmith, Langfuse, Braintrust, W&B Weave, Arize Phoenix all implement
 
 </details>
 
-### 41. How do you monitor a deployed LLM system for drift? What kinds of drift matter?
+### 43. How do you monitor a deployed LLM system for drift? What kinds of drift matter?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1106,7 +1148,7 @@ flowchart LR
 
 </details>
 
-### 42. Where does Goodhart's law bite in LLM evaluation? Give concrete examples and defences.
+### 44. Where does Goodhart's law bite in LLM evaluation? Give concrete examples and defences.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1144,7 +1186,7 @@ flowchart LR
 
 </details>
 
-### 43. Evals are nondeterministic - temperature, sampling, flaky agents. How do you get trustworthy numbers?
+### 45. Evals are nondeterministic - temperature, sampling, flaky agents. How do you get trustworthy numbers?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1172,7 +1214,7 @@ Culture point: put error bars on every eval number shown in a decision context. 
 
 </details>
 
-### 44. A team ships prompt changes on vibes - the founder tries five favourite prompts and merges. How do you move them to eval maturity without halting shipping?
+### 46. A team ships prompt changes on vibes - the founder tries five favourite prompts and merges. How do you move them to eval maturity without halting shipping?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1192,7 +1234,7 @@ The maturity ladder you're walking: vibes → written spot-checks → versioned 
 
 </details>
 
-### 45. Your new prompt improves aggregate pass rate by 3 points, but one customer segment drops 8. How do you catch this before shipping, and what do you do about it?
+### 47. Your new prompt improves aggregate pass rate by 3 points, but one customer segment drops 8. How do you catch this before shipping, and what do you do about it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1226,7 +1268,7 @@ flowchart TD
 
 </details>
 
-### 46. Design the evaluation for a document understanding feature: users upload invoices and scanned forms and ask questions about them.
+### 48. Design the evaluation for a document understanding feature: users upload invoices and scanned forms and ask questions about them.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1250,7 +1292,7 @@ On ground truth, be realistic. Annotating one document is minutes, not seconds. 
 
 </details>
 
-### 47. How does evaluating and observing a reasoning model differ from a standard one?
+### 49. How does evaluating and observing a reasoning model differ from a standard one?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1270,7 +1312,7 @@ Finally, overthinking on trivial inputs is a real regression. Track budget spent
 
 </details>
 
-### 48. How would you build a deterministic replay harness for agent evals, and what does it genuinely buy you?
+### 50. How would you build a deterministic replay harness for agent evals, and what does it genuinely buy you?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1301,7 +1343,7 @@ flowchart TD
 
 </details>
 
-### 49. Your eval suite is green, ship velocity is good, and users are complaining that quality got worse. Debug it.
+### 51. Your eval suite is green, ship velocity is good, and users are complaining that quality got worse. Debug it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1342,7 +1384,7 @@ flowchart TD
 
 </details>
 
-### 50. How do you evaluate your eval suite itself? What makes one good or bad?
+### 52. How do you evaluate your eval suite itself? What makes one good or bad?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1377,5 +1419,94 @@ flowchart LR
 ```
 
 **Follow-ups:** Your suite catches 9 of 10 escaped defects but takes 40 minutes in CI. Worth it? How would you build the crippled config without it being trivially detectable?
+
+</details>
+
+### 53. Running your LLM judge on every production trace would cost more than the feature itself. How do you monitor quality online at scale?
+
+<details><summary><b>Answer</b></summary>
+
+Layer the graders by cost and escalate only what the cheap layers cannot settle, the same way you would design a serving cascade.
+
+Layer one is free and runs on all traffic: deterministic checks such as schema validity, cited IDs that exist in the retrieved set, banned-content patterns, refusal detection and length bounds, plus the implicit signals you already log (regeneration, abandonment, escalation). These catch format and guardrail failures exhaustively.
+
+Layer two is a small, fast evaluator on a large sample or on everything: a classifier or small model fine-tuned for one criterion, such as groundedness or intent satisfied. Its training labels come from running your calibrated frontier judge, plus human labels, over a few thousand traces. It costs a small fraction of the frontier judge and can sometimes run inline as a guardrail when the latency budget allows.
+
+Layer three is the frontier judge with the full rubric and reasoning, on a stratified sample: whatever layer two scored as uncertain, a slice of high-risk routes, and a small uniform random sample. Layer four is human review, fed by layer-three disagreements and the random slice.
+
+The traps are about validity, not cost. A distilled evaluator inherits its teacher's biases and adds its own, so calibrate it against human labels directly, not only against the judge it copied. It also drifts: a small model trained on last quarter's traffic degrades quietly on new intents, so track its agreement with the frontier judge on the overlap sample as a first-class metric and retrain when it slips. And never estimate the failure rate from the escalated sample, because it was selected on suspicion. The uniform random slice scored by the strongest grader is the only unbiased estimate, so keep it when budgets tighten.
+
+Finally, write every score back onto the trace with the grader name and version, so a quality dip can be joined against releases.
+
+**Worth sketching.** The random slice bypassing the cascade is the detail that keeps the failure-rate estimate honest.
+
+```mermaid
+flowchart TD
+    T["All production traces"] --> L1["Layer 1: code checks and<br/>implicit signals, 100%"]
+    L1 --> L2["Layer 2: small distilled<br/>evaluator, large sample"]
+    L2 -->|"uncertain or high risk"| L3["Layer 3: calibrated<br/>frontier judge"]
+    T -->|"uniform random slice"| L3
+    L3 -->|"disagreements"| H["Layer 4: human review"]
+    L3 --> W["Scores written back<br/>onto the trace"]
+    H --> C["Recalibrate layers 2 and 3"]
+```
+
+**Follow-ups:** Your distilled evaluator agrees with the frontier judge 92% of the time but with humans only 78%. Which number do you trust, and what do you do? How would you decide whether the small evaluator is good enough to block responses inline?
+
+</details>
+
+### 54. Your team wants to reuse the eval suite's graders as the reward signal for reinforcement fine-tuning. What changes?
+
+<details><summary><b>Answer</b></summary>
+
+The way you validate the grader changes completely, and you lose the eval suite as an independent measurement unless you split it. An eval grader only has to be right on the outputs a model naturally produces. A reward grader has an optimiser actively searching for outputs it scores highly, so it has to be right on adversarial outputs too, and those come from a different distribution.
+
+Robustness becomes the main property. Agreement with humans on natural outputs says nothing about what happens when the policy finds the grader's blind spot. Judges reward length, confidence and rubric keywords; code graders reward passing the visible tests, including by special-casing them. Before training, red-team the grader: write outputs designed to score high while being wrong (padded, hedged, keyword-stuffed, hard-coded to the tests) and confirm they fail. During training, sample high-reward outputs at regular intervals and have a human read them. Reward hacking shows up in transcripts well before it shows in aggregate metrics.
+
+Prefer verifiable components. Wherever the criterion can be checked by execution or exact comparison, use that for the reward, with hidden tests rather than visible ones, and keep the judge for what is left.
+
+Independence is the other casualty. If the training reward and the eval are the same grader on overlapping prompts, rising eval scores are guaranteed and mean nothing. Keep training prompts disjoint from eval prompts, and evaluate the trained model with at least one grader the optimiser never saw: a different judge family or rubric, human review on a held-out slice, and online metrics.
+
+Watch for the classic signatures: reward climbing while held-out pass rate is flat or falling, output length drifting, response diversity collapsing.
+
+Finally, version the reward grader as part of the training run's provenance. A judge swap mid-run changes the objective, not just the measurement.
+
+**Follow-ups:** Your grader agrees with humans 90% of the time on natural outputs. Is that enough to use it as a reward? How would you tell the policy is exploiting the judge rather than genuinely improving?
+
+</details>
+
+### 55. Your agent now runs tasks that take hours and hundreds of steps. How do you evaluate and observe it?
+
+<details><summary><b>Answer</b></summary>
+
+Stop treating a task as one pass/fail sample. At that length the end-to-end outcome is too rare, too expensive and too noisy to iterate on alone, so you need intermediate structure in both the eval and the traces.
+
+Evaluation:
+
+- **Milestone grading.** Decompose each task into checkpoints verifiable against environment state: failing test reproduced, fix compiles, migration applied, report drafted. Score progress as milestones reached and keep the final outcome as the headline. Long tasks then give you a gradient instead of a wall of zeros.
+- **Reliability against task length.** Bucket tasks by how long a skilled human would take and plot success rate per bucket. Success falls with length, and the length at which the agent succeeds half the time summarises it better than one average. METR popularised this "time horizon" framing for frontier models; the same plot on your own tasks tells you which jobs are safe to delegate.
+- **Budgeted trials.** A run can cost real money and hours, so k=10 on everything is unaffordable. Keep a small long-task suite on a nightly schedule with a few trials, and a larger mid-length set for fast iteration. Resume from checkpoints to test late stages without replaying early ones.
+
+Observability:
+
+- The trace is too big to read, so emit structured events above the span level: milestone reached, plan revised, context compacted, sub-agent spawned, budget threshold crossed. Those are what you query.
+- Track context management explicitly. Many long-run failures are the agent losing a constraint after compaction, and no token or latency metric shows it.
+- Detect stalls: steps without milestone progress, repeated near-identical tool calls, rising cost per milestone. Alert on them, and enforce hard caps on steps, wall-clock time and spend.
+- Make runs resumable from checkpoints, so a failure at hour three can be debugged without paying for hours one and two again.
+
+**Worth sketching.** Milestones and compaction events on one timeline show where a long run actually broke.
+
+```mermaid
+flowchart LR
+    T["Long task in a sandbox"] --> M1["Milestone 1:<br/>bug reproduced"]
+    M1 --> M2["Milestone 2:<br/>fix compiles"]
+    M2 --> CP["Context compacted"]
+    CP --> M3["Milestone 3:<br/>tests pass"]
+    M3 --> O["Final outcome grade"]
+    CP -.-> EV["Event logged:<br/>constraint still present?"]
+    M2 -.-> ST["Stall detector:<br/>steps without progress"]
+```
+
+**Follow-ups:** How do you write milestones for a task with many valid paths without punishing the unconventional ones? Your agent's success rate at four-hour tasks doubled after a model upgrade, but cost per success tripled. Is that a win?
 
 </details>

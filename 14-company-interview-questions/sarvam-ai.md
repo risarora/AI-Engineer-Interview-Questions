@@ -1,6 +1,6 @@
 # 🪔 Sarvam AI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,11 +8,11 @@
 - Loop shape varies by team and is only moderately documented. A common pattern from public reports: **briefing call -> time-boxed practical task/assignment -> follow-up technical rounds that dig into your submission -> a DSA-ish round in some tracks -> founder/CTO and HR conversations.**
 - They weight **Indic language depth** heavily: multilingual tokenization and fertility, code-mixed (Hinglish) handling, transliteration and script normalization, and low-resource adaptation. Generic English-only NLP answers read poorly here.
 - **Speech and voice pipelines** are core product surface (Saaras ASR, Bulbul TTS, real-time voice agents). Expect at least one round that touches streaming latency, VAD/endpointing, or ASR/TTS for Indian languages if you are on an applied or agents track.
-- **Efficiency and pragmatism** run through everything: small models that punch up (Sarvam-1 is 2B), MoE at the frontier (Sarvam-105B with ~9B active), quantization, on-device (Sarvam-Edge), and sovereign/on-prem deployment. They are building for cost-sensitive, population-scale, sometimes offline settings.
+- **Efficiency and pragmatism** run through everything: small models that punch up (Sarvam-1 is 2B), MoE at the frontier (Sarvam-105B with ~10B active, open-sourced under Apache 2.0 in February 2026), quantization, on-device (Sarvam-Edge), and sovereign/on-prem deployment. They are building for cost-sensitive, population-scale, sometimes offline settings.
 
 ## Company context
 
-Sarvam AI is India's sovereign-AI frontier lab: founded in August 2023 in Bengaluru by Vivek Raghavan and Pratyush Kumar (both from AI4Bharat at IIT Madras), it builds LLMs, speech models, and voice agents centred on Indian languages. It was selected under the government's IndiaAI Mission to build India's sovereign foundation model, receiving one of the mission's largest compute allocations (a reported ~4,096 H100 GPUs for about six months) to train a family of models (Sarvam-Large, Sarvam-Small, Sarvam-Edge). Its public model lineup spans Sarvam-1 (a 2B Indic base model), Sarvam-M (24B, built on Mistral Small), the newer Sarvam-30B and Sarvam-105B MoE models, plus Saaras (ASR), Bulbul (TTS), Mayura (translation), and Sarvam Vision. The team is small and high-bar and backed by Lightspeed, Peak XV, and Khosla Ventures (unicorn valuation as of the 2026 Series B). "AI engineer" here usually means end-to-end ownership: you might tune a model, wire an agent harness, build a low-latency voice pipeline, and deploy it on-prem for a government or enterprise customer, often in the same quarter.
+Sarvam AI is India's sovereign-AI frontier lab: founded in August 2023 in Bengaluru by Vivek Raghavan and Pratyush Kumar (both from AI4Bharat at IIT Madras), it builds LLMs, speech models, and voice agents centred on Indian languages. It was selected under the government's IndiaAI Mission to build India's sovereign foundation model, receiving one of the mission's largest compute allocations (a reported ~4,096 H100 GPUs for about six months) to train a family of models (Sarvam-Large, Sarvam-Small, Sarvam-Edge). Its public model lineup spans Sarvam-1 (a 2B Indic base model), Sarvam-M (24B, built on Mistral Small), the Sarvam-30B and Sarvam-105B MoE models (open-weight, released February 2026; the 105B also powers the Indus chat app), plus Saaras (ASR), Bulbul (TTS), Mayura (translation), and Sarvam Vision. The team is small and high-bar. Early backers include Lightspeed, Peak XV, and Khosla Ventures, and a 2026 Series B (reported ~$234M first close at a ~$1.5B valuation, with HCLTech as lead strategic investor) made it a unicorn. "AI engineer" here usually means end-to-end ownership: you might tune a model, wire an agent harness, build a low-latency voice pipeline, and deploy it on-prem for a government or enterprise customer, often in the same quarter.
 
 ## Roles & titles they hire
 
@@ -35,7 +35,7 @@ Public detail is moderate and comes mostly from candidate write-ups (Glassdoor, 
 |---|---|---|
 | Recruiter / briefing call | ~30 min, explains the task and expectations (reported, varies) | Motivation, background, "why Sarvam / why Indic AI" |
 | Practical task / assignment | Time-boxed build; one report describes a ~2.5 hr proctored session (e.g. build a VAD from scratch), any tools allowed including AI assistants (reported, varies) | Can you ship a working solution fast; setup speed, debugging under pressure, library fluency |
-| Technical deep-dive on your submission | 1-2 rounds discussing your code, logic, and design choices (reported, varies) | Depth behind the build; tradeoffs, what you would change, why |
+| Technical deep-dive on your submission | 1-2 rounds discussing your code, logic, and design choices; ML tracks reportedly add from-scratch maths and architecture questions such as coding gradient descent or self-attention (reported, varies) | Depth behind the build; tradeoffs, what you would change, why |
 | Founder / CTO "induction" round | One report: self-intro plus 2 problems to solve with LLM use allowed, ~1 hr (reported, varies) | Raw problem-solving, communication, culture and drive |
 | DSA / fundamentals round | Present in some tracks per reports; not universal (reported, varies) | Core CS fundamentals where the role needs them |
 | HR / offer | Discussion | Fit, expectations, logistics |
@@ -47,7 +47,7 @@ Reported end-to-end timelines are short for the category, often around 1-2 weeks
 - **Indic tokenization and fertility.** Sarvam-1's headline is a tokenizer with fertility of 1.4-2.1 across supported languages, described as 2-4x more efficient than existing multilingual tokenizers. If you cannot explain why an English-centric tokenizer mangles Devanagari or Tamil and what that costs, you are not calibrated for this company.
 - **Code-mixed, real-world Indian speech and text.** Their ASR (Saaras) is tuned for Hinglish, telephony-quality 8 kHz audio, and code-switching. Handling "Main kal market ja raha hoon" without forcing it into pure Hindi or pure English is a first-class requirement, not an edge case.
 - **Low-latency voice pipelines.** Voice agents pairing Saaras (ASR) + an LLM + Bulbul (TTS) target sub-250ms streaming latency. Streaming, endpointing/VAD, barge-in, and partial hypotheses are expected fluency for applied/agents roles.
-- **Efficiency across the size spectrum.** From a 2B base model to a 105B MoE with ~9B active params to on-device Sarvam-Edge, the through-line is quality per FLOP and per rupee. Quantization, MoE routing, and small-model tricks matter.
+- **Efficiency across the size spectrum.** From a 2B base model to a 105B MoE with ~10B active params (10.3B per the model card) to on-device Sarvam-Edge, the through-line is quality per FLOP and per rupee. Quantization, MoE routing, and small-model tricks matter.
 - **Adaptation with scarce data.** Building for 10+ Indian languages, many low-resource, means synthetic data generation, transliteration, continued pretraining, and tokenizer surgery are daily tools, not exotica.
 - **Sovereign, population-scale, pragmatic delivery.** On-prem/air-gapped deployment, data residency, and forward-deployed customer work (government, enterprise) reward engineers who own the whole stack and ship, not just model in a notebook.
 
@@ -292,6 +292,24 @@ Delivery discipline: build a **gold eval set from real citizen queries per langu
 
 </details>
 
+### 13. Sarvam-105B pairs an MLA-style attention stack with a 128-expert MoE (top-8 routing plus a shared expert, auxiliary-loss-free balancing). What does each choice buy you when serving 22 Indian languages?
+
+<details><summary><b>Answer</b></summary>
+
+They attack two different serving costs: MoE cuts compute per token, MLA cuts memory per token of context.
+
+**MoE.** With 105B total and ~10B active parameters, each token pays roughly the FLOPs of a 10B dense model while the network has 105B parameters of capacity to spread across 22 languages, code, and reasoning. Fine-grained experts (128, top-8) give the router far more combinations than a handful of large experts, which suits a mix where scripts and domains want partly separate capacity. The shared expert absorbs features every token needs, so routed experts can specialise. Memory still scales with total parameters, so you serve it across several GPUs with expert parallelism.
+
+**Auxiliary-loss-free balancing.** Rather than adding a load-balancing loss that competes with the language-modelling objective, a per-expert bias is added to routing scores for top-k selection only, nudged up for under-loaded experts and down for over-loaded ones. Balance is enforced without distorting gradients. For a multilingual model that matters: a strong balance loss can push low-resource-language tokens onto generic experts just to even out load.
+
+**MLA.** Multi-head latent attention caches a low-rank compressed latent per token instead of full per-head keys and values, and reconstructs them (or folds the up-projection into the query and output matrices) at attention time. KV memory per token drops several-fold against standard multi-head attention with quality close to it. RoPE is applied to a small decoupled slice of the query and key, which is why the model card lists a 192-dim query/key head against a 128-dim value head. At a 128K context the cache, not the weights, dominates memory, so this is what makes long Indic documents and many concurrent sessions affordable on-prem.
+
+**Costs.** MoE brings all-to-all communication and expert imbalance inside a batch; MLA needs specialised kernels and complicates some KV-quantization paths.
+
+**Follow-ups:** How would you detect that tokens from one language are piling onto a few overloaded experts? When would you deploy Sarvam-30B instead for an on-prem customer?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
@@ -323,6 +341,8 @@ Company-specific moves:
 - [Sarvam AI (Wikipedia)](https://en.wikipedia.org/wiki/Sarvam_AI) - founding, founders, funding/investors, model timeline, valuation
 - [Grapevine: Sarvam Backend AI Engineer interview](https://www.grapevine.in/round1/job-interview/e87b2eb9-8bcf-4122-8122-2afaa2500801) - candidate-reported stage breakdown (assignment, technical rounds, DSA, HR)
 - [GetPersonalisedCV: Sarvam AI interview experience](https://getpersonalisedcv.in/blog/sarvam-ai-interview-experience-84-lpa-ml-engineer) - candidate report of the ~2.5 hr proctored build session (VAD from scratch), tools-allowed, no-DSA proof-of-work format
-- [Glassdoor: SarvM.ai interviews](https://www.glassdoor.com/Interview/SarvM-ai-Interview-Questions-E7826863.htm) - aggregated candidate reports (unofficial; process varies)
+- [Blind: Sarvam AI interviews with no DSA round (candidate discussion)](https://www.teamblind.com/post/sarvams-ai-interviews-have-no-dsa-and-still-offered-84-lpa-instead-l86l5tp0) - VAD build session and follow-up maths/architecture rounds (unofficial; process varies)
+- [Sarvam-105B on Hugging Face](https://huggingface.co/sarvamai/sarvam-105b) - 105B total / 10.3B active MoE, MLA-style attention, 128 experts with top-8 routing and a shared expert, auxiliary-loss-free balancing, 128K context, Apache 2.0
+- [Sarvam Series B first close (exchange4media)](https://www.exchange4media.com/industry-briefing-news/sarvam-raises-234m-in-first-close-of-300m-series-b-at-15b-valuation-155498.html) - 2026 funding and valuation
 
 *Interview-process detail is drawn from a small number of public candidate reports and is not officially published, so treat the loop as indicative rather than fixed.*

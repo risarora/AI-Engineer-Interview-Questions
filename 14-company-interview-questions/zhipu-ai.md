@@ -1,18 +1,18 @@
 # 🧠 Zhipu AI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **Public detail on the interview loop is thin.** Zhipu AI does not publish a process skeleton, and there are few English-language candidate write-ups. The loop below is the typical shape for a research-driven Chinese LLM lab, clearly labelled as inference, anchored to their real job requirements (PhD or MS plus publications, strong Python/C++). Treat it as a map, not a contract.
 - Expect a research-heavy bar: their public postings ask for a track record at KDD, ICML, NeurIPS, ICLR, or ACL, and name pre-training, alignment, instruction tuning, RLHF, and evaluation as the actual work.
-- The technical centre of gravity is the **GLM lineage**: the autoregressive blank-infilling objective, the GLM-4.5 / GLM-5 MoE architecture, hybrid thinking / non-thinking reasoning, and their **ARC focus** (agentic, reasoning, coding). Know how their models actually work, not just the API surface.
+- The technical centre of gravity is the **GLM lineage**: the autoregressive blank-infilling objective, the GLM-4.5 and GLM-5 series MoE architectures (GLM-5.3 and GLM-5.3-Flash are the current open-weight releases as of October 2026), sparse attention for long context, hybrid thinking / non-thinking reasoning with selectable effort levels, and their **ARC focus** (agentic, reasoning, coding). Know how their models actually work, not just the API surface.
 - **Agents are a first-class product line**, not a side project: AutoGLM (phone GUI agent) and CogAgent (vision-language GUI agent) mean long-horizon tool use, GUI grounding, and agentic RL are fair game.
 - Chinese big-tech and startup loops commonly include a written/online assessment (笔试) and several technical rounds; be ready to reason bilingually about tokenization, data, and evaluation for Chinese and English.
 
 ## Company context
 
-Zhipu AI (智谱, internationally branded **Z.ai**) is a Beijing LLM company spun out of the Knowledge Engineering Group at Tsinghua University in 2019, founded by professors Tang Jie and Li Juanzi with Zhang Peng as CEO. It is one of China's leading foundation-model labs, known publicly for the **GLM family**: the original General Language Model objective, the open bilingual GLM-130B, ChatGLM, and the GLM-4 / GLM-4.5 / GLM-5 series, plus agent products (AutoGLM, CogAgent) and multimodal models (GLM-4V, CogVLM, CogVideoX). Several flagship models ship as open weights, so an "AI engineer" here sits close to real training and post-training runs: pre-training data and objectives, RLHF and reinforcement learning with verifiable rewards, agentic RL infrastructure, inference efficiency, and evaluation. Teams are academically minded (heavy Tsinghua ties) but ship product at scale. Note the geopolitical context: Zhipu was added to the US Entity List in January 2025, and its recent models are reported to train on domestic (Huawei Ascend) hardware.
+Zhipu AI (智谱, internationally branded **Z.ai**) is a Beijing LLM company spun out of the Knowledge Engineering Group at Tsinghua University in 2019, founded by professors Tang Jie and Li Juanzi with Zhang Peng as CEO. It is one of China's leading foundation-model labs, known publicly for the **GLM family**: the original General Language Model objective, the open bilingual GLM-130B, ChatGLM, and the GLM-4 / GLM-4.5 / GLM-5 series (GLM-5 in February 2026, followed by GLM-5.1, 5.2 and 5.3), plus agent products (AutoGLM, CogAgent) and multimodal models (GLM-4V, CogVLM, CogVideoX). Several flagship models ship as open weights, so an "AI engineer" here sits close to real training and post-training runs: pre-training data and objectives, RLHF and reinforcement learning with verifiable rewards, agentic RL infrastructure, inference efficiency, and evaluation. Teams are academically minded (heavy Tsinghua ties) but ship product at scale. Zhipu listed on the Hong Kong stock exchange in early 2026. Note the geopolitical context: Zhipu was added to the US Entity List in January 2025, its recent models are reported to train on domestic (Huawei Ascend) hardware, and the GLM-5 series ships with Ascend deployment support.
 
 ## Roles & titles they hire
 
@@ -21,7 +21,7 @@ From publicly posted Zhipu AI job descriptions and category norms (labelled wher
 - **NLP Researcher** - pre-training, alignment, instruction tuning, RLHF, and evaluation of large language models. Public posting asks for a PhD, or an MS with 2+ years of research experience, strong Python/C++/Git, PyTorch or TensorFlow, and a publication record at KDD/ICML/NeurIPS/ICLR/ACL.
 - **Multi-Modality Researcher** - vision-language and generation work (the CogVLM / CogAgent / CogVideoX lineage); at least one CV or NLP paper expected.
 - **Data Engineer / Data Scientist** - pre-training and post-training data pipelines, curation, and quality; strong engineering, bachelor's-level entry.
-- **Research / ML Engineer, Systems (inferred)** - distributed training, RL infrastructure (their slime framework), serving and inference optimization; typical for a lab shipping 100B+ MoE models.
+- **Research / ML Engineer, Systems (inferred)** - distributed training, RL infrastructure (their slime framework), serving and inference optimisation; typical for a lab shipping 700B-class open MoE models.
 - **Applied / Product and Agent Engineering (inferred)** - building on GLM APIs and the AutoGLM agent stack, plus overseas growth roles (they have reportedly been hiring to boost overseas sales out of Hong Kong and Malaysia).
 
 Apply routes are usually the official site and email (public postings list ai.hr@zhipuai.cn). Titles and Chinese-language equivalents (算法, 大模型, 多模态) vary by team.
@@ -43,12 +43,12 @@ Timeline and the exact number of rounds are not publicly documented; assume it v
 
 ## What they emphasise
 
-- **GLM-lineage fluency.** From the autoregressive blank-infilling objective through the GLM-4.5 MoE and hybrid reasoning design, they build their own architecture family. Being able to explain *why* GLM is shaped the way it is signals you have read past the model card.
-- **Agentic, Reasoning, Coding (ARC).** GLM-4.5 is explicitly framed around ARC, and GLM-5 pushes agentic engineering. Expect questions on long-horizon agents, tool use, and coding-model evaluation (SWE-bench, TAU-bench style).
+- **GLM-lineage fluency.** From the autoregressive blank-infilling objective through the GLM-4.5 MoE and hybrid reasoning design to the GLM-5 series' sparse attention and 1M-token context, they build their own architecture family. Being able to explain *why* GLM is shaped the way it is signals you have read past the model card.
+- **Agentic, Reasoning, Coding (ARC).** GLM-4.5 is explicitly framed around ARC, and the GLM-5 series pushes long-horizon agentic engineering (GLM-5.1 is pitched as sustaining work over hundreds of rounds and thousands of tool calls). Expect questions on long-horizon agents, tool use, and coding-model evaluation (SWE-bench Pro, Terminal-Bench, TAU-bench style).
 - **Reinforcement learning at scale.** Their post-training stack (expert training then unified training, plus the open-source slime RL framework with colocated and disaggregated modes) means RLHF, RLVR, and agentic RL are core, not trivia.
 - **Bilingual by design.** GLM has been Chinese/English from GLM-130B onward. Tokenization, data balance, and evaluation across both languages are real concerns here.
 - **Multimodal and GUI grounding.** CogVLM, CogAgent, and AutoGLM mean vision-language grounding and screen-operating agents are a genuine product line, not a research curiosity.
-- **Efficiency and open weights.** Shipping open MoE models makes inference economics (active vs total parameters, MTP, quantization, serving) a shared obsession across the org.
+- **Efficiency and open weights.** Shipping open MoE models makes inference economics (active vs total parameters, sparse and linear attention, MTP, quantization, serving) a shared obsession across the org.
 
 ## Representative questions
 
@@ -209,7 +209,7 @@ Standard language-model training predicts one next token per position. **Multi-T
 
 The bigger practical payoff is at **inference**, where MTP feeds naturally into **speculative decoding**. Autoregressive decode is memory-bandwidth-bound: each token requires a full forward pass reading all the weights, so latency is dominated by that per-step cost, not by the arithmetic. Speculative decoding breaks the one-token-per-pass barrier by cheaply *proposing* several future tokens and then verifying them in a single forward pass of the main model; any prefix the main model agrees with is accepted at once. An MTP head is a built-in, well-aligned proposer - it was trained jointly with the model to predict those next tokens, so its guesses are accepted more often than a generic tiny draft model, giving a speed-up with no change to the output distribution (verification guarantees the same tokens the base model would have produced).
 
-The tradeoffs: MTP adds parameters and training complexity, the acceptance rate (and thus the speed-up) depends on how predictable the continuation is, and you carry the extra head's compute per step. Some deployments train with MTP for the quality benefit and can drop the extra heads at serving time if they do not use speculative decoding. The interview signal is connecting a training-time objective to a concrete decode-latency win, and knowing that speculative decoding is lossless.
+The tradeoffs: MTP adds parameters and training complexity, the acceptance rate (and thus the speed-up) depends on how predictable the continuation is, and you carry the extra head's compute per step. Some deployments train with MTP for the quality benefit and can drop the extra heads at serving time if they do not use speculative decoding. The head stays an optimisation target: Z.ai reports that reworking GLM-5.2's MTP layer raised speculative acceptance length by up to 20%. The interview signal is connecting a training-time objective to a concrete decode-latency win, and knowing that speculative decoding is lossless.
 
 **Follow-ups:** Why does speculative decoding not change the output distribution? When does MTP give little speed-up (low acceptance)?
 
@@ -237,7 +237,7 @@ Start with what each measures. **SWE-bench Verified** gives the model a real Git
 
 The traps to defend against: (1) **Contamination.** These repos and issues may be in pre-training data; a high score can reflect memorisation. Check dates, hold out fresh issues, and inspect whether the model reproduces the exact human patch versus solving it independently. (2) **Harness leakage.** Agentic scores depend heavily on scaffolding - retries, tools, context management, number of allowed steps. A "model" comparison that changes the harness is not a fair comparison; fix the harness or report it. (3) **Flaky tests and partial credit.** Some tests are non-deterministic; a pass can be luck. Run multiple seeds and report variance, not a single number. (4) **Reward/measure mismatch.** Passing hidden tests is not the same as a good patch (it may break unrelated behaviour); for a stronger read, review a sample of accepted patches. (5) **Pass@k inflation.** pass@1 and pass@8 tell different stories; state which and why.
 
-Beyond the public sets, build an internal eval on your own tasks and languages, track per-step tool-call accuracy alongside end-to-end success, and version the eval so a model upgrade can be compared apples-to-apples. The signal is scepticism: you treat a leaderboard number as a hypothesis, not a result.
+Note the drift in what labs report: Z.ai's GLM-5.1 and 5.2 releases lead with SWE-bench Pro and Terminal-Bench rather than SWE-bench Verified. Harder, newer sets are less saturated and less likely to sit in pre-training data, but every trap above still applies to them. Beyond the public sets, build an internal eval on your own tasks and languages, track per-step tool-call accuracy alongside end-to-end success, and version the eval so a model upgrade can be compared apples-to-apples. The signal is scepticism: you treat a leaderboard number as a hypothesis, not a result.
 
 **Follow-ups:** How would you detect contamination concretely? Why can two labs report very different SWE-bench numbers for the same open weights?
 
@@ -261,6 +261,24 @@ Treat it as a real system, not a demo. **Requirements first:** latency tolerance
 
 </details>
 
+### 13. GLM-5 adopted DeepSeek Sparse Attention, GLM-5.2 shares the sparse-attention indexer across layers to hold a 1M-token context, and GLM-5.3-Flash moves to hybrid sparse and linear attention. Explain how DSA works and what each of those steps buys at long context.
+
+<details><summary><b>Answer</b></summary>
+
+Each step attacks a different term in the long-context bill, so separate the terms first: attention compute, memory bandwidth per decode step, and KV-cache capacity.
+
+**DSA.** Dense attention costs O(L^2) compute over a sequence of length L, and every decode step reads the whole KV cache. DeepSeek Sparse Attention adds a lightweight indexer: a few small, low-precision heads score each previous token against the current query, a top-k selector keeps a fixed budget of positions (2,048 in DeepSeek's V3.2 release), and the main attention runs only over those, so core attention drops to O(Lk). The indexer is still quadratic but cheap per pair. Training warms the indexer up first, with the main model frozen and still dense while the indexer learns to match its attention distribution through a KL objective, then switches the whole model to sparse training. What it does not fix: you still store the full KV cache, because any token can be selected later. DSA saves compute and bandwidth, not capacity.
+
+**Indexer sharing.** At 1M tokens the indexer's quadratic term starts to dominate. Z.ai's IndexShare reuses one indexer across every four sparse-attention layers in GLM-5.2 and reports a 2.9x cut in per-token FLOPs at 1M context. The bet is that neighbouring layers want largely the same tokens; the risk is a layer that needed something different can no longer reach it.
+
+**Hybrid sparse plus linear.** Linear-attention layers carry a fixed-size recurrent state, so their memory and per-token cost do not grow with context, which attacks the capacity term DSA leaves alone. Their weakness is exact recall: a compressed state loses precise strings and positions. Interleaving sparse layers restores retrieval while most layers run at constant cost.
+
+**Evaluation.** Perplexity hides these failures. Use retrieval and multi-hop tests at increasing depth, long-horizon agent tasks where early tool output matters much later, and serving metrics (throughput and memory per sequence at 128k, 512k and 1M).
+
+**Follow-ups:** How would you choose the top-k budget, and what symptom tells you it is too small? Where would you place the sparse layers in a hybrid stack, and how would you test that choice?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
@@ -274,8 +292,8 @@ Priority order for this repo's topics:
 
 Company-specific moves:
 
-- **Read the GLM technical reports.** Start with the original GLM paper (autoregressive blank infilling) and the GLM-130B report for the bilingual roots, then the GLM-4.5 (ARC) technical report for the current MoE, hybrid-reasoning, and RL recipe. Being fluent in expert-then-unified training and slime's colocated/disaggregated modes covers a lot of ground.
-- **Run an open GLM model.** GLM-4.5 / GLM-4.5-Air weights are public; serve one, try thinking vs non-thinking mode, and speak about active-vs-total-parameter serving from experience.
+- **Read the GLM technical reports.** Start with the original GLM paper (autoregressive blank infilling) and the GLM-130B report for the bilingual roots, then the GLM-4.5 (ARC) technical report for the MoE, hybrid-reasoning, and RL recipe, and the GLM-5 report ("from Vibe Coding to Agentic Engineering") for DSA sparse attention, the 744B-total / 40B-active scale-up, and asynchronous RL. Being fluent in expert-then-unified training and slime's colocated/disaggregated modes covers a lot of ground.
+- **Run an open GLM model.** GLM-4.5-Air and the GLM-5 series (through GLM-5.3 and the 320B-total / 18B-active GLM-5.3-Flash) are public; serve the smallest one you can, try the reasoning-effort levels, and speak about active-vs-total-parameter serving from experience.
 - **Use the agent products.** Try AutoGLM and read the CogAgent write-up so you can talk about GUI grounding, action spaces, and long-horizon recovery concretely.
 - **Prepare bilingually.** Be ready to reason about Chinese/English tokenization, data mixing, and per-language evaluation - it is a genuine differentiator here.
 - **Have a "why Zhipu" answer** grounded in their open-weights strategy, ARC focus, and Tsinghua research culture, plus a crisp deep-dive on your own strongest project.
@@ -286,6 +304,8 @@ Company-specific moves:
 - [GLM: General Language Model Pretraining with Autoregressive Blank Infilling (arXiv 2103.10360)](https://arxiv.org/abs/2103.10360) - the foundational objective and 2D positional encoding
 - [GLM-130B: An Open Bilingual Pre-Trained Model (Tsinghua KEG)](https://keg.cs.tsinghua.edu.cn/glm-130b/posts/glm-130b/) - bilingual pre-training roots, scale, and training setup
 - [GLM-4.5 GitHub (zai-org)](https://github.com/zai-org/GLM-4.5) - open-weight release, thinking/non-thinking modes, MTP, license
+- [GLM-5: from Vibe Coding to Agentic Engineering (arXiv 2602.15763)](https://arxiv.org/abs/2602.15763) - 744B / 40B active, 28.5T tokens, DSA, asynchronous RL infrastructure
+- [GLM-5 GitHub (zai-org)](https://github.com/zai-org/GLM-5) - GLM-5 through GLM-5.3 and GLM-5.3-Flash: IndexShare and 1M context (5.2), hybrid sparse and linear attention (5.3-Flash), reasoning-effort levels, MTP acceptance gains, Ascend support (consulted October 2026)
 - [CogAgent: A Visual Language Model for GUI Agents (CVPR 2024)](https://openaccess.thecvf.com/content/CVPR2024/papers/Hong_CogAgent_A_Visual_Language_Model_for_GUI_Agents_CVPR_2024_paper.pdf) - GUI grounding and agent design
 - [CogAgent GitHub (zai-org)](https://github.com/zai-org/CogAgent) - open GUI-agent model based on GLM-4V-9B
 - [Zhipu AI NLP Researcher posting (ISWC 2023)](https://iswc2023.semanticweb.org/job-posting/zhipu-ai-nlp-researcher/) - real role requirements (pre-training, alignment, RLHF, evaluation; publication and coding bar)

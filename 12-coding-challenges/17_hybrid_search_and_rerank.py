@@ -2,8 +2,9 @@
 
 PROBLEM
 -------
-Dense retrieval misses exact identifiers. Lexical retrieval misses paraphrases.
-Hybrid search runs both and fuses the results. Implement the three pieces.
+Dense retrieval tends to miss exact identifiers (error codes, SKUs, function
+names). Lexical retrieval misses paraphrases. Hybrid search runs both and
+fuses the results. Implement the three pieces.
 
 1. bm25_scores(query_tokens, corpus_tokens, k1=1.5, b=0.75) -> np.ndarray
    Okapi BM25 over pre-tokenized documents, one score per document:
@@ -40,7 +41,10 @@ A strong solution demonstrates:
 - That RRF fuses ranks, not scores: a BM25 score of 3.0 and a cosine of 0.4 are
   not comparable, and any weighted sum re-scores the corpus the moment either
   scorer is recalibrated. k damps each list's head, so a small k lets one
-  rank-1 vote dominate while k=60 rewards consensus.
+  rank-1 vote dominate while k=60 (the value from Cormack et al., 2009)
+  rewards consensus. RRF is the zero-tuning default, not the ceiling: with
+  labelled queries, a tuned convex combination of normalised scores can beat
+  it, at the cost of re-tuning whenever a scorer changes.
 - That MMR is greedy, trades relevance against redundancy, and collapses to
   plain top-k at lambda_=1.0, which is the cheapest way to test it.
 Common mistakes: idf that can go negative; forgetting avgdl so long documents
@@ -48,7 +52,10 @@ win; recomputing document frequency per document instead of once per term; RRF
 summing similarities instead of reciprocal ranks; MMR measuring redundancy
 against the mean of the selected set rather than the max, which lets a cluster
 in by attrition. Follow-ups: weighted RRF when one retriever is stronger; a
-cross-encoder second stage over the fused top-50; per-field BM25 weights.
+cross-encoder second stage over the fused top-50, and its latency budget;
+per-field BM25 weights (BM25F); learned sparse retrieval such as SPLADE as the
+lexical leg; whether MMR runs before or after the reranker, and which
+relevance score it should then use.
 """
 
 import math

@@ -1,6 +1,6 @@
 # 🤖 Figure AI - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,11 +8,12 @@
 - One publicly reported detail worth knowing: a first technical round described as roughly 30 minutes with an engineer, **no coding**, conceptual questions on behaviour cloning and reinforcement learning (reported, varies). Do not assume a LeetCode gate; assume a "can you actually reason about embodied learning" gate.
 - The centre of gravity is the **Helix** stack: a vision-language-action model split into a slow semantic layer and a fast reactive controller, running entirely onboard the robot. If you cannot explain why that split exists, you will not get far.
 - Expect probing on **data**, not just models. Figure's published results turn on teleoperation data volume, curation quality, and auto-labelling far more than on architecture novelty. Data collection is the bottleneck in this field and they know it.
+- The 2026 shift is **human video as pretraining data**. In August 2026 Figure launched **Index**, a consumer app through which paid contributors record themselves doing everyday tasks, and in September it reported that **Helix 2.5**, pretrained from scratch on Index, reached 56 percent zero-shot success across 30 unseen homes against 9 percent for a scratch-trained baseline. Expect questions on the embodiment gap and on how you would judge a claim like that. The board also now lists Helix data-infrastructure, backend and Android engineering roles (reported, varies).
 - Expect **physical-consequence thinking**: latency budgets in milliseconds, sim-to-real transfer, evaluation where every trial costs robot time, and safety around humans. Roles are onsite in San Jose, reportedly five days a week, because you cannot debug a humanoid over Slack.
 
 ## Company context
 
-Figure builds general-purpose humanoid robots (the Figure 03 platform) and the AI system that drives them (Helix). Helix is a vision-language-action model: cameras, tactile sensors, proprioception and a natural-language goal go in, continuous joint commands come out, with a single set of weights covering many behaviours rather than a policy per task. They manufacture their own robots at a facility called BotQ and deploy them into logistics and industrial customers, which means every fielded robot is also a data-collection unit. Engineers want in because this is one of the few places where a frontier-scale learned model closes the loop on physical hardware at commercial scale, and because the hard problems (data, generalisation, evaluation) are genuinely unsolved. "AI engineer" here means modelling, robot learning, RL, perception, pretraining, training infrastructure, and whole-body control - not LLM API plumbing.
+Figure builds general-purpose humanoid robots (the Figure 03 platform) and the AI system that drives them (Helix). Helix is a vision-language-action model: cameras, tactile sensors, proprioception and a natural-language goal go in, continuous joint commands come out, with a single set of weights covering many behaviours rather than a policy per task. They manufacture their own robots at a facility called BotQ and deploy them into logistics and industrial customers, which means every fielded robot is also a data-collection unit. In 2026 they added a second data engine, Index, a crowd-sourced human-video dataset collected through a contributor app, and signed a compute partnership with Nscale for up to 100,000 GPUs. Engineers want in because this is one of the few places where a frontier-scale learned model closes the loop on physical hardware at commercial scale, and because the hard problems (data, generalisation, evaluation) are genuinely unsolved. "AI engineer" here means modelling, robot learning, RL, perception, pretraining, training infrastructure, and whole-body control - not LLM API plumbing.
 
 ## Roles & titles they hire
 
@@ -31,6 +32,8 @@ From Figure's public Greenhouse board (August 2026), the AI group is organised a
 - **Robot Manipulation Engineer - Helix Team**
 - Controls: **Reinforcement Learning Engineer - Whole Body Control**, **AI Training Infrastructure Engineer - Humanoid Whole Body Control**, **State Estimation Engineer - Data Collection Systems**
 - Data side: **Helix Data Creator** (teleoperation operators) and **AI Data Operations Manager**
+
+A recheck of the board in October 2026 (roughly 98 open roles) also showed **Helix AI Engineer, Data Infrastructure**, **Helix AI Engineer, Backend**, **Helix AI Engineer, Android** and a **Humanoid Robot Pilot** role, while some titles above were no longer listed. Postings rotate, so treat the list as a snapshot.
 
 Most AI roles are San Jose, CA, onsite. The postings name PyTorch, behaviour cloning, reinforcement learning, imitation learning, offline RL, distributed training, and simulation and digital-twin tooling. Several list prior work at a frontier lab (OpenAI, DeepMind, Anthropic, xAI are named in postings) as a bonus, which tells you the calibre bar and the fact that they hire pure ML people without robotics backgrounds. Figure AI is listed on [levels.fyi](https://www.levels.fyi/jobs/company/figure-ai) if you want to track postings there.
 
@@ -76,7 +79,7 @@ Three concrete consequences:
 
 **Error dynamics.** An LLM's mistake produces a wrong answer. A VLA's mistake changes the world, and the model's next input is the world it just changed. Errors compound through the state distribution rather than through a context window.
 
-The overlap is real: a VLA typically starts from a pretrained vision-language model so that "pick up the red mug" transfers to a mug it has never seen. But the pretrained model contributes semantics, not control.
+The overlap is real: a VLA typically starts from a pretrained vision-language model so that "pick up the red mug" transfers to a mug it has never seen. But the pretrained model contributes semantics, not control. Figure's Helix 2.5 is a notable exception: it reports pretraining from random initialisation on its own human-video dataset instead of starting from an internet VLM.
 
 **Follow-ups:** Where do discrete tool calls still make sense on a humanoid? What would you have to give up to make a VLA fully autoregressive over single actions instead of chunks?
 
@@ -88,7 +91,7 @@ The overlap is real: a VLA typically starts from a pretrained vision-language mo
 
 Because the two jobs have incompatible requirements. Semantic understanding ("that is a dish rack, the mug goes bowl-down") wants a big internet-pretrained model and tolerates latency. Reactive control (recover from a slipping grasp, keep the torso balanced) wants milliseconds and tolerates being small and dumb about the world.
 
-Figure's published numbers make this concrete: System 2 is a 7B open-weight VLM running at roughly 7 to 9 Hz, distilling the scene and instruction into a latent vector. System 1 is an 80M cross-attention encoder-decoder transformer that consumes that latent plus full-rate sensing and emits control at 200 Hz. Helix 02 adds System 0, a 10M-parameter learned whole-body controller emitting joint-level actuator commands at 1 kHz.
+Figure's published numbers make this concrete: System 2 is a 7B open-weight VLM running at roughly 7 to 9 Hz, distilling the scene and instruction into a latent vector. System 1 is an 80M cross-attention encoder-decoder transformer that consumes that latent plus full-rate sensing and emits control at 200 Hz. Helix 02 adds System 0, a 10M-parameter learned whole-body controller emitting joint-level actuator commands at 1 kHz. These are the published Helix and Helix 02 figures. The Helix 2.5 post does not restate the architecture, so do not quote them as current without checking.
 
 Run one network end to end and you pick a single rate. Run it at 200 Hz and the semantic model must be tiny, so generalisation to unseen objects collapses. Run it at 8 Hz and the robot cannot react to contact events, which is where manipulation actually lives.
 
@@ -205,7 +208,7 @@ A pipeline that holds up:
 4. **Version and index.** Datasets are the artefact you are actually shipping. Content-hash episodes, track which model saw which slice, and make ablations reproducible.
 5. **Close the loop.** Evaluate on robots, find the failure modes, direct the next collection session at those specific gaps. The queue of what to collect next should be driven by evaluation output, not by a spreadsheet written a month ago.
 
-The strategic answer is that fielded robots doing customer work generate operational data continuously, which is why deployment and data strategy are the same strategy.
+The strategic answer is that fielded robots doing customer work generate operational data continuously, which is why deployment and data strategy are the same strategy. Figure's 2026 move adds a second source: Index, crowd-sourced human video that is cheap per hour but carries no robot actions, so robot data plausibly shifts from being the whole dataset to being the adaptation layer on top of a video-pretrained model (see Q13).
 
 **Worth sketching.** The pipeline is a cycle, and evaluation is what steers collection.
 
@@ -394,6 +397,27 @@ Imitation learning gets you to competence fast because a demonstration contains 
 
 </details>
 
+### 13. Figure reports that pretraining on human video lifted zero-shot success in unseen homes from 9 to 56 percent. How do you get robot-useful pretraining from video that contains no robot actions, and how would you stress-test that claim?
+
+<details><summary><b>Answer</b></summary>
+
+Human video gives you scale and diversity that teleoperation never will. Index reports hundreds of unique tasks and more than a hundred environments per thousand hours. What it does not give you is actions in the robot's own joint space. So pretraining learns what to do and what the world looks like, and a smaller amount of robot data grounds how this body does it. Figure's post does not say which mechanism it uses, so present the options as options.
+
+**Ways to extract signal from action-free video:**
+
+- **Predictive representation learning.** Train the model to predict future frames or future embeddings. That forces it to encode object permanence, contact and task progress, which transfers even when the body does not.
+- **Latent actions.** Infer a discrete or continuous "what changed between frames" code, pretrain the policy to predict it, then learn a small mapping from latent actions to real joint commands on robot data.
+- **Retargeted hand and body pose.** Estimate 3D human hand and wrist trajectories and map them onto the robot. A humanoid with dexterous hands makes this far more plausible than it is for a parallel gripper.
+- **Language structure.** Index annotates clips with hierarchical captions, which teaches task decomposition such as "tidy room" into "pick toy" and "place in bin".
+
+**Stress-testing the 9 to 56 percent result.** First, the baseline: scratch-trained is the weakest comparison, so ask how it compares with VLM initialisation. Figure's answer is that Helix 2.5 matched Helix 02 with half the adaptation data. Second, statistics: 30 homes and three tasks is a modest sample, so ask for per-task and per-home spread and confidence intervals, though a gap this size is unlikely to be noise. Third, leakage: verify the evaluation homes and objects were truly withheld, which the post says they were. Fourth, the success definition: all-or-nothing completion criteria fixed in advance is the strict, credible choice.
+
+Crowd-sourced, paid data also brings its own risks: fraud, staged clips and task-mix skew. That is why Figure's pipeline lists fraud review, deduplication and rebalancing alongside filtering and annotation.
+
+**Follow-ups:** Which embodiment differences between a human and the humanoid would most limit transfer, and how would you measure them? How would you decide the ratio of video pretraining compute to robot adaptation data for the next model?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -411,7 +435,7 @@ Imitation learning gets you to competence fast because a demonstration contains 
 
 **Company-specific moves:**
 
-1. Read Figure's Helix write-ups end to end: the original Helix technical post, Helix 02, and the logistics posts. Know the numbers - the 7B semantic layer at single-digit Hz, the 80M policy at 200 Hz, the 10M whole-body controller at 1 kHz, the data-scaling ablation, the curated-versus-larger-dataset result. Interview vocabulary comes from this material.
+1. Read Figure's Helix write-ups end to end: the original Helix technical post, Helix 02, the logistics posts, and the 2026 Index and Helix 2.5 posts on human-video pretraining. Know the numbers - the 7B semantic layer at single-digit Hz, the 80M policy at 200 Hz, the 10M whole-body controller at 1 kHz, the data-scaling ablation, the curated-versus-larger-dataset result. Interview vocabulary comes from this material.
 2. Prepare one project deep-dive in real depth, ideally something you deployed on physical hardware. What you measured, how many trials, what the failure modes were, what you changed. If you have no hardware experience, be explicit about it and show you understand what would break.
 3. Get hands-on with an open robot-learning stack before the interview. Train a behaviour-cloning policy on a public manipulation dataset, or run a locomotion policy in a physics simulator with domain randomisation. Even a small amount of first-hand experience changes how you answer Q5 and Q8.
 4. Read the current open-source VLA literature so you can compare approaches rather than only describe Helix. Being able to contrast architecture choices, action-representation choices and data strategies across published models is exactly the "advance learning approaches" signal the Modeling posting asks for.
@@ -424,9 +448,12 @@ Imitation learning gets you to competence fast because a demonstration contains 
 - [Figure - Helix Accelerating Real-World Logistics](https://www.figure.ai/news/helix-logistics) (fetched August 2026; stereo vision, learned visual proprioception, sport mode, curation result)
 - [Figure - Scaling Helix: a New State of the Art in Humanoid Logistics](https://www.figure.ai/news/scaling-helix-logistics) (fetched August 2026; data-scaling ablation, seconds-per-package and barcode-success metrics)
 - [Figure - Helix 02 Living Room Tidy](https://www.figure.ai/news/helix-02-living-room-tidy) (fetched August 2026)
+- [Figure - Introducing Index](https://www.figure.ai/news/introducing-index) (fetched October 2026; contributor app, per-1,000-hour task and environment diversity, filtering, fraud review, deduplication, rebalancing and captioning pipeline)
+- [Figure - Helix 2.5: Zero-Shot 30-Home Generalization](https://www.figure.ai/news/helix-2-5-zero-shot-30-home-generalization) (fetched October 2026; pretraining from random initialisation on Index, 56 percent vs 9 percent zero-shot success, half the adaptation data of Helix 02)
+- [Figure - Figure and Nscale strategic partnership](https://www.figure.ai/news/figure-and-nscale-sign-strategic-partnership) (September 2026; compute context)
 - [Figure - News index](https://www.figure.ai/news) and [Helix overview](https://www.figure.ai/helix)
 - [Figure - Careers](https://www.figure.ai/careers) (fetched August 2026; no interview-process detail published)
-- [Figure - Greenhouse job board](https://job-boards.greenhouse.io/figureai) (fetched August 2026; role titles and team structure above)
+- [Figure - Greenhouse job board](https://job-boards.greenhouse.io/figureai) (fetched August 2026 and rechecked October 2026; role titles and team structure above)
 - [Helix AI Engineer, Robot Learning posting](https://job-boards.greenhouse.io/figureai/jobs/4649851006), [Helix AI Engineer, Modeling posting](https://job-boards.greenhouse.io/figureai/jobs/4671712006), [Helix AI Engineer, Reinforcement Learning posting](https://job-boards.greenhouse.io/figureai/jobs/4671707006) (fetched August 2026; requirements quoted above)
 - [Glassdoor - Figure AI interview questions](https://www.glassdoor.com/Interview/Figure-AI-Interview-Questions-E9642582.htm) (blocks automated fetch; stage counts, timeline, difficulty rating and the no-coding first-round report reached via search summaries and marked "reported, varies")
 - [levels.fyi - Figure AI](https://www.levels.fyi/jobs/company/figure-ai)

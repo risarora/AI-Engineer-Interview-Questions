@@ -1,6 +1,6 @@
 # Inference, Serving & Production LLM Systems - Interview Questions
 
-51 questions: 13 basic, 20 intermediate, 18 advanced.
+56 questions: 14 basic, 22 intermediate, 20 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -115,7 +115,7 @@ data: {"delta": {"text": " answer"}}
 data: [DONE]
 ```
 
-Each event is a `data:` line terminated by a blank line; clients parse events as they arrive. OpenAI-style APIs stream token deltas and end with a `[DONE]` sentinel; Anthropic streams typed events (`message_start`, `content_block_delta`, `message_stop`). WebSockets are an alternative when you need bidirectional traffic (e.g., voice), but SSE is simpler and proxy-friendly for one-way token streams.
+Each event is a `data:` line terminated by a blank line; clients parse events as they arrive. OpenAI's Chat Completions streams token deltas and ends with a `[DONE]` sentinel; Anthropic's Messages API and OpenAI's newer Responses API stream named, typed events instead (for example `message_start`, `content_block_delta`, `message_stop` on Anthropic, `response.output_text.delta` on OpenAI). WebSockets are an alternative when you need bidirectional traffic (e.g., voice), but SSE is simpler and proxy-friendly for one-way token streams.
 
 Production gotchas worth mentioning: intermediate proxies/load balancers buffering responses (must disable buffering, watch idle timeouts); handling reconnects (most LLM APIs can't resume a stream - a retry restarts generation, so the client must handle replacement); heartbeats/keep-alives during long tool-use pauses; and the fact that usage/cost accounting typically arrives in the final event, so billing code can't assume it exists if the stream is aborted. Tool calls and JSON arrive as partial fragments and need accumulation before they're parseable.
 
@@ -156,7 +156,7 @@ Small-end intuition to have ready: 8B FP16 ≈ 16 GB (fits a 24 GB consumer card
 
 <details><summary><b>Answer</b></summary>
 
-Because they cost the provider more to produce. Input tokens are processed in parallel during prefill - one compute-efficient pass amortised across the whole prompt. Each output token requires its own full sequential forward pass through the model, monopolising memory bandwidth, and long generations occupy KV-cache memory (and a batch slot) for their entire duration. Providers price accordingly: output tokens typically cost ~3-5× input tokens across OpenAI, Anthropic, and Google price lists. And on reasoning models, hidden chain-of-thought/reasoning tokens **bill as output tokens** - a "one-sentence answer" can carry thousands of billed reasoning tokens behind it.
+Because they cost the provider more to produce. Input tokens are processed in parallel during prefill - one compute-efficient pass amortised across the whole prompt. Each output token requires its own full sequential forward pass through the model, monopolising memory bandwidth, and long generations occupy KV-cache memory (and a batch slot) for their entire duration. Providers price accordingly: output tokens typically cost ~4-8× input tokens across OpenAI, Anthropic, and Google price lists (check the current list for your model, since ratios shift between generations). And on reasoning models, hidden chain-of-thought/reasoning tokens **bill as output tokens** - a "one-sentence answer" can carry thousands of billed reasoning tokens behind it.
 
 Design implications:
 
@@ -180,7 +180,7 @@ Quantization stores numbers in fewer bits (FP16 → INT8/FP8/INT4) to cut memory
 
 **Weights-only (e.g., W4A16)**: weights are stored in 4 or 8 bits, dequantized on the fly, and the math still happens in FP16. Since batch-1 decode is bound by *streaming weight bytes from HBM*, shrinking weights 4× directly raises the decode-speed ceiling up to ~4× and cuts memory ~4× (freeing room for KV cache). It does little for prefill or large-batch serving, which are compute-bound. GPTQ and AWQ are the standard 4-bit post-training methods; GGUF k-quants serve the llama.cpp/Ollama ecosystem.
 
-**Weights + activations (e.g., W8A8 INT8 or FP8)**: both operands are low-precision, so matmuls run on INT8/FP8 tensor cores - roughly 2× the FLOPs of FP16. This is what helps *compute-bound* regimes: prefill and high-batch throughput serving. The hard part is activations, which have extreme outlier channels; techniques like SmoothQuant migrate that difficulty into weights. FP8 on Hopper-class GPUs is the current production workhorse; FP4-family formats (NVFP4/MXFP4) arrive with Blackwell-era hardware, and some open-weight models now ship natively in MXFP4.
+**Weights + activations (e.g., W8A8 INT8 or FP8)**: both operands are low-precision, so matmuls run on INT8/FP8 tensor cores - roughly 2× the FLOPs of FP16. This is what helps *compute-bound* regimes: prefill and high-batch throughput serving. The hard part is activations, which have extreme outlier channels; techniques like SmoothQuant migrate that difficulty into weights. FP8 (native from Hopper onward) is the mainstream production workhorse; FP4-family formats (NVFP4/MXFP4) are natively accelerated on Blackwell-class GPUs and increasingly used in production there, and some open-weight models ship natively in MXFP4. FP4 is more quality-sensitive than FP8, so it needs the same task-level evaluation.
 
 Typical quality cost: 8-bit ≈ negligible; well-done 4-bit weights ≈ small but real degradation - often ~1-2% on benchmarks, but occasionally much worse on specific capabilities (math, code, low-resource languages). The professional answer: **always evaluate the quantized model on your own task suite**, not perplexity alone. KV-cache quantization is a separate, composable lever (see the dedicated question).
 
@@ -223,7 +223,7 @@ Prefill work depends only on the tokens processed so far, so if two requests sha
 
 Self-hosted: vLLM does hash-based automatic prefix caching over KV blocks; SGLang's RadixAttention keeps a radix tree of cached prefixes and its scheduler routes matching requests to them. Cache hits cut TTFT dramatically (prefill collapses to the uncached suffix) and free compute.
 
-Provider APIs monetise the same mechanism: **cached input tokens are billed at a steep discount**. Anthropic's is explicit (`cache_control` breakpoints): cache writes cost ~1.25× base input, cache reads ~0.1× - a 90% discount - with a ~5-minute refreshing TTL (longer TTL available). OpenAI's is automatic for prompts past a minimum length (~1024 tokens), with cached input discounted ~50-75% depending on model. Gemini offers explicit context caching with storage-based pricing. For an agent re-sending a 20K-token context 30 times per session, caching is the difference between paying for ~600K input tokens and ~600K mostly-discounted ones - often the single largest line-item saving available with zero quality impact.
+Provider APIs monetise the same mechanism: **cached input tokens are billed at a steep discount**. Anthropic's is explicit (`cache_control` breakpoints): cache writes cost ~1.25× base input, cache reads ~0.1× - a 90% discount - with a ~5-minute refreshing TTL (longer TTL available). OpenAI's is automatic for prompts past a minimum length (~1024 tokens), with the cached-input discount varying by model generation, from ~50% on older models to ~90% on newer ones. Gemini offers both implicit (automatic) caching on recent models and explicit context caching with storage-based pricing. Exact multipliers and TTLs change, so read the current price page rather than memorising them. For an agent re-sending a 20K-token context 30 times per session, caching is the difference between paying for ~600K input tokens and ~600K mostly-discounted ones - often the single largest line-item saving available with zero quality impact.
 
 The engineering discipline it imposes: **stable prefix first, variable content last**. Any changed byte invalidates everything after it - so no timestamps/request IDs early in the system prompt, deterministic tool-definition ordering, and append-only conversation structure. Cache hit rate belongs on your cost dashboard.
 
@@ -288,7 +288,7 @@ The misconception to kill: "greedy means deterministic." Greedy is deterministic
 
 They solve different problems at different layers, and you use them together rather than choosing between them.
 
-**FlashAttention is a kernel.** It is an exact, IO-aware implementation of attention. Instead of materialising the full n x n score matrix in HBM, it tiles Q, K and V into on-chip SRAM and computes the softmax in a streaming pass, keeping a running max and running sum. Memory traffic drops from roughly O(n^2) to roughly O(n), which is what makes long contexts tractable. It is exact, not an approximation: outputs match naive attention up to floating point. It wins most on prefill and long context, where the score matrix is large. Decode has a query length of 1, so there is almost no parallelism along the query axis, which is why decode-oriented variants split along the KV length and combine partial softmaxes afterwards.
+**FlashAttention is a kernel.** It is an exact, IO-aware implementation of attention. Instead of materialising the full n x n score matrix in HBM, it tiles Q, K and V into on-chip SRAM and computes the softmax in a streaming pass, keeping a running max and running sum. Extra memory drops from O(n^2) to O(n), and HBM reads and writes fall by a large constant factor because the score matrix never leaves SRAM (the FLOPs are still quadratic), which is what makes long contexts tractable. It is exact, not an approximation: outputs match naive attention up to floating point. It wins most on prefill and long context, where the score matrix is large. Decode has a query length of 1, so there is almost no parallelism along the query axis, which is why decode-oriented variants split along the KV length and combine partial softmaxes afterwards.
 
 **PagedAttention is memory management.** Store the KV cache in fixed-size blocks (16 tokens is the common default) indexed through a per-sequence block table, so a sequence's KV does not need to be contiguous. That kills the fragmentation you get from pre-allocating max-length buffers, so the same HBM supports a much larger batch, and prefix sharing becomes a block-table pointer instead of a copy. The attention kernel then has to gather KV through the block table.
 
@@ -301,7 +301,7 @@ Red flag phrasing: "we use PagedAttention instead of FlashAttention." Also worth
 ```mermaid
 flowchart TD
     A["Attention for one step"] --> K["Kernel layer: FlashAttention tiles<br/>Q, K, V through SRAM"]
-    K -->|"traffic drops from O(n squared) to O(n)"| R["Exact output, no approximation"]
+    K -->|"extra memory drops from O(n squared) to O(n)"| R["Exact output, no approximation"]
     K --> B["Gathers KV through a block table"]
     B --> M["Memory layer: PagedAttention,<br/>fixed 16-token blocks"]
     M --> POOL["Shared pool: no fragmentation,<br/>prefix sharing by pointer"]
@@ -344,9 +344,34 @@ sequenceDiagram
 
 </details>
 
+### 14. Your production code reads the response text but never checks `finish_reason` (or `stop_reason`). Why is that a bug, and what should you do with each stop reason?
+
+<details><summary><b>Answer</b></summary>
+
+Because a response can end for reasons other than "the model was done", and the text alone will not tell you. Every major API reports why generation stopped: `finish_reason` in OpenAI's Chat Completions, a `status` plus incomplete details in its Responses API, `stop_reason` on Anthropic, `finishReason` on Gemini. Ignoring it means shipping truncated or filtered output as if it were complete.
+
+Each value maps to a distinct action:
+
+- **Natural stop** (`stop`, `end_turn`): the model finished. Validate and use it.
+- **Length** (`length`, `max_tokens`): truncated at the cap. Prose ends mid-sentence. JSON or a tool call is unparseable, and constrained decoding does not save you, because the grammar cannot close the object once the budget is gone. Raise the cap for that feature, ask for a shorter format, or continue the generation, but never parse it as complete. On reasoning models, thinking tokens usually count against the same budget, so a request can hit the cap before writing any visible answer.
+- **Stop sequence** (`stop_sequence`): one of your stop strings fired. Expected if you designed it, a bug if that string can legitimately appear in content.
+- **Tool use** (`tool_calls`, `tool_use`): the model wants a tool run. Agent loops should branch on this field, not on whether the text looks empty.
+- **Safety or refusal** (`content_filter`, `refusal`): the provider blocked the output or the model declined. Show a deliberate UX, do not blindly retry the same input, and log it for review.
+
+Production habits that go with it:
+
+- Log the stop reason on every call and chart the rate of length stops per feature. A jump after a prompt or model change is an early sign of verbosity creep, and it shows up before users complain about cut-off answers.
+- Alert on a rising refusal rate per feature, since it often means a prompt change tripped a policy boundary.
+- In streams, the reason arrives in the final event, so code that aborts early or drops the last event silently loses it.
+- Treat an unknown value as an error. Providers add new ones, and a default branch that assumes success is how a new stop reason ships truncated data.
+
+**Follow-ups:** How would you safely continue a generation that was truncated in the middle of a JSON object? Your length-stop rate doubled after a model upgrade with no prompt change: what happened, and what do you change?
+
+</details>
+
 ## Intermediate
 
-### 14. Why do we obsess over P99 latency rather than the average, and what causes tail latency in LLM serving specifically?
+### 15. Why do we obsess over P99 latency rather than the average, and what causes tail latency in LLM serving specifically?
 
 <details><summary><b>Answer</b></summary>
 
@@ -369,7 +394,7 @@ Measure percentiles per prompt-length bucket and per feature; a global P99 mixes
 
 </details>
 
-### 15. Explain arithmetic intensity and the roofline model as applied to LLM inference. Why does batching improve decode throughput so dramatically?
+### 16. Explain arithmetic intensity and the roofline model as applied to LLM inference. Why does batching improve decode throughput so dramatically?
 
 <details><summary><b>Answer</b></summary>
 
@@ -398,7 +423,7 @@ flowchart LR
 
 </details>
 
-### 16. What problem does PagedAttention solve, and how does it work?
+### 17. What problem does PagedAttention solve, and how does it work?
 
 <details><summary><b>Answer</b></summary>
 
@@ -429,7 +454,7 @@ flowchart LR
 
 </details>
 
-### 17. What is chunked prefill and what scheduling problem does it fix?
+### 18. What is chunked prefill and what scheduling problem does it fix?
 
 <details><summary><b>Answer</b></summary>
 
@@ -459,7 +484,7 @@ flowchart LR
 
 </details>
 
-### 18. Explain speculative decoding. Why is the output provably faithful to the target model, and when does it actually help?
+### 19. Explain speculative decoding. Why is the output provably faithful to the target model, and when does it actually help?
 
 <details><summary><b>Answer</b></summary>
 
@@ -485,7 +510,7 @@ flowchart TD
 
 </details>
 
-### 19. Compare GPTQ, AWQ, GGUF, INT8, and FP8. How do you actually choose a quantization approach for a deployment?
+### 20. Compare GPTQ, AWQ, GGUF, INT8, and FP8. How do you actually choose a quantization approach for a deployment?
 
 <details><summary><b>Answer</b></summary>
 
@@ -495,16 +520,16 @@ They're not interchangeable - they differ in what's quantized, how, and where th
 - **AWQ**: post-training, weights-only 4-bit. Observation: a small fraction of weight channels matter disproportionately, identified by *activation* magnitudes; AWQ rescales those salient channels before quantizing to protect them. No backprop, calibration-light, tends to be robust and fast with good kernels (works well for instruction-tuned models).
 - **GGUF**: not an algorithm - the llama.cpp *file format*, carrying its family of k-quants/i-quants (Q4_K_M, Q5_K_S, ...) with per-block scales. The lingua franca of CPU/Metal/edge inference via llama.cpp and Ollama, with per-layer mixed precision.
 - **INT8 W8A8**: weights *and* activations in INT8 (LLM.int8(), SmoothQuant lineage) - accelerates the matmuls themselves. Activation outliers are the difficulty.
-- **FP8 (E4M3/E5M2)**: Hopper-native W8A8; floating-point structure handles outliers more gracefully than INT8. Near-lossless in practice and the default for high-throughput production serving; also used for KV cache. FP4-family (NVFP4/MXFP4) is the Blackwell-era follow-on - worth naming as "aware of, evaluate carefully."
+- **FP8 (E4M3/E5M2)**: Hopper-native W8A8; floating-point structure handles outliers more gracefully than INT8. Near-lossless in practice and the default for high-throughput production serving; also used for KV cache. FP4-family (NVFP4/MXFP4) is the Blackwell-native follow-on, now in production use on Blackwell fleets, but with a larger and more task-dependent quality cost than FP8, so evaluate it carefully.
 
-Choosing - ask three questions. (1) **Bottleneck**: latency-sensitive/low-batch → weights-only 4-bit (AWQ/GPTQ) attacks the bandwidth bound; high-batch throughput → FP8 W8A8 attacks the compute bound. (2) **Hardware/stack**: H100-class + vLLM/TensorRT-LLM → FP8; consumer GPU → GPTQ/AWQ; CPU/Apple Silicon/edge → GGUF. (3) **Quality bar**: run *your* eval suite on the quantized artifact - perplexity deltas hide task-specific regressions (math, code, multilingual are the usual victims). Many teams land on: FP8 for the serving fleet, INT4 for the memory-constrained tier, GGUF for local/dev.
+Choosing - ask three questions. (1) **Bottleneck**: latency-sensitive/low-batch → weights-only 4-bit (AWQ/GPTQ) attacks the bandwidth bound; high-batch throughput → FP8 W8A8 attacks the compute bound. (2) **Hardware/stack**: H100-class + vLLM/TensorRT-LLM → FP8; Blackwell-class → FP8, or NVFP4 where evals allow; consumer GPU → GPTQ/AWQ; CPU/Apple Silicon/edge → GGUF. (3) **Quality bar**: run *your* eval suite on the quantized artifact - perplexity deltas hide task-specific regressions (math, code, multilingual are the usual victims). Many teams land on: FP8 for the serving fleet, INT4 for the memory-constrained tier, GGUF for local/dev.
 
 **Worth sketching.** Branching on the bottleneck rather than on the format name is the whole point, and the loop back through evals is where seniority shows.
 
 ```mermaid
 flowchart TD
     Q["What binds this deployment?"] -->|"low batch, latency-sensitive"| W["Weights-only 4-bit:<br/>AWQ or GPTQ"]
-    Q -->|"high batch, throughput"| A["W8A8: FP8 on Hopper-class,<br/>INT8 otherwise"]
+    Q -->|"high batch, throughput"| A["W8A8: FP8 on Hopper or newer,<br/>INT8 otherwise"]
     Q -->|"CPU, Apple silicon, edge"| G["GGUF k-quants via llama.cpp"]
     W --> E["Run your own eval suite<br/>on the quantized artifact"]
     A --> E
@@ -516,7 +541,7 @@ flowchart TD
 
 </details>
 
-### 20. What is KV-cache quantization, and when is it the right lever?
+### 21. What is KV-cache quantization, and when is it the right lever?
 
 <details><summary><b>Answer</b></summary>
 
@@ -532,7 +557,7 @@ When to reach for it: (1) KV-bound deployments - high concurrency or long contex
 
 </details>
 
-### 21. Describe the throughput - latency tradeoff curve for an LLM server, and explain goodput.
+### 22. Describe the throughput - latency tradeoff curve for an LLM server, and explain goodput.
 
 <details><summary><b>Answer</b></summary>
 
@@ -546,7 +571,7 @@ Operationally: load-test each config to find the knee, then run at ~60-70% of kn
 
 </details>
 
-### 22. vLLM, SGLang, TensorRT-LLM, TGI, llama.cpp/Ollama - how do you choose a serving stack?
+### 23. vLLM, SGLang, TensorRT-LLM, TGI, llama.cpp/Ollama - how do you choose a serving stack?
 
 <details><summary><b>Answer</b></summary>
 
@@ -554,17 +579,17 @@ Decide on workload shape, hardware, and how much engineering you'll invest - not
 
 - **vLLM**: the default open-source choice. PagedAttention, continuous batching, chunked prefill, prefix caching, speculative decoding, quantization support, tensor/pipeline parallelism, OpenAI-compatible server, broad model coverage (including day-one support for most open releases) and multi-hardware backends. Pick it unless you have a specific reason not to.
 - **SGLang**: strongest when requests share prefixes heavily - agentic workloads, multi-turn chat, few-shot batteries - thanks to RadixAttention (tree-structured automatic prefix cache reuse) and a scheduler that exploits it; also known for very fast constrained/structured generation. Often benchmark-competitive or ahead of vLLM on these patterns.
-- **TensorRT-LLM**: NVIDIA's maximum-performance path - compiled engines, aggressive kernel fusion, first-class FP8/FP4. Best raw numbers on NVIDIA hardware, but you pay in build/tuning complexity, slower model onboarding, and NVIDIA lock-in. Choose when serving cost at scale justifies dedicated inference engineers (often behind Triton or NVIDIA's Dynamo orchestration).
-- **TGI (Text Generation Inference)**: Hugging Face's production server; solid continuous batching and quantization, tight HF Hub integration. Sensible in HF-centric shops, though much of the ecosystem's momentum has consolidated around vLLM/SGLang.
+- **TensorRT-LLM**: NVIDIA's maximum-performance path - heavily tuned kernels, aggressive fusion, first-class FP8/FP4. Since its 1.0 release the PyTorch-based runtime is the default, with the older compiled-engine workflow still available. Best raw numbers on NVIDIA hardware, but you pay in tuning complexity, sometimes slower model onboarding, and NVIDIA lock-in. Choose when serving cost at scale justifies dedicated inference engineers (often behind Triton or NVIDIA's Dynamo orchestration).
+- **TGI (Text Generation Inference)**: Hugging Face's former production server. Hugging Face moved it into maintenance mode in late 2025 and now points users to vLLM and SGLang, so new model architectures will not land there. Treat it as a migration item, not a choice for a new deployment.
 - **llama.cpp / Ollama / MLX**: the edge/local tier. CPU, Apple Silicon (Metal / MLX), consumer GPUs; GGUF quantized models; trivially easy to run. Right for on-device products, privacy-constrained local inference, and dev laptops - not for high-QPS datacenter serving.
 
 Decision drivers to name: hardware (NVIDIA datacenter vs AMD/TPU vs laptop), workload (prefix-heavy agentic → SGLang; general → vLLM; cost-obsessed at scale → TensorRT-LLM), features needed (structured output, multi-LoRA serving, spec decoding), team ops maturity, and community velocity for new model support. Also mention the "buy" option: managed endpoints (Bedrock, Vertex, Fireworks, Together, etc.) when you don't want to run the stack at all.
 
-**Follow-ups:** Your workload is 90% shared-system-prompt agent traffic - which stack and why? What does an "engine build" in TensorRT-LLM buy that a PyTorch-based server can't?
+**Follow-ups:** Your workload is 90% shared-system-prompt agent traffic - which stack and why? What does a vendor-tuned stack like TensorRT-LLM buy over a portable engine, and what does it cost you when you want to add AMD capacity?
 
 </details>
 
-### 23. Explain tensor parallelism vs pipeline parallelism for inference. When do you need each?
+### 24. Explain tensor parallelism vs pipeline parallelism for inference. When do you need each?
 
 <details><summary><b>Answer</b></summary>
 
@@ -590,13 +615,13 @@ flowchart LR
 
 </details>
 
-### 24. Self-host an open-weights model or call a provider API - walk me through the decision.
+### 25. Self-host an open-weights model or call a provider API - walk me through the decision.
 
 <details><summary><b>Answer</b></summary>
 
 Framework with six axes, then the math:
 
-1. **Quality requirements**: if the task needs frontier-model capability, APIs are the only option - open weights trail the frontier. If a 8-70B open model (possibly fine-tuned) clears your eval bar, self-hosting is on the table. Evals decide this, not vibes.
+1. **Quality requirements**: if the task needs the very best frontier capability, APIs are usually the only option - the strongest open-weight models trail the closed frontier, and the ones that come closest are very large MoEs that are expensive to self-host well. If an open model (possibly fine-tuned) clears your eval bar, self-hosting is on the table. Evals decide this, not vibes.
 2. **Utilization economics**: GPUs bill by the hour whether busy or idle; APIs bill per token. Self-hosting wins only with **high, steady utilization**. Sketch the math: an H100 at ~$2-4/hr serving a well-batched 70B-class model can produce on the order of a few thousand output tokens/sec aggregate - call it ~$0.10-0.50 per million tokens at good utilization, versus API prices often 5-20× that. But at 10% utilization your effective cost multiplies 10×, and spiky diurnal traffic makes sustained utilization genuinely hard. Include the hidden line items: engineers on-call, capacity headroom, evals/upgrades.
 3. **Privacy/compliance/residency**: hard requirements (regulated data, air-gapped, data-residency) can force self-hosting - or at least VPC-deployed provider offerings (Bedrock, Vertex, Azure) as a middle path.
 4. **Latency control**: self-hosting buys colocation with your services, no rate limits, control over the full tail. APIs give you someone else's multi-tenant P99.
@@ -609,7 +634,7 @@ The mature answer is usually **hybrid**: frontier API for the hard, low-volume r
 
 </details>
 
-### 25. When would you use a batch API, and how do you design a pipeline around one?
+### 26. When would you use a batch API, and how do you design a pipeline around one?
 
 <details><summary><b>Answer</b></summary>
 
@@ -630,7 +655,7 @@ Pipeline design points:
 
 </details>
 
-### 26. What is semantic caching, how is it different from prompt/prefix caching, and what are its failure modes?
+### 27. What is semantic caching, how is it different from prompt/prefix caching, and what are its failure modes?
 
 <details><summary><b>Answer</b></summary>
 
@@ -663,13 +688,13 @@ flowchart TD
 
 </details>
 
-### 27. How do you handle streaming when the model is emitting tool calls or structured JSON?
+### 28. How do you handle streaming when the model is emitting tool calls or structured JSON?
 
 <details><summary><b>Answer</b></summary>
 
 The tension: streaming exists to show incremental progress, but tool calls and JSON are only actionable when syntactically complete. The stream delivers fragments - `{"loc` ... `ation": "par` - and naive `json.loads` on partial data throws.
 
-Mechanics first: providers stream structured content as typed deltas. OpenAI-style APIs send `tool_calls` deltas carrying an index, the function name (early), and incremental `arguments` string fragments; Anthropic sends `content_block_start` / `input_json_delta` events per block, with blocks possibly interleaving text and tool use. The client's job is an **accumulator**: route each delta to its block/tool-call by index, concatenate argument fragments, and mark completion on the block-stop/finish event. Only then parse, validate against the tool's schema, and dispatch.
+Mechanics first: providers stream structured content as typed deltas. OpenAI's Chat Completions sends `tool_calls` deltas carrying an index, the function name (early), and incremental `arguments` string fragments, and its Responses API emits typed `response.function_call_arguments.delta` events; Anthropic sends `content_block_start` / `input_json_delta` events per block, with blocks possibly interleaving text and tool use. The client's job is an **accumulator**: route each delta to its block/tool-call by index, concatenate argument fragments, and mark completion on the block-stop/finish event. Only then parse, validate against the tool's schema, and dispatch.
 
 Patterns on top of that:
 
@@ -696,7 +721,7 @@ flowchart LR
 
 </details>
 
-### 28. You need to serve 200 customer-specific fine-tunes of the same 8B base model. How do you do that on a handful of GPUs, and what breaks first?
+### 29. You need to serve 200 customer-specific fine-tunes of the same 8B base model. How do you do that on a handful of GPUs, and what breaks first?
 
 <details><summary><b>Answer</b></summary>
 
@@ -730,7 +755,7 @@ flowchart LR
 
 </details>
 
-### 29. How do you load test an LLM service so the numbers actually mean something?
+### 30. How do you load test an LLM service so the numbers actually mean something?
 
 <details><summary><b>Answer</b></summary>
 
@@ -762,7 +787,7 @@ Then test the ugly parts: behaviour past saturation (does it queue, shed, or fal
 
 </details>
 
-### 30. Your product is moving from a standard chat model to a reasoning model with extended thinking. What changes for capacity, SLOs, and design?
+### 31. Your product is moving from a standard chat model to a reasoning model with extended thinking. What changes for capacity, SLOs, and design?
 
 <details><summary><b>Answer</b></summary>
 
@@ -776,13 +801,13 @@ Almost everything downstream of "tokens per request", because that number jumps 
 
 **Scheduling.** Do not mix long reasoning generations and fast chat in one queue; the long ones will wreck chat's P99. Separate pools or priority classes, routed by effort.
 
-**Design levers.** Route by difficulty: cheap non-reasoning model first, escalate on signals of hardness. Prompt caching does not help thinking tokens, since they are generated fresh every time, and reasoning traces are usually not reusable across turns, so multi-turn agents re-pay. Speculative decoding often does well here because long traces contain predictable structure. And for anything not interactive, a batch API path is the right answer.
+**Design levers.** Route by difficulty: cheap non-reasoning model first, escalate on signals of hardness. Prompt caching does not help thinking tokens, since they are generated fresh every time. Whether earlier reasoning is carried forward differs by provider: some drop prior-turn thinking from context, others expect you to pass reasoning items or thinking blocks back within a tool-use loop, which keeps both continuity and cache hits. Read your provider's rules, because getting this wrong silently costs either quality or cache hits. Speculative decoding often does well here because long traces contain predictable structure. And for anything not interactive, a batch API path is the right answer.
 
 **Follow-ups:** How would you pick the thinking budget per request rather than setting one global value? Which is worse for your fleet: one 30K-token reasoning request or thirty 1K-token chat requests, and why?
 
 </details>
 
-### 31. Explain KV cache offloading and cross-request reuse beyond a single GPU's memory. When does loading a cached prefix beat just recomputing prefill?
+### 32. Explain KV cache offloading and cross-request reuse beyond a single GPU's memory. When does loading a cached prefix beat just recomputing prefill?
 
 <details><summary><b>Answer</b></summary>
 
@@ -811,7 +836,7 @@ Where it pays: multi-turn chat and agents with long stable prefixes, RAG over a 
 
 </details>
 
-### 32. How do you choose inference hardware: NVIDIA GPUs, AMD, TPUs, or cloud silicon like Inferentia and Trainium?
+### 33. How do you choose inference hardware: NVIDIA GPUs, AMD, TPUs, or cloud silicon like Inferentia and Trainium?
 
 <details><summary><b>Answer</b></summary>
 
@@ -829,7 +854,7 @@ Start from the workload's binding constraint and the software you would have to 
 
 </details>
 
-### 33. When does on-device or edge inference make sense, and what actually constrains it?
+### 34. When does on-device or edge inference make sense, and what actually constrains it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -849,9 +874,63 @@ The design that usually wins is hybrid: a small local model handles classificati
 
 </details>
 
+### 35. At low batch sizes your decode is slower than the bandwidth math predicts, and the GPU timeline shows gaps between kernels. What is CPU overhead in LLM serving, and how do CUDA graphs and overlapped scheduling fix it?
+
+<details><summary><b>Answer</b></summary>
+
+At small batch sizes a decode step is so short that the host side, not the GPU, becomes the bottleneck. One step is hundreds of small kernels (several per layer across dozens of layers), and each launch costs microseconds of CPU time in Python, the framework dispatcher and the driver. Add the scheduler's per-step work (choosing the batch, updating block tables, sampling, detokenizing, streaming) and the GPU idles between steps. A profile shows gaps on the GPU timeline and one pegged CPU core. On a small model, where a step's weight read takes well under a millisecond, overhead can be a large share of the step.
+
+The fixes, roughly in the order engines adopted them:
+
+- **CUDA graphs.** Capture the whole decode step once and replay it with a single launch, so launch overhead collapses. The catch is that graphs are static in shape: engines capture a set of batch-size buckets at startup and pad each step to the nearest bucket, which costs memory and startup time. Dynamic pieces, such as some attention backends, MoE routing or custom ops, can break capture and force eager mode.
+- **Compilation and fusion.** `torch.compile` and hand-fused kernels merge elementwise work (norms, activations, rotary embeddings) into fewer, larger kernels, which means fewer launches and fewer HBM round trips.
+- **Overlapped scheduling.** Prepare step N+1 on the CPU while the GPU runs step N, so the scheduler leaves the critical path. SGLang's overlap scheduler and vLLM's async scheduling do this. The subtlety is that step N+1 needs the token sampled in step N, so everything else is prepared ahead and the token is filled in last.
+- **Move work off the hot loop.** Run tokenization, detokenization, streaming and HTTP handling in separate processes from the engine core.
+
+The interview point: this is why measured batch-1 tokens per second on a small model can sit well below the bandwidth ceiling, and why an engine upgrade sometimes buys more latency than a faster GPU. It matters most for small models, low batch, speculative decoding (many tiny verify steps), and architectures with weaker graph coverage.
+
+**Worth sketching.** It shows where the idle time comes from and which fix removes each slice of it.
+
+```mermaid
+flowchart LR
+    A["Eager decode step"] --> B["Hundreds of kernel launches,<br/>microseconds of CPU each"]
+    B --> C["GPU idles between kernels"]
+    A --> D["CUDA graph captured once<br/>per batch-size bucket"]
+    D --> E["One replay per step"]
+    E --> F["Overlapped scheduling: CPU prepares<br/>step N+1 while N runs"]
+    F --> G["GPU timeline without gaps"]
+```
+
+**Follow-ups:** Why do CUDA graphs need batch-size buckets, and what does padding to a bucket cost you? How would you confirm from a profile that a latency problem is host overhead rather than memory bandwidth?
+
+</details>
+
+### 36. Providers now sell the same model at several service tiers: standard, priority, flex or batch, and provisioned throughput. How do you decide which traffic goes where?
+
+<details><summary><b>Answer</b></summary>
+
+Treat tiers as different points on a price, latency and capacity-guarantee curve, and send each workload to the cheapest tier that still meets its SLO. The model is the same in every tier. What you are buying is scheduling priority and how firmly the provider guarantees capacity.
+
+- **Standard on-demand.** Per-token pricing, shared capacity, best-effort latency, per-organisation rate limits. The default for interactive features at moderate volume.
+- **Priority.** OpenAI's priority `service_tier`, Anthropic's Priority Tier and similar offerings charge a premium or require a commitment in exchange for being scheduled first when the provider is busy, so tail latency and availability at peak improve. Worth it for the latency-critical slice where a P99 miss costs revenue, not for all traffic.
+- **Flex and batch.** Discounted, often around half price, in exchange for slower or asynchronous completion and the chance of being deprioritised or refused at busy times. Flex keeps the synchronous API shape with longer timeouts. Batch takes a file of requests and a completion window. Both suit evals, backfills, enrichment and anything a person is not waiting on.
+- **Provisioned throughput.** Bedrock, Vertex AI, Azure and direct commitments reserve capacity in model units or tokens per minute, billed whether you use it or not. It buys predictable latency and no 429s up to your reservation, and its economics are the self-hosting economics: it pays only at high, steady utilisation.
+
+How to decide: classify traffic by latency tolerance and business value. Fill provisioned capacity up to your sustained baseline, burst on standard, route the critical slice to priority, and push everything deferrable to flex or batch. Review reserved-capacity utilisation weekly, because an unused commitment is pure waste.
+
+Pitfalls:
+
+- Tiers can differ in rate limits and feature support, so test prompt caching, tool use and structured output on each tier you route to.
+- Flex traffic needs longer timeouts and a defined behaviour when capacity is refused: retry later, fall back to standard, or queue.
+- Prices, discounts and terms change often. Keep the tier routing table in configuration, tag every request with the tier that served it, and attribute cost per tier so the next renegotiation uses real data.
+
+**Follow-ups:** Your provisioned capacity runs at 40% utilisation overnight: what do you route into it? How do you decide whether a feature's P99 is worth paying priority-tier prices for?
+
+</details>
+
 ## Advanced
 
-### 34. Build the full GPU memory budget for a serving deployment, and show how it determines maximum batch size and concurrency.
+### 37. Build the full GPU memory budget for a serving deployment, and show how it determines maximum batch size and concurrency.
 
 <details><summary><b>Answer</b></summary>
 
@@ -893,7 +972,7 @@ flowchart TD
 
 </details>
 
-### 35. Design the SLOs for a new LLM-powered feature. What do you promise, and how do you measure it?
+### 38. Design the SLOs for a new LLM-powered feature. What do you promise, and how do you measure it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -914,7 +993,7 @@ Finally, wire SLOs to action: alerts on budget burn rate (not point-in-time blip
 
 </details>
 
-### 36. Capacity planning: you're told to expect 100 requests/sec at peak with ~2K input and ~300 output tokens per request. Walk me through estimating the GPU fleet.
+### 39. Capacity planning: you're told to expect 100 requests/sec at peak with ~2K input and ~300 output tokens per request. Walk me through estimating the GPU fleet.
 
 <details><summary><b>Answer</b></summary>
 
@@ -936,7 +1015,7 @@ The trap to avoid: quoting a tokens/s number from a blog benchmark run with 128-
 
 </details>
 
-### 37. GPU cold starts take minutes. How do you autoscale an inference fleet anyway?
+### 40. GPU cold starts take minutes. How do you autoscale an inference fleet anyway?
 
 <details><summary><b>Answer</b></summary>
 
@@ -968,7 +1047,7 @@ flowchart LR
 
 </details>
 
-### 38. What do you monitor in production LLM serving, and what pages someone at 3 a.m.?
+### 41. What do you monitor in production LLM serving, and what pages someone at 3 a.m.?
 
 <details><summary><b>Answer</b></summary>
 
@@ -990,7 +1069,7 @@ Two practices worth naming: burn-rate alerting (alert on error-budget consumptio
 
 </details>
 
-### 39. Design the reliability layer for calls to an LLM provider: timeouts, retries, circuit breakers, idempotency.
+### 42. Design the reliability layer for calls to an LLM provider: timeouts, retries, circuit breakers, idempotency.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1017,7 +1096,7 @@ flowchart LR
 
 </details>
 
-### 40. Traffic doubles overnight and you can't get more GPU capacity for a week. What are your graceful-degradation options?
+### 43. Traffic doubles overnight and you can't get more GPU capacity for a week. What are your graceful-degradation options?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1040,11 +1119,11 @@ Two operational notes that distinguish senior answers: every rung needs a **feat
 
 </details>
 
-### 41. How is structured output actually enforced at the serving layer, and what does it cost?
+### 44. How is structured output actually enforced at the serving layer, and what does it cost?
 
 <details><summary><b>Answer</b></summary>
 
-The mechanism is **constrained (guided) decoding**: compile the target format - JSON Schema, regex, or a context-free grammar - into an automaton (FSM for regex/JSON, pushdown for CFGs), and at every decode step **mask the logits** of all tokens that would violate the format before sampling. The model can only ever emit valid continuations, so the output is syntactically valid *by construction* - no parse-and-retry loops. This is what Outlines and XGrammar implement, what vLLM/SGLang expose as guided/structured output, what llama.cpp's GBNF grammars do, and what OpenAI's `strict` JSON-schema mode runs server-side. Anthropic-style tool-input schemas achieve similar ends; know your provider's exact guarantees.
+The mechanism is **constrained (guided) decoding**: compile the target format - JSON Schema, regex, or a context-free grammar - into an automaton (FSM for regex/JSON, pushdown for CFGs), and at every decode step **mask the logits** of all tokens that would violate the format before sampling. The model can only ever emit valid continuations, so the output is syntactically valid *by construction* - no parse-and-retry loops. This is what Outlines and XGrammar implement, what vLLM/SGLang expose as guided/structured output, what llama.cpp's GBNF grammars do, and what the hosted APIs run server-side: OpenAI's `strict` JSON-schema mode, Anthropic's structured outputs and strict tool use, and Gemini's response schemas. Each supports a different subset of JSON Schema, so know your provider's exact guarantees.
 
 Subtleties that show depth: masking operates on **tokens, not characters** - a JSON string can span token boundaries arbitrarily, so the automaton must be compiled against the tokenizer's vocabulary (the expensive precomputation that Outlines/XGrammar optimise); schema features don't all map cleanly to grammars (unbounded recursion, some regex features, `additionalProperties` handling), so check the supported subset.
 
@@ -1072,7 +1151,7 @@ flowchart LR
 
 </details>
 
-### 42. Your LLM bill tripled this quarter. Design a cost-engineering programme - attribution, cascades, context management.
+### 45. Your LLM bill tripled this quarter. Design a cost-engineering programme - attribution, cascades, context management.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1082,7 +1161,7 @@ flowchart LR
 
 - **Prompt caching**: restructure prompts to stable-prefix-first; on Anthropic-style pricing cached reads are ~10% of input price. For agent/chat traffic this alone often cuts input spend 50%+.
 - **Batch API** for everything offline: ~50% off with a 24 h window.
-- **Output discipline**: `max_tokens` caps, terse formats, no input-echoing, tuned reasoning effort. Output is 3-5× input-priced, so output tokens are where trimming pays most.
+- **Output discipline**: `max_tokens` caps, terse formats, no input-echoing, tuned reasoning effort. Output is typically ~4-8× input-priced, so output tokens are where trimming pays most.
 - **Context management**: sliding-window + summarization for history, fewer/better RAG chunks (retrieval precision is a cost feature), prune verbose tool results in agent loops. Watch for the quadratic-ish pattern: context that grows per turn while being re-billed every turn.
 
 **Step 3: model tiering/cascades.** Route by predicted difficulty: a cheap router (heuristics, small classifier, or logprob-based confidence) sends easy traffic to a small model and escalates hard cases - FrugalGPT-style cascade: try cheap, verify (validators, self-consistency, judge), escalate on failure. Right-size per feature via evals; many features run fine on models 10-30× cheaper than the default-to-frontier choice. Guard rails: eval-gate every routing change, monitor escalation rate (a cascade that escalates 60% of traffic costs *more* than direct-to-big).
@@ -1093,13 +1172,13 @@ flowchart LR
 
 </details>
 
-### 43. Go deeper on speculative decoding: acceptance-rate math, modern drafters like Medusa/EAGLE, and when it backfires.
+### 46. Go deeper on speculative decoding: acceptance-rate math, modern drafters like Medusa/EAGLE, and when it backfires.
 
 <details><summary><b>Answer</b></summary>
 
 **The math.** Let α be the per-token acceptance rate (draft token accepted by the target's rejection-sampling check). Drafting k tokens per cycle, the expected tokens emitted per target forward pass is `(1 − α^(k+1)) / (1 − α)` (Leviathan et al.). At α = 0.8, k = 4: ~3.4 tokens per target pass. Wall-clock speedup ≈ that, divided by the cycle cost `1 + k·c` where c is the drafter's per-token cost relative to the target - so a drafter must be *both* well-aligned (high α) and cheap (low c). α is empirical and domain-dependent: high on code, boilerplate, extraction; lower on open-ended creative text. Larger k has diminishing returns (α^k decay wastes draft work past the first rejection), so k is tuned per workload (~4-8 typical).
 
-**Modern drafters.** Separate small models need a matching tokenizer and still burn sequential time drafting. Self-drafting removes that: **Medusa** bolts extra decoding heads onto the target to predict several future tokens in one pass; **EAGLE** autoregresses in the target's *feature space* (reusing its top-layer representations) which gets substantially better acceptance than token-level heads, verified over a **tree** of candidate continuations rather than a single chain (tree attention verifies multiple branches in one pass - raising expected accepted length). **Prompt-lookup/n-gram** drafting retrieves candidate spans from the existing context - zero model cost, brutal effectiveness on tasks whose outputs copy inputs (editing, extraction, RAG quotes). Engines like vLLM/TensorRT-LLM ship several of these.
+**Modern drafters.** Separate small models need a matching tokenizer and still burn sequential time drafting. Self-drafting removes that: **Medusa** bolts extra decoding heads onto the target to predict several future tokens in one pass; **EAGLE** autoregresses in the target's *feature space* (reusing its top-layer representations) which gets substantially better acceptance than token-level heads, verified over a **tree** of candidate continuations rather than a single chain (tree attention verifies multiple branches in one pass - raising expected accepted length). **Prompt-lookup/n-gram** drafting retrieves candidate spans from the existing context - zero model cost, brutal effectiveness on tasks whose outputs copy inputs (editing, extraction, RAG quotes). Models trained with **multi-token prediction (MTP)** modules, DeepSeek-V3 being the well-known example, ship their own drafter, which engines can use directly with no separate training. Engines like vLLM/SGLang/TensorRT-LLM ship several of these.
 
 **When it backfires**: (1) high-batch serving - verification consumes compute that regular decoding of other sequences would have used; when the fleet is compute-bound, spec decoding *reduces* aggregate throughput, so it's primarily a low-batch/latency-tier tool; (2) low α - drafting overhead with nothing accepted (mismatched domains, high temperature settings hurt); (3) memory - a draft model or extra heads eat KV/weight budget that could have been batch size; (4) engineering complexity - two models' KV caches, tree verification correctness, scheduler interaction. Always A/B on production-shaped traffic: measure ITL *and* aggregate goodput *and* cost, per domain.
 
@@ -1107,7 +1186,7 @@ flowchart LR
 
 </details>
 
-### 44. What is prefill/decode disaggregation, and why do large-scale deployments separate the two?
+### 47. What is prefill/decode disaggregation, and why do large-scale deployments separate the two?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1136,7 +1215,7 @@ flowchart LR
 
 </details>
 
-### 45. Design a multi-provider LLM gateway: routing, fallbacks, and the pitfalls teams hit.
+### 48. Design a multi-provider LLM gateway: routing, fallbacks, and the pitfalls teams hit.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1172,7 +1251,7 @@ flowchart LR
 
 </details>
 
-### 46. You run 40 replicas of the same model behind a load balancer, and round-robin gives you a terrible prefix cache hit rate. Design the routing layer.
+### 49. You run 40 replicas of the same model behind a load balancer, and round-robin gives you a terrible prefix cache hit rate. Design the routing layer.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1207,7 +1286,7 @@ flowchart TD
 
 </details>
 
-### 47. How does serving a large sparse mixture-of-experts model differ from serving a dense model, and what does expert parallelism change?
+### 50. How does serving a large sparse mixture-of-experts model differ from serving a dense model, and what does expert parallelism change?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1239,7 +1318,7 @@ flowchart LR
 
 </details>
 
-### 48. You run a shared LLM platform for 30 internal teams on one GPU fleet. Design the tenancy model: fairness, isolation, and cost attribution.
+### 51. You run a shared LLM platform for 30 internal teams on one GPU fleet. Design the tenancy model: fairness, isolation, and cost attribution.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1257,7 +1336,7 @@ flowchart LR
 
 </details>
 
-### 49. Your traffic is shifting from single-turn chat to agents: 20 to 50 model calls per task, tool calls in between, sessions lasting tens of minutes. What does that do to your serving design?
+### 52. Your traffic is shifting from single-turn chat to agents: 20 to 50 model calls per task, tool calls in between, sessions lasting tens of minutes. What does that do to your serving design?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1281,7 +1360,7 @@ Metrics: tokens per task, cache hit rate per step, model vs tool latency split, 
 
 </details>
 
-### 50. After a routine deploy, P99 TTFT went from ~600 ms to ~4 s. Throughput, error rate, GPU utilization and the model version are all unchanged. Debug it.
+### 53. After a routine deploy, P99 TTFT went from ~600 ms to ~4 s. Throughput, error rate, GPU utilization and the model version are all unchanged. Debug it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1317,19 +1396,19 @@ flowchart TD
 
 </details>
 
-### 51. You are moving from a dense transformer to a Mamba-attention hybrid. What changes in your serving stack?
+### 54. You are moving from a dense transformer to a Mamba-attention hybrid. What changes in your serving stack?
 
 <details><summary><b>Answer</b></summary>
 
 Short version: the model gets much cheaper at long context, and your cache manager gets much harder. Memory stops growing with context, and prefix caching stops being free.
 
-**Layers no longer share a cache shape.** In a dense transformer every layer stores the same KV per token, so one uniform block pool works. A hybrid mixes full-attention layers, which append per-token KV, with Mamba or linear-attention layers, which hold a fixed-size recurrent state updated in place. Engines handle this with a unified allocator over heterogeneous per-layer state: vLLM groups layers by type and forces one page size across groups, which in practice means raising the attention block size until an attention page is at least as large as a Mamba page. That produces block sizes like 528 or 672 tokens instead of 16.
+**Layers no longer share a cache shape.** In a dense transformer every layer stores the same KV per token, so one uniform block pool works. A hybrid mixes full-attention layers, which append per-token KV, with Mamba or linear-attention layers, which hold a fixed-size recurrent state updated in place. Engines handle this with a unified allocator over heterogeneous per-layer state: vLLM groups layers by type and forces one page size across groups, which in practice means raising the attention block size until an attention page is at least as large as a Mamba page. That produces attention block sizes in the hundreds of tokens instead of 16.
 
-**Prefix caching is where it bites.** A KV block is token-addressable, so you can match, share and roll back at token granularity. A recurrent state is one vector summarising everything seen so far: you cannot slice it or trim the last 30 tokens, only snapshot it at chosen boundaries and replay forward. So reuse becomes explicit state checkpointing, with a mode choice trading pool memory against hit rate, and it is still experimental.
+**Prefix caching is where it bites.** A KV block is token-addressable, so you can match, share and roll back at token granularity. A recurrent state is one vector summarising everything seen so far: you cannot slice it or trim the last 30 tokens, only snapshot it at chosen boundaries and replay forward. So reuse becomes explicit state checkpointing, with a mode choice trading pool memory against hit rate, and engine support for it is still maturing.
 
-The trap follows from the block size. Matching is block-granular, so a prompt shorter than one block has zero complete blocks and gets roughly a 0% hit rate. On a reported Qwen3.5-class hybrid, a 479-token prompt hit near 0% while a 552-token prompt hit 95.4%. Short-prompt chat traffic falls off a cliff with no obvious cause.
+The trap follows from the block size. Matching is block-granular, so a prompt shorter than one block has zero complete blocks and gets roughly a 0% hit rate, while a prompt just past the block boundary can hit almost entirely. Short-prompt chat traffic falls off a cliff with no obvious cause.
 
-**Memory flips.** KV no longer grows linearly with context on most layers, so your ceiling is not KV-per-token times context times batch any more. Concurrency is capped by a near-flat per-sequence state, a couple of MB on 12B-class hybrids. Redo the memory budget and the fleet-sizing arithmetic from the capacity questions rather than carrying the old formula across.
+**Memory flips.** KV no longer grows linearly with context on most layers, so your ceiling is not KV-per-token times context times batch any more. Concurrency is capped by a near-flat per-sequence state, on the order of megabytes for mid-sized hybrids. Redo the memory budget and the fleet-sizing arithmetic from the capacity questions rather than carrying the old formula across.
 
 **Anything that moves cache must move state.** Prefill/decode disaggregation and KV offload now transfer recurrent state as well as blocks. Also watch low-concurrency latency: the Mamba kernels are typically Triton, so CUDA graph coverage matters more than on a dense model.
 
@@ -1341,11 +1420,79 @@ flowchart TD
     M --> S["Mamba layer: fixed-size state,<br/>updated in place, not sliceable"]
     A --> U["Unified allocator, one page size<br/>across all layer groups"]
     S --> U
-    U --> B["Attention block size raised to match<br/>mamba page, 528 to 672 tokens"]
+    U --> B["Attention block size raised to match<br/>mamba page, hundreds of tokens"]
     B --> H["Prompt shorter than one block:<br/>no complete block, 0% cache hit"]
     S --> C["Reuse needs explicit state checkpoints<br/>plus replay forward"]
 ```
 
 **Follow-ups:** Why can you not roll a Mamba state back by 30 tokens the way you can drop KV blocks, and what does that cost an agent that edits its own history? Your hybrid deployment reports a 0% prefix cache hit rate on chat traffic but 90% on RAG traffic. What do you check first?
+
+</details>
+
+### 55. Product wants to offer a 1M-token context window on a model you self-host. What breaks in serving, and how do you make it work?
+
+<details><summary><b>Answer</b></summary>
+
+Three things break at once: the KV cache for one request outgrows a GPU, prefill takes long enough to be a product problem of its own, and a single such request can starve everyone else on the box. Size it before agreeing to it.
+
+**Memory.** With the 70B GQA shape used earlier (~320 KB per token at FP16), 1M tokens is ~330 GB of KV for one sequence, several GPUs' worth of HBM. FP8 KV halves that. Architectures with MLA, sliding-window layers or linear-attention hybrid layers cut it far further, which is why long-context models are built that way. Either way, a 1M request needs its own capacity class.
+
+**Prefill.** Attention FLOPs grow quadratically, so at 1M tokens attention dominates the linear-layer work, and on one GPU prefill would take tens of minutes even if memory allowed it. The fix is **context parallelism**: shard the sequence across GPUs, each holding a slice of Q, K and V, and pass KV blocks around a ring (ring attention) or gather them, overlapping communication with compute. Prefill time drops roughly with GPU count, and the KV cache ends up sharded across devices.
+
+**Decode.** Every step reads the whole KV cache, and that read does not amortise across the batch the way weights do, so per-token latency rises with context. Keep the KV sharded: each GPU computes partial attention over its slice, and a small combine merges the partial softmaxes.
+
+**Scheduling.** Route long requests to a dedicated pool so a multi-minute prefill never shares a queue with chat. Admission control must reserve KV for the whole request up front, otherwise it gets preempted halfway and recomputed, the most expensive preemption there is.
+
+**Economics and quality.** Prefix caching is what makes it affordable: users ask many questions of the same corpus, so the 1M prefill is paid once and reused, ideally from an offload tier. Price long context separately, as some providers do above a threshold. And run long-context evals first, because many models degrade well before their advertised limit.
+
+**Worth sketching.** It shows the long request taking its own path from admission to reuse, which is the core of the design.
+
+```mermaid
+flowchart TD
+    R["1M-token request"] --> A["Admission: reserve the whole KV<br/>before accepting"]
+    A --> L["Dedicated long-context pool"]
+    L --> CP["Context-parallel prefill,<br/>sequence sharded across GPUs"]
+    CP -->|"KV blocks passed around a ring"| KV["KV cache sharded,<br/>FP8 to halve it"]
+    KV --> D["Decode: partial attention per GPU,<br/>then a combine"]
+    KV --> PC["Prefix cache or offload tier<br/>for the next question"]
+```
+
+**Follow-ups:** Why does context parallelism help prefill far more than it helps decode? A customer sends a different 900K-token document with every request: how does that change your pricing and capacity plan?
+
+</details>
+
+### 56. What changes in your serving design when the NVLink domain grows from 8 GPUs in a server to 72 GPUs in a rack, as with GB200 NVL72-class systems?
+
+<details><summary><b>Answer</b></summary>
+
+The boundary between "fast interconnect" and "slow network" moves from the server to the rack, and that changes which parallelism plans are affordable. On an 8-GPU server the rule was tensor parallelism inside the box and anything crossing boxes over InfiniBand or Ethernet, roughly an order of magnitude slower. In a 72-GPU NVLink domain such as GB200 NVL72, every GPU reaches every other through NVLink switches at ~1.8 TB/s per GPU.
+
+What it unlocks:
+
+- **Wide expert parallelism.** The all-to-all dispatch and combine that dominate large-MoE decode were painful across nodes. Inside one NVLink domain you can spread experts over dozens of GPUs, so each GPU holds few experts, most of its HBM goes to KV cache, and per-GPU batch grows. Published large-MoE deployments on these racks lean on exactly this.
+- **Bigger instances without pipeline parallelism.** A model too big for 8 GPUs no longer needs pipeline stages over a slow link, so you avoid bubbles and stage-hop latency.
+- **Cheap KV movement.** Prefill/decode handoff and shared KV tiers inside the rack move bytes at NVLink speed, which shrinks the disaggregation tax.
+
+What it costs:
+
+- **Blast radius.** One serving instance may span most of a rack, so a single GPU or link fault can take out a large replica. Health checking, failover and spare capacity planning move from per-GPU to per-rack thinking.
+- **Coarse granularity.** Fewer, larger replicas mean lumpier autoscaling and a worse deal at low traffic, the same low-QPS trap as MoE in general.
+- **Software has to know the topology.** You need all-to-all kernels built for the domain, topology-aware expert placement, and rack-aware orchestration such as NVIDIA Dynamo or llm-d. A stack tuned for 8-GPU nodes leaves most of the benefit unused.
+- **Facilities.** Liquid cooling and rack power density decide where you can actually get this capacity.
+
+The interview point: topology decides the parallelism plan. Re-derive TP, EP and prefill/decode splits from the new domain size instead of porting the 8-GPU plan.
+
+**Worth sketching.** It contrasts where the slow link sits in each topology, which is what drives every downstream choice.
+
+```mermaid
+flowchart LR
+    S["8-GPU server"] -->|"NVLink inside the box"| TP["Tensor parallel within 8"]
+    S -->|"InfiniBand or Ethernet between boxes"| PP["Pipeline stages or narrow EP,<br/>slow all-to-all"]
+    R["72-GPU NVLink rack"] -->|"NVLink across the rack"| WEP["Wide expert parallelism,<br/>fast all-to-all"]
+    WEP --> KV["Most HBM freed for KV cache"]
+    R --> BR["Larger blast radius,<br/>coarser scaling units"]
+```
+
+**Follow-ups:** Why does wide expert parallelism free HBM for KV cache, and how does that change achievable batch size? A single NVLink switch tray fails in the rack: what happens to your serving instance, and how do you design for it?
 
 </details>

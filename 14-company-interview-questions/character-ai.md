@@ -1,6 +1,6 @@
 # 🎭 Character.AI - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,15 +8,15 @@
 - Reported shape (reported, varies): recruiter screen → hiring manager screen → ~60-min technical screen → virtual onsite of 4-5 rounds (coding, an ML/inference round, a system design round, behavioural) → founder or executive round for senior levels. Reported timeline roughly 3-5 weeks.
 - The centre of gravity is **inference economics at consumer scale**. They have publicly said they serve 20,000+ inference queries per second and cut serving cost 33x since late 2022. Almost every ML round reduces to "what does one message cost, and why".
 - **KV cache is the recurring theme.** Their published stack is multi-query attention, hybrid attention horizons, cross-layer KV sharing, native int8, and a stateful inter-turn cache at a reported 95% hit rate. Know these well enough to argue the quality tradeoffs, not just name them.
-- **Safety is a first-class engineering track, not a policy afterthought.** They post safety and integrity engineering roles, removed open-ended chat for under-18 users in November 2025, and funded an independent AI Safety Lab. Expect at least one round where engagement and wellbeing pull in opposite directions and you have to pick.
+- **Safety is a first-class engineering track, not a policy afterthought.** They post safety and integrity engineering roles, removed open-ended chat for under-18 users in November 2025, funded an independent AI Safety Lab, and in September 2026 described an in-house age estimation model, self-harm detection that reads signals building up over long chats, and a moderation appeals process. Expect at least one round where engagement and wellbeing pull in opposite directions and you have to pick.
 
 ## Company context
 
-Character.AI is a consumer AI entertainment platform: users create characters and hold open-ended conversations with them, at a reported 20 million monthly active users. The engineering problem is unusual for an AI company - not frontier capability, but **serving enormous conversational volume at a cost per message low enough for a consumer product**, with dialogues that average around 180 messages and personas that must stay consistent across all of them. They built and served their own model family (Kaiju: 13B, 34B, 110B) and have since said they are moving towards open-source base models, which shifts the value from pretraining to post-training, serving, and safety. "AI engineer" here means inference and serving engineering, post-training, applied ML for discovery and recommendation, or safety and integrity ML - and the same person is often expected to reason about the product consequences of their latency and cost choices.
+Character.AI is a consumer AI entertainment platform: users create characters and hold open-ended conversations with them, at a reported 20 million monthly active users (the company's 2025 figure). The engineering problem is unusual for an AI company - not frontier capability, but **serving enormous conversational volume at a cost per message low enough for a consumer product**, with dialogues that average around 180 messages and personas that must stay consistent across all of them. They built and served their own model family (Kaiju: 13B, 34B, 110B) and have since said they are moving towards open-source base models, which shifts the value from pretraining to post-training, serving, and safety. The September 2026 releases follow that pattern: CAI-Image, a family of image models post-trained from the open-source Qwen-Image for character consistency across art styles, and new free chat styles (PipSqueak 3, ShortSqueak) alongside a low-cost "lite" subscription tier. "AI engineer" here means inference and serving engineering, post-training, applied ML for discovery and recommendation, or safety and integrity ML - and the same person is often expected to reason about the product consequences of their latency and cost choices.
 
 ## Roles & titles they hire
 
-From their public Ashby job board (August 2026):
+From their public Ashby job board (checked October 2026; unchanged since August):
 
 - **Machine Learning Infrastructure Engineer** (Technical Staff - ML, Redwood City)
 - **Research Engineer, Post-Training (All Industry Levels)** (Redwood City or New York)
@@ -52,7 +52,7 @@ Reported end-to-end timeline is roughly 3-5 weeks, described by candidates as fa
 - **KV cache as the binding constraint.** Multi-query attention (about 8x smaller cache than GQA), interleaved sliding-window and global attention (1024-token local window, roughly one global layer in six), and cross-layer KV sharing (another 2-3x) combine for a stated 20x-plus reduction. They chose these knowing MQA costs some benchmark quality, and they will ask you to defend that trade.
 - **Caching across turns, not just within a request.** Their stateful cache is a tree-structured LRU keyed by rolling hash over the dialogue prefix, similar in spirit to RadixAttention, holding KV on host memory between turns at a reported 95% hit rate. Long dialogues make this the single highest-leverage optimisation in the product.
 - **Kernel-level ownership.** Their second inference post describes int8 FlashAttention variants, warp-specialised producer warpgroups, TMA-based cooperative preprocessing, and query-head packing for MQA decode, with reported gains of roughly 10% in prefill and 30% in decode over their earlier Triton kernels. Infra roles should expect to go at least one level below the framework.
-- **Safety engineering with real product consequences.** Token-level safety classifier heads, classifier-guided decoding, age assurance, and the November 2025 removal of open-ended chat for under-18 users are all public. This is a company that has shipped a product change that reduced engagement on purpose.
+- **Safety engineering with real product consequences.** Token-level safety classifier heads, classifier-guided decoding, age assurance, the November 2025 removal of open-ended chat for under-18 users, and the September 2026 additions (in-house age estimation, long-chat self-harm signals, creator moderation notices with appeals) are all public. This is a company that has shipped a product change that reduced engagement on purpose.
 - **Consumer product instinct.** The careers page leads with users first and with entertainment, storytelling, and social connection. Engineers who treat the model as the product, rather than the conversation, tend to miss what they are actually optimising.
 
 ## Representative questions
@@ -153,7 +153,7 @@ Method over memorised numbers, and state every assumption. Take their public fig
 
 **Cost.** At an illustrative $2 per GPU-hour and 300 GPUs, that is $600/hour against 72 million messages per hour, so on the order of $0.00001 per message - under a cent per thousand messages. That is the regime a free consumer product needs.
 
-**Which lever moves it most.** In order: (1) the inter-turn cache hit rate, because a miss on a 180-message dialogue costs orders of magnitude more than a hit; (2) achieved batch size, which is gated by KV cache size per sequence, which is why MQA and cross-layer sharing are economic decisions not architectural taste; (3) utilization, since a fleet sized for peak sits idle at trough; (4) kernel efficiency, worth tens of percent, not multiples.
+**Which lever moves it most.** In order: (1) the inter-turn cache hit rate, because a miss on a 180-message dialogue costs orders of magnitude more than a hit; (2) achieved batch size, which is gated by KV cache size per sequence, which is why MQA and cross-layer sharing are economic decisions not architectural taste; (3) utilisation, since a fleet sized for peak sits idle at trough; (4) kernel efficiency, worth tens of percent, not multiples.
 
 **Follow-ups:** How does a long-context feature that raises average dialogue length change this? Where would you put the crossover for serving a larger model to paying subscribers only?
 
@@ -401,6 +401,26 @@ flowchart LR
 
 </details>
 
+### 13. We post-trained an open-source image model so a user's character stays recognisable across art styles. How would you build and evaluate that identity consistency?
+
+<details><summary><b>Answer</b></summary>
+
+Treat identity and style as separate conditioning signals, train on data where they vary independently, and evaluate the two axes separately. Character.AI's September 2026 post describes exactly this target: given a style reference and a character image, follow the aesthetic of the first and the identity of the second.
+
+**Why base models fail.** Open image models entangle the two. Ask for "the same character, watercolour" and the face, markings or outfit drift, or the output collapses to the model's default look. Prompting alone does not fix entanglement that was learned in pretraining.
+
+**Data does the disentangling.** Build sets where the same character appears in many styles and the same style covers many characters, so the only way to reduce loss is to read identity from one input and style from the other. Caption identity attributes (hair, markings, silhouette, palette) separately from style terms. Creator content is a natural source, but curate it hard: popular characters dominate and will teach the model a few famous faces.
+
+**Training.** Supervised post-training on reference-conditioned examples first, then preference tuning on human pairwise judgements of "same character?" and "right style?". Keep a held-out set of characters the model has never seen, because memorising popular characters looks like consistency and is not.
+
+**Evaluation on two axes.** Identity: human raters plus a judge that checks the attribute list, calibrated against those raters. Style adherence: a separate judge against the style reference. Report them as a frontier, not a blended score, since a model that copies the reference image straight through maxes identity and fails style.
+
+**Safety is part of the design.** The reference image is user-uploaded, so a photo of a real person, or of a minor, can arrive as a "character". Detect real faces and minor likeness before conditioning, and hash-match against known abuse imagery on both input and output.
+
+**Follow-ups:** How would you detect the copy-through failure in production without a human looking at every image? What changes if creators want their character's identity locked so other users cannot restyle it?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -429,10 +449,13 @@ flowchart LR
 - [Character.AI blog - Optimizing AI Inference at Character.AI (Part Deux)](https://blog.character.ai/optimizing-ai-inference-at-character-ai-part-deux-2/) (int8 attention kernels, warp specialisation, query-head packing)
 - [Character.AI blog - Inside Kaiju: building conversational models at scale](https://blog.character.ai/inside-kaiju-building-conversational-models-at-scale/) (model sizes, int8 QAT, classifier head and classifier-guided decoding, shift towards open-source models)
 - [Character.AI blog - Taking Bold Steps to Keep Teen Users Safe](https://blog.character.ai/u18-chat-announcement/) (under-18 chat removal, age assurance, AI Safety Lab)
+- [Character.AI blog - Continuing To Build Upon Our Safety Priorities](https://blog.character.ai/continuing-to-build-upon-our-safety-priorities/) (September 2026; in-house age estimation, long-chat self-harm detection, moderation appeals)
+- [Character.AI blog - Post-training image models for fandom](https://blog.character.ai/cai-image-models/) (September 2026; CAI-Image, post-trained from Qwen-Image)
+- [Character.AI blog - introducing PipSqueak 3, ShortSqueak, and (c.ai) lite](https://blog.character.ai/new-styles-new-plan/) (September 2026; new chat styles and subscription tier)
 - [Character.AI blog - Scaling Our Logging System](https://blog.character.ai/scaling-our-logging-system/)
 - [Character.AI research blog index](https://blog.character.ai/news/research/)
 - [Character.AI careers page](https://character.ai/careers) (values and framing)
-- [Character.AI job board on Ashby](https://jobs.ashbyhq.com/character/) (fetched August 2026; role titles above)
+- [Character.AI job board on Ashby](https://jobs.ashbyhq.com/character/) (checked October 2026; role titles above)
 - [Character.AI blog - Character.AI Names Karandeep Anand as CEO](https://blog.character.ai/character-ai-names-karandeep-anand-as-ceo/) (20 million monthly active users)
 - [techinterview.org - Character.AI interview guide](https://www.techinterview.org/companies/character-ai-interview-guide/) (third-party guide; loop stages marked "reported, varies" above)
 - [Glassdoor - Character.AI interview questions](https://www.glassdoor.com/Interview/Character-AI-Interview-Questions-E8035202.htm) (small number of candidate reports; difficulty and timeline)

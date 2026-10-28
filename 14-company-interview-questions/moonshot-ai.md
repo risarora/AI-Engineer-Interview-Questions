@@ -1,18 +1,18 @@
 # 🌑 Moonshot AI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **Public detail on Moonshot's interview loop is thin**, and several third-party aggregators conflate this Beijing lab with unrelated companies also called "Moonshot". Treat the loop table below as the *typical frontier-lab-startup shape*, clearly labelled as inference, not a confirmed script.
-- What is *not* thin is their published technical identity: long-context modelling, KV-cache-centric serving (Mooncake), reinforcement learning for reasoning (Kimi K1.5), and a trillion-parameter open-weight MoE (Kimi K2). Expect the technical bar to be set by that body of work.
+- What is *not* thin is their published technical identity: long-context modelling, KV-cache-centric serving (Mooncake), reinforcement learning for reasoning (Kimi K1.5), a trillion-parameter open-weight MoE (Kimi K2), and, since July 2026, the ~2.8T-parameter open-weight Kimi K3, which replaces most full-attention layers with linear attention (Kimi Delta Attention) to make a 1M-token context affordable. Expect the technical bar to be set by that body of work.
 - The signal they weight most heavily is **depth on long-context economics**: why the KV cache, not FLOPs, is the wall at 128K-2M tokens, and how you serve it without going bankrupt. This is their founding thesis, not a niche.
-- Strong candidates can move between **architecture** (MLA, MoE routing, MuonClip stability), **systems** (prefill/decode disaggregation, prefix-cache reuse, expert parallelism), and **post-training** (long-context RL, agentic tool-use, evaluation). Single-lane specialists read as weaker for a lean lab.
+- Strong candidates can move between **architecture** (MLA, hybrid linear attention, MoE routing, MuonClip stability), **systems** (prefill/decode disaggregation, prefix-cache reuse, expert parallelism), and **post-training** (long-context RL, agentic tool-use, evaluation). Single-lane specialists read as weaker for a lean lab.
 - Come with a view on the **long-context-vs-RAG** question and on **why open-weight**. Their product and strategy both take a side; a substantive opinion beats a neutral one.
 
 ## Company context
 
-Moonshot AI (月之暗面, "the dark side of the moon") is a Beijing frontier lab founded in March 2023 by Yang Zhilin, Zhou Xinyu, and Wu Yuxin, all Tsinghua graduates; Yang is a co-author of the Transformer-XL and XLNet papers, and long-context modelling is the company's founding bet. Its assistant, Kimi, launched in October 2023 marketed on handling very long inputs (initially around 200,000 Chinese characters, later extended substantially), and the company has since shipped the Kimi K1.5 reasoning model and the open-weight Kimi K2, a trillion-parameter Mixture-of-Experts model aimed at agentic and coding workloads. "AI engineer" here spans a narrow, high-density org: research engineers close to training runs, inference engineers who built and open-sourced the Mooncake serving stack, and post-training people working on RL and tool-use. Teams are small relative to US labs, so ownership runs wide.
+Moonshot AI (月之暗面, "the dark side of the moon") is a Beijing frontier lab founded in March 2023 by Yang Zhilin, Zhou Xinyu, and Wu Yuxin, all Tsinghua graduates; Yang is a co-author of the Transformer-XL and XLNet papers, and long-context modelling is the company's founding bet. Its assistant, Kimi, launched in October 2023 marketed on handling very long inputs (initially around 200,000 Chinese characters, later extended substantially), and the company has since shipped the Kimi K1.5 reasoning model and the open-weight Kimi K2, a trillion-parameter Mixture-of-Experts model aimed at agentic and coding workloads, followed by K2 Thinking and the natively multimodal K2.5 (January 2026). Its current flagship, Kimi K3 (announced July 2026, weights released later that month under a custom Kimi K3 licence), is a 2.8T-total, 104B-active MoE with 896 experts, a 1M-token context window, native vision, and a hybrid attention stack of 69 Kimi Delta Attention layers and 24 gated MLA layers, an architecture first published in the smaller Kimi Linear model (October 2025). "AI engineer" here spans a narrow, high-density org: research engineers close to training runs, inference engineers who built and open-sourced the Mooncake serving stack, and post-training people working on RL and tool-use. Teams are small relative to US labs, so ownership runs wide.
 
 ## Roles & titles they hire
 
@@ -46,7 +46,8 @@ For senior research hires, expect the balance to tilt toward research taste and 
 
 - **Long-context as a first-class problem, not a spec-sheet number.** Their thesis is that lossless long context underpins personalised, agentic products. Expect to be pushed past "we support 128K" into how you keep it accurate, fast, and affordable.
 - **KV-cache and serving economics.** The Mooncake work (open-sourced, and the subject of an award-winning systems paper) makes disaggregated prefill/decode, cache reuse, and SLO-aware scheduling core company knowledge, not infra trivia.
-- **MoE at trillion-parameter scale.** Kimi K2 is a 1T-parameter, 32B-active MoE. Routing, load balancing, expert parallelism, and training stability (the MuonClip/QK-Clip work) are live topics.
+- **MoE at trillion-parameter scale.** Kimi K2 is a 1T-parameter, 32B-active MoE; Kimi K3 pushes to 2.8T total and 104B active, routing each token to 16 of 896 experts, and ships weights quantized to MXFP4 through quantization-aware training. Routing, load balancing, expert parallelism, low-precision training, and stability (the MuonClip/QK-Clip work) are live topics.
+- **Hybrid linear attention.** K3 makes Kimi Delta Attention (a gated, delta-rule linear attention) the majority of its layers, keeping full attention in roughly one layer in four. Expect questions on what fixed-size recurrent state can and cannot remember, and what it does to caching and serving.
 - **Post-training for reasoning and agents.** Kimi K1.5 scaled RL for long chain-of-thought; K2 targets agentic tool-use and coding. Understand RLHF/RLVR, long-context RL, and reward design, not just supervised fine-tuning.
 - **Evaluation of hard-to-measure capabilities.** Long-context recall and multi-step agentic tasks are notoriously easy to fake with weak benchmarks; a credible view on rigorous evaluation stands out.
 - **Open-weight conviction and efficiency.** They ship weights and technical reports; being fluent in their published methods (and having an opinion on the open-weight strategy) signals genuine interest.
@@ -254,11 +255,27 @@ The tell of a strong candidate: they reason in bytes-moved-per-token and know wh
 
 </details>
 
+### 13. Kimi K3 uses Kimi Delta Attention, a linear attention, in most layers and full MLA attention in roughly one layer in four. Why hybridise instead of going all-linear or all-full, and what does it change about serving a 1M-token context?
+
+<details><summary><b>Answer</b></summary>
+
+Full attention keeps every past key and value, so recall is exact, but the KV cache grows linearly with context and every decode step reads all of it. Linear attention replaces the cache with a fixed-size state per head, a d_k × d_v matrix updated once per token: memory per layer is constant in sequence length, prefill is linear rather than quadratic, and decode cost stops growing with context. The catch is capacity. A fixed-size state is a lossy compression of the whole history, and pure linear models are weakest at what long context is for: precisely retrieving or copying one earlier span.
+
+KDA makes the linear layers as strong as possible. It extends Gated DeltaNet: schematically, each step decays the state with a learned per-channel gate, then applies the delta rule, which erases what the state currently associates with key k before writing the new value, `S_t = (I - β k k^T) Diag(α) S_{t-1} + β k v^T`. Writes become error-correcting rather than purely additive, and each channel forgets at its own rate.
+
+The full-attention layers are the safety valve. A minority of layers with exact access to every position restores retrieval, and only those layers keep a KV cache, so KV memory and per-step bandwidth at long context fall sharply. That is what makes 1M tokens servable. In Kimi Linear, the MLA layers also drop positional encoding and leave position to the recurrent layers.
+
+Serving changes in four places. Prefix caching no longer works block by block for linear layers, because their state is a snapshot at one position: checkpoint state at chunk boundaries and reuse only there. Speculative decoding needs state rollback when drafts are rejected. Disaggregated serving ships recurrent state plus a smaller KV cache. And chunkwise-parallel prefill kernels are younger than FlashAttention, so kernel quality matters.
+
+**Follow-ups:** How would you build an eval that separates a model with real long-context retrieval from one that merely compresses well? What breaks in a paged-attention cache manager when three quarters of the layers keep no per-token KV?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
 
-1. **[02-llm-fundamentals](../02-llm-fundamentals/)** - the core bar. Attention variants (MHA/GQA and especially MLA), RoPE and long-context extension, MoE routing and load balancing, tokenization. Be able to implement, not just describe.
+1. **[02-llm-fundamentals](../02-llm-fundamentals/)** - the core bar. Attention variants (MHA/GQA, especially MLA, and now linear attention with delta-rule updates), RoPE and long-context extension, MoE routing and load balancing, tokenization. Be able to implement, not just describe.
 2. **[08-inference-and-production](../08-inference-and-production/)** - their differentiator. KV-cache math, paged attention, prefix caching, prefill/decode disaggregation (Mooncake), continuous batching, quantization, speculative decoding. Reason in bytes-per-token, not just FLOPs.
 3. **[05-fine-tuning-and-alignment](../05-fine-tuning-and-alignment/)** - post-training is central: RLHF/RLVR, long-context RL, reward design. The Kimi K1.5 report is the anchor.
 4. **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - Kimi K2 targets agentic coding; understand tool-calling reliability, agent loops, and SWE-bench-style evaluation.
@@ -267,7 +284,7 @@ Priority order for this repo's topics:
 
 Company-specific moves:
 
-- **Read the Kimi technical reports.** The Kimi K2 report (arXiv:2507.20534) for the trillion-scale MoE, MLA, and MuonClip/QK-Clip; the Kimi K1.5 report (arXiv:2501.12599) for long-context RL, partial rollouts, and long2short. Being fluent in these covers a large fraction of the likely technical depth.
+- **Read the Kimi technical reports.** The Kimi K2 report (arXiv:2507.20534) for the trillion-scale MoE, MLA, and MuonClip/QK-Clip; the Kimi K1.5 report (arXiv:2501.12599) for long-context RL, partial rollouts, and long2short; the Kimi Linear paper (arXiv:2510.26692) for Kimi Delta Attention and the hybrid KDA/MLA layout; and the Kimi K3 model card and report for how that layout scales to 2.8T parameters and 1M tokens. Being fluent in these covers a large fraction of the likely technical depth.
 - **Read the Mooncake paper** (arXiv:2407.00079) and skim the open-source repo. Prefill/decode disaggregation, the KV-cache-centric scheduler, and cache reuse are effectively company canon.
 - **Use Kimi** and probe its long-context behaviour yourself; have concrete observations about where long context helps and where it strains.
 - **Have a position** on long-context-vs-RAG and on the open-weight strategy. Their product and their releases both take a side, and a substantive opinion signals real interest.
@@ -279,6 +296,8 @@ Company-specific moves:
 - [Kimi K2 GitHub repository](https://github.com/MoonshotAI/Kimi-K2) - Kimi K2 architecture specs (1T total / 32B active parameters, 384 experts, MLA, MuonClip) and agentic benchmarks
 - [Kimi K2 technical report (arXiv:2507.20534)](https://arxiv.org/abs/2507.20534) - trillion-parameter MoE training, MuonClip/QK-Clip stability
 - [Kimi K1.5 technical report (arXiv:2501.12599)](https://arxiv.org/abs/2501.12599) - reinforcement learning for reasoning, long-context RL, partial rollouts, long2short
+- [Kimi K3 model card (Hugging Face)](https://huggingface.co/moonshotai/Kimi-K3) - 2.8T total / 104B active, 896 experts with 16 routed, 69 KDA + 24 gated MLA layers, 1M-token context, MXFP4 weights via quantization-aware training, Kimi K3 licence
+- [Kimi Linear paper (arXiv:2510.26692)](https://arxiv.org/abs/2510.26692) - Kimi Delta Attention and the 3:1 hybrid KDA/MLA architecture
 - [Mooncake paper (arXiv:2407.00079)](https://arxiv.org/abs/2407.00079) - KV-cache-centric disaggregated serving architecture for Kimi
 - [Mooncake open-source repository](https://github.com/kvcache-ai/Mooncake) - the serving platform for Kimi
 - [Moonshot / Kimi careers portal](https://careers.kimi.com/) - official recruiting site (role listings; primarily Beijing-based, largely in Chinese)

@@ -1,30 +1,31 @@
 # ⌨️ Cursor (Anysphere) - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- The centrepiece is famous and publicly confirmed by the CEO: **every engineer and designer goes through an on-site work trial** - reported as up to two days - with a desk, a laptop, and a frozen snapshot of the real codebase. You build something real instead of whiteboarding. This is the decision round.
+- The centrepiece is famous and publicly confirmed by the CEO: **every engineer and designer goes through an on-site work trial** - reported as up to two days, while 2026 guides describe a paid 8-9 hour project day, sometimes remote (reported, varies) - with a desk, a laptop, and a frozen snapshot of the real codebase. You build something real instead of whiteboarding. This is the decision round.
 - Earlier stages are lighter: a recruiter/manager screen plus one or more 60-minute technical screens with **practical problems** (file-system dedup, hash trees, editor/streaming primitives) - not LeetCode-puzzle grinding.
-- **AI tools are often permitted in coding rounds** (reported), but with scoped-query expectations - pasting whole problems into a model reads as a negative. Judgment about model output is itself the signal.
+- **AI-tool policy is stage-dependent.** Many reports say AI tools are permitted with scoped-query expectations - pasting whole problems into a model, or raw model output, reads as a negative. 2026 guides add that early screens often restrict AI to test raw problem-solving, while later rounds expect you to work in a real codebase using Cursor actively (reported, varies). Ask your recruiter per round; judgment about model output is itself the signal.
 - **Authentic product usage is close to a hard requirement.** Multiple public reports say interviewers can tell within minutes whether you actually work in Cursor daily. Come with real opinions about tab, agent mode, and what's broken.
 - The work trial doubles as a **mutual cultural interview**: meals with the team, informal conversations, founder-level chats for many roles. They're a small, talent-obsessed team screening for self-motivated ICs who go end-to-end.
 
 ## Company context
 
-Anysphere builds Cursor, the AI code editor - tab (next-edit prediction), inline edits, codebase-aware chat, agent mode, and background agents - used by millions of developers, plus their own custom models for completion and fast code application. It's one of the fastest-growing software products ever (publicly reported to have hit $100M ARR roughly 20 months after launch), built by a deliberately small team, which is exactly the draw: enormous surface area per engineer. "AI engineer" at Cursor means shipping the full stack around models - retrieval/indexing over huge codebases, low-latency inference, agent harnesses, evals, and editor UX - often training or fine-tuning their own models rather than only wrapping frontier APIs.
+Anysphere builds Cursor, the AI code editor - tab (next-edit prediction), inline edits, codebase-aware chat, agent mode, cloud agents (formerly background agents), and Bugbot for code review - used by millions of developers, plus their own custom models for completion and fast code application. Two 2026 shifts matter for interviews: **Composer 2** (March 2026), their in-house agentic coding model built on continued pretraining plus reinforcement learning over long-horizon coding tasks, and **Cursor 3** (April 2026), an agent-first interface that manages many local and cloud agents in parallel and hands sessions between them. It's one of the fastest-growing software products ever (publicly reported to have hit $100M ARR roughly 20 months after launch), built by a deliberately small team, which is exactly the draw: enormous surface area per engineer. "AI engineer" at Cursor means shipping the full stack around models - retrieval/indexing over huge codebases, low-latency inference, agent harnesses, evals, and editor UX - often training or fine-tuning their own models rather than only wrapping frontier APIs.
 
 ## Roles & titles they hire
 
-From their careers page (July 2026):
+From their careers page (October 2026):
 
-- **Software Engineer** - with many specialisations posted: Agent Evaluation, Infrastructure, ML, Bugbot, Security, Storage, Billing
+- **Software Engineer** - with many specialisations posted: Generalist, Product, Infrastructure, Security, Agent Evaluation and Quality, Agent Harness, Model Routing & Inference, Bugbot, Billing
+- **Model-training engineering** (new role families since mid-2026): Software Engineer, Pretraining; RL Data; RL Environments; ML Research, ML Infrastructure and ML Platform - consistent with training Composer in-house
 - **Research Scientist** (RL / mid-training research, owning ambiguous research problems end-to-end)
 - **Design Engineer**
 - **Data Platform Engineer**
 - **Field Engineer / Forward Deployed Engineer** and **Solutions Architect** (enterprise-facing)
 - **Technical Support Engineer**
-- **Engineering Manager** (Core Services, Desktop, Infrastructure, ML)
+- **Engineering Manager** (Agent & Product Security, Core Services, Evals, Infrastructure, ML)
 
 Their careers page is explicit about culture: they "obsess over talent to an unusual degree" and are building "a haven for self-motivated individual contributors."
 
@@ -35,9 +36,9 @@ The work-trial onsite is unusually well documented - CEO Michael Truell has desc
 | Stage | Format | What's evaluated |
 |---|---|---|
 | Recruiter/manager screen | 30-45 min call | Why Cursor specifically, genuine interest in the problem space, product usage. (reported, varies) |
-| Technical phone screen(s) | 1-3 rounds, ~60 min live coding | Practical problems: file-system/dedup tasks, hash trees over repo data, streaming/editor primitives. Clean working code, communication. AI tools reportedly allowed for scoped queries. (reported, varies) |
+| Technical phone screen(s) | 1-3 rounds, ~60 min live coding | Practical problems: file-system/dedup tasks, hash trees over repo data, streaming/editor primitives. Clean working code, communication. AI policy varies by round: some reports describe AI allowed for scoped queries, 2026 guides say early screens often restrict it. (reported, varies) |
 | Take-home | Some senior/staff loops | A project of similar weight to the onsite, done async. (reported, varies) |
-| **On-site work trial** | Reported as up to two days in SF; desk, laptop, frozen codebase snapshot; some reports describe an ~8-hour project variant, sometimes remote | Can you go end-to-end in an unfamiliar real codebase? What do you build when left alone without direction? Raw technical skill, autonomy, product taste. **This is the decision round.** |
+| **On-site work trial** | Reported as up to two days in SF; desk, laptop, frozen codebase snapshot; some reports describe an ~8-hour project variant, sometimes remote; 2026 guides describe a paid 8-9 hour project day ending in a presentation or video debrief of your tradeoffs (reported, varies) | Can you go end-to-end in an unfamiliar real codebase? What do you build when left alone without direction? Raw technical skill, autonomy, product taste. **This is the decision round.** |
 | Culture / team fit | Meals and informal conversations woven through the trial; founder-level conversation for many roles | Passion for the problem space vs. job-shopping; mutual fit. (publicly described by CEO) |
 
 Two caveats worth knowing. First, logistics vary by role and seniority - public reports describe both a two-day in-office trial and a one-day (~8-hour) project, sometimes remote. Second, **payment for the trial is disputed in public reports**: some third-party guides describe it as paid, while at least one public candidate post described a two-day unpaid trial with IP-assignment language in the agreement. Ask your recruiter directly about compensation and IP terms before the trial - that's a normal, professional question.
@@ -194,7 +195,7 @@ Design axes:
 
 **Cost control.** Duplicate LSP instances and containers per agent run are expensive; pool them, hibernate idle ones, and cap concurrent agent sessions per machine.
 
-**Follow-ups:** What syscall/network policy do you set for the test-execution sandbox? How does this extend to background agents running remotely on a repo the user doesn't have checked out?
+**Follow-ups:** What syscall/network policy do you set for the test-execution sandbox? How does this extend to cloud agents running remotely on a repo the user doesn't have checked out, and to handing a session from cloud back to local?
 
 </details>
 
@@ -321,6 +322,26 @@ Also worth naming: request dedupe/debounce at the client, regional capacity plan
 
 </details>
 
+### 13. We train our own agentic coding model with reinforcement learning on long-horizon tasks. Design the RL environment and the reward: what does the agent see, what counts as success, and how do you stop it gaming the reward?
+
+<details><summary><b>Answer</b></summary>
+
+The environment is a sandboxed snapshot of a real repo exposing the same tools the product harness uses; the reward is mostly verifiable execution; and the hard engineering is task supply, sandbox throughput and reward-hacking defence, not the RL algorithm.
+
+**Environment.** Each episode is a container holding a repo at a commit, a task (issue text or instruction), and tools identical to production: read, search, edit, terminal. Train-serve parity matters: a policy trained against different tool semantics or output formats regresses inside the real harness. Rollouts run to hundreds of actions, so environment latency, not GPU time, often becomes the bottleneck: copy-on-write snapshots for fast reset, pre-warmed dependency caches, and thousands of concurrent sandboxes.
+
+**Task supply.** Mine real commits that came with tests (revert the fix, keep the tests hidden), add synthetic bug injection, and include genuinely long-horizon multi-file tasks. Drop tasks the current policy always solves or never solves; neither produces useful gradient.
+
+**Reward.** Primary signal: hidden tests pass, executed outside the agent's reach. Shape sparingly: type-check and lint pass, a mild penalty on diff size or token cost to push efficiency. Sparse binary reward with several rollouts per task and group-relative advantages is usually more robust than dense shaping, which invites gaming.
+
+**Reward hacking is the main event.** Expect the policy to edit or delete tests, special-case test inputs, swallow exceptions, or hard-code expected outputs. Defences: mount hidden tests only after the episode ends, flag diffs that touch test files, keep held-out test variants per task, review a sample of high-reward trajectories by hand or with a judge, and alarm when training reward climbs while held-out internal benchmarks stay flat.
+
+Ship decisions still come from held-out repos and online signals such as whether users keep the agent's diffs.
+
+**Follow-ups:** Training reward rises steadily but the held-out benchmark is flat - what do you check first? How do you assign credit across a 300-action trajectory?
+
+</details>
+
 ## How to prepare
 
 **Repo topics to go deep on, in priority order:**
@@ -329,21 +350,24 @@ Also worth naming: request dedupe/debounce at the client, regional capacity plan
 - **[11-ai-system-design](../11-ai-system-design/)** - and specifically the **[AI code assistant case study](../11-ai-system-design/case-studies/02-ai-code-assistant.md)**, which is essentially Cursor's product. Do that one until you can whiteboard the tab-latency budget and the indexing pipeline cold.
 - **[04-rag-and-retrieval](../04-rag-and-retrieval/)** - codebase context retrieval (chunking by AST, hybrid search, incremental indexing) is core product tech and prime interview material.
 - **[08-inference-and-production](../08-inference-and-production/)** - KV/prefix caching, quantization, speculative decoding, batching-vs-latency. They train and serve their own models; cost/latency fluency is a differentiator.
-- **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - agent mode, background agents, and Bugbot are where they're hiring; harness design (checkpoints, sandboxing, feedback loops) maps directly.
+- **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - agent mode, cloud agents, the agent harness, and Bugbot are where they're hiring; harness design (checkpoints, sandboxing, feedback loops) maps directly.
 - **[07-evaluation-and-observability](../07-evaluation-and-observability/)** - they post roles specifically in Agent Evaluation; know acceptance-rate-style online metrics and execution-based offline evals for code.
 - **[13-interview-process-and-behavioral](../13-interview-process-and-behavioral/)** - the trial is a two-day behavioural interview disguised as work; scoping, communication, and demo skills decide it.
 
 **Company-specific prep moves:**
 
-1. **Use Cursor seriously for at least a few weeks** - daily, on real projects, including tab, inline edit, agent mode, and Bugbot. Multiple public reports say inauthentic usage is detectable within minutes and is the most common failure mode. Keep a running list of three things you'd fix and one feature you'd build; that list is your product-round answer and your work-trial project shortlist.
-2. **Read their engineering blog** (cursor.com/blog) - they've published unusually technical posts on their tab model, fast-apply/speculative edits, and background-agent infrastructure. Interview problems rhyme with what they write about.
+1. **Use Cursor seriously for at least a few weeks** - daily, on real projects, including tab, inline edit, agent mode with Composer, parallel and cloud agents in the Cursor 3 interface, and Bugbot. Multiple public reports say inauthentic usage is detectable within minutes and is the most common failure mode. Keep a running list of three things you'd fix and one feature you'd build; that list is your product-round answer and your work-trial project shortlist.
+2. **Read their engineering blog** (cursor.com/blog) - they've published unusually technical posts on their tab model, fast-apply/speculative edits, background/cloud-agent infrastructure, and how Composer is trained. Interview problems rhyme with what they write about.
 3. **Rehearse the work trial format:** pick a large unfamiliar open-source codebase, give yourself one day, and ship a small end-to-end feature with a demo. The skill of ramping into strange code fast is trainable and is exactly what the trial measures.
 4. **Prepare latency-budget fluency:** be able to decompose "100ms perceived" into network, queueing, prefill, and decode, with realistic numbers. Their design rounds reportedly reward this specificity.
 5. **Clarify trial logistics up front** - duration, payment, and IP terms have varied across public reports; asking directly is professional and protects you.
 
 ## Sources
 
-- [Cursor careers page](https://cursor.com/careers) - role titles, culture statements (consulted July 2026)
+- [Cursor careers page](https://cursor.com/careers) - role titles, culture statements (consulted October 2026)
+- [Cursor blog - Composer 2](https://cursor.com/blog/composer-2) - in-house agentic coding model, continued pretraining plus RL on long-horizon tasks (March 2026)
+- [Cursor blog - Cursor 3](https://cursor.com/blog/cursor-3) - agent-first interface, parallel local and cloud agents (April 2026)
+- [TechPrep: Cursor's interview process (2026)](https://www.techprep.app/blog/cursor-interview-process) - third-party; stage-dependent AI-tool policy and paid project-day reports
 - [Business Insider coverage (AOL syndication): Cursor's recruiting and two-day work trial, quoting CEO Michael Truell on the a16z podcast](https://www.aol.com/news/cursor-courted-top-engineers-flying-070128578.html)
 - [Lenny's Podcast: "The rise of Cursor" - Michael Truell on hiring and the work trial](https://www.lennysnewsletter.com/p/the-rise-of-cursor-michael-truell)
 - [a16z on X, summarising Truell on the two-day onsite ("Can they go end-to-end in the codebase?")](https://x.com/a16z/status/1987963295446475108)

@@ -32,22 +32,32 @@ Implement three evaluation building blocks:
 INTERVIEW NOTES
 ---------------
 A strong solution demonstrates:
-- WHY the naive estimator (fraction of tasks where any of the first k samples
-  pass) is biased for k < n, and why the combinatorial form fixes it.
+- WHY the alternatives are worse. Drawing exactly k samples and checking for
+  a pass is unbiased but high-variance and wastes the other n - k samples.
+  The plug-in 1 - (1 - c/n)**k uses all n but is biased: it systematically
+  UNDERESTIMATES pass@k (Chen et al., appendix A). The combinatorial form is
+  unbiased and uses every sample.
 - Numerical maturity: C(200, 100) ~ 9e58 still fits in float64, but
-  C(2000, 1000) ~ 2e600 overflows it (float64 max ~1.8e308); the product form
-  never leaves [0, 1].
-- Knowing the official SQuAD normalization steps by heart - most homegrown
-  F1 implementations forget article stripping and get systematically lower
-  scores than reported baselines.
-- Position bias is THE failure mode of pairwise LLM judges; swapping answer
-  order and requiring agreement is the standard mitigation.
+  C(2000, 1000) ~ 2e600 overflows it (float64 max ~1.8e308), so a
+  numpy/scipy.special.comb version returns inf / inf = nan. Python's exact
+  ints hide the problem in tests; the product form never leaves [0, 1].
+- Knowing the official SQuAD normalization (lowercase, strip punctuation,
+  drop articles, collapse whitespace) by heart. A homegrown F1 that skips a
+  step scores differently from the official script, so its numbers cannot be
+  compared with published baselines.
+- Position bias is the best-documented failure mode of pairwise LLM judges;
+  swapping answer order and requiring agreement is the standard mitigation.
+  Verbosity bias and self-preference (a judge favouring its own model
+  family) need separate controls.
 Common mistakes: pass@k returning >1 or negative for edge cases (c=0, c=n,
 n-c<k); F1 using set intersection instead of multiset (double-counted tokens);
-judge harness trusting a single ordering; parsing judge output with equality
-instead of tolerant matching.
-Follow-ups: confidence intervals on pass@k via bootstrap; length-bias
-controls for judges; Elo aggregation across many model pairs; agreement
+judge harness trusting a single ordering; parsing free-text judge output
+with strict equality (tolerant matching helps, a schema-constrained verdict
+field removes the problem); silently scoring an unparseable verdict as a tie
+or a loss instead of surfacing it.
+Follow-ups: confidence intervals on pass@k via bootstrap over tasks;
+length-bias controls for judges; Bradley-Terry (rather than online Elo)
+aggregation across many model pairs, which is order-independent; agreement
 metrics (Cohen's kappa) between judge and humans.
 """
 
@@ -178,7 +188,17 @@ if __name__ == "__main__":
     for n, c, k in [(20, 7, 5), (100, 13, 10), (50, 50, 25), (30, 1, 30)]:
         exact = 1.0 - math.comb(n - c, k) / math.comb(n, k)
         assert abs(pass_at_k(n, c, k) - exact) < 1e-12     # matches comb form
-    assert 0.0 <= pass_at_k(2000, 3, 100) <= 1.0           # stable at scale
+    # Stable at scale: matches the exact big-int ratio where float64 comb overflows.
+    for n, c, k in [(2000, 3, 100), (2000, 10, 1000)]:
+        exact = 1.0 - math.comb(n - c, k) / math.comb(n, k)   # Python ints, exact
+        assert abs(pass_at_k(n, c, k) - exact) < 1e-12
+    try:
+        float(math.comb(2000, 1000))
+        assert False, "C(2000, 1000) should not fit in float64"
+    except OverflowError:
+        pass
+    # The plug-in estimator 1 - (1 - c/n)**k is biased low; the unbiased one is not.
+    assert 1.0 - (1.0 - 2 / 5) ** 2 < pass_at_k(5, 2, 2)  # 0.64 < 0.70
     try:
         pass_at_k(5, 6, 1); assert False
     except ValueError:
@@ -219,5 +239,12 @@ if __name__ == "__main__":
     biased = pairwise_eval(lambda prompt: "FIRST", examples, rubric="anything")
     assert biased.inconsistent == 3 and biased.wins_a == 0
     assert abs(biased.win_rate_a - 0.5) < 1e-12            # bias doesn't inflate A
+
+    # 5. An unparseable verdict raises instead of being scored as something.
+    try:
+        pairwise_eval(lambda prompt: "Both answers have merit.", examples[:1], "x")
+        assert False, "free-text verdict must not be silently scored"
+    except ValueError:
+        pass
 
     print("All tests passed.")

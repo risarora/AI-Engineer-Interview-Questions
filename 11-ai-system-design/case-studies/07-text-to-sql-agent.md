@@ -10,7 +10,7 @@ Design a natural-language analytics agent over an enterprise data warehouse (Sno
 
 1. **Who are the users and what's the tolerance for error?** → *Assume:* ~5,000 employees; mixed SQL-literacy. Answers inform decisions, so correctness > coverage: the system should refuse/clarify rather than guess. Analysts will inspect SQL; execs won't.
 2. **Warehouse shape?** → *Assume:* ~10,000 tables / 150,000 columns across raw, staging, and curated layers; ~300 well-modelled curated tables (dbt marts) cover ~80% of real questions; documentation quality is uneven.
-3. **Is there a semantic layer?** → *Assume:* partial - some certified metric definitions (dbt metrics / LookML-class) exist for ~50 core metrics. This matters enormously; a candidate who asks this question signals experience.
+3. **Is there a semantic layer?** → *Assume:* partial - some certified metric definitions (dbt Semantic Layer / MetricFlow, LookML-class) exist for ~50 core metrics. This matters enormously; a candidate who asks this question signals experience.
 4. **Latency expectations?** → *Assume:* p50 ≤ 15s, p95 ≤ 60s end-to-end including warehouse execution - chat-analytics, not dashboards.
 5. **Write access?** → *Never.* Read-only by construction, plus per-user row/column-level security must hold (the agent must not become a permission bypass).
 6. **Volume?** → *Assume:* 20k questions/day steady state, 3× at quarter-end.
@@ -98,17 +98,23 @@ import sqlglot
 from sqlglot import exp
 
 def validate(sql: str, catalog, dialect="snowflake") -> str:
-    tree = sqlglot.parse(sql, dialect=dialect)          # raises on syntax error
-    if len(tree) != 1 or not isinstance(tree[0], (exp.Select, exp.With)):
-        raise Rejected("single SELECT/WITH statements only")
+    try:
+        tree = sqlglot.parse(sql, dialect=dialect)
+    except sqlglot.errors.ParseError as e:
+        raise Retryable(f"syntax error: {e}")            # model can fix this
+    if len(tree) != 1 or not isinstance(tree[0], exp.Query):
+        raise Rejected("single read query only")        # SELECT, WITH ... SELECT, UNION
 
     stmt = tree[0]
-    for node in stmt.walk():                             # deny side effects
-        if isinstance(node, (exp.Insert, exp.Update, exp.Delete,
-                             exp.Drop, exp.Alter, exp.Create, exp.Command)):
-            raise Rejected(f"disallowed statement: {type(node).__name__}")
+    banned = (exp.Insert, exp.Update, exp.Delete, exp.Merge,
+              exp.Drop, exp.Alter, exp.Create, exp.Command)
+    for node in stmt.find_all(*banned):                  # e.g. DML inside a CTE
+        raise Rejected(f"disallowed statement: {type(node).__name__}")
 
+    cte_names = {cte.alias_or_name for cte in stmt.find_all(exp.CTE)}
     for table in stmt.find_all(exp.Table):               # hallucination check
+        if not table.db and table.name in cte_names:
+            continue                                     # CTE reference, not a table
         if not catalog.exists(table.db, table.name):
             raise Retryable(f"unknown table: {table.sql()}")   # feed back to model
 
@@ -138,7 +144,7 @@ def generate_with_repair(question, ctx, max_attempts=3):
             return sql, result
         except Retryable as e:
             error_ctx = accumulate(error_ctx, sql, e)  # keep ALL prior attempts
-            if attempt == 1:                           # round 2: widen retrieval
+            if attempt == 1:                           # before the final round: widen retrieval
                 ctx = ctx.re_retrieve(extra_terms=e.schema_terms())
     return honest_failure(question, error_ctx)         # best attempt + why it failed
 ```
@@ -159,12 +165,12 @@ Also handle the subtle leak: **error messages and result metadata can disclose d
 
 Classify before generating: is the question (a) unambiguous, (b) minor-assumption ("assume calendar quarters" - proceed and state it), or (c) materially ambiguous ("revenue" with three definitions - ask). Implement as a lightweight first LLM pass:
 
-```json
+```jsonc
 // "How did revenue do last quarter for big accounts?"
 {
   "status": "clarify",
   "assumptions_ok": [
-    {"term": "last quarter", "assume": "2026-Q2 (calendar)"}
+    {"term": "last quarter", "assume": "2026-Q3 (calendar)"}
   ],
   "must_clarify": {
     "term": "revenue",
@@ -174,7 +180,7 @@ Classify before generating: is the question (a) unambiguous, (b) minor-assumptio
 }
 ```
 
-The routing rule: ambiguity is *material* only if the candidate interpretations would produce meaningfully different SQL (different tables/metrics), which the classifier can check against the retrieved schema slice - "big accounts" is material if both a `segment` enum and an ARR threshold convention exist. Over-clarifying kills the product (users leave after two rounds of questions); under-clarifying ships wrong numbers. Tune the boundary with product: default to *at most one* clarifying question, then proceed with stated assumptions rendered visibly in the answer ("Assuming calendar Q2 and ARR - tap to change"). Log every assumption made - assumption-mismatch is a top source of "wrong" answers that are actually mis-specified questions.
+The routing rule: ambiguity is *material* only if the candidate interpretations would produce meaningfully different SQL (different tables/metrics), which the classifier can check against the retrieved schema slice - "big accounts" is material if both a `segment` enum and an ARR threshold convention exist. Over-clarifying kills the product (users leave after two rounds of questions); under-clarifying ships wrong numbers. Tune the boundary with product: default to *at most one* clarifying question, then proceed with stated assumptions rendered visibly in the answer ("Assuming calendar Q3 and ARR - tap to change"). Log every assumption made - assumption-mismatch is a top source of "wrong" answers that are actually mis-specified questions.
 
 ## Data & context strategy
 
@@ -185,7 +191,7 @@ The routing rule: ambiguity is *material* only if the candidate interpretations 
 
 ## Evaluation plan
 
-1. **Golden set with execution-accuracy scoring:** 300-500 questions written with the analytics team, each with verified reference SQL + expected result *semantics*. Score by **executing both queries and comparing result sets** - not by string-matching SQL, since many different queries are correct. This is the standard Spider/BIRD-style execution-accuracy methodology applied to your own warehouse.
+1. **Golden set with execution-accuracy scoring:** 300-500 questions written with the analytics team, each with verified reference SQL + expected result *semantics*. Score by **executing both queries and comparing result sets** - not by string-matching SQL, since many different queries are correct. This is the standard Spider/BIRD-style execution-accuracy methodology applied to your own warehouse. Public leaderboard numbers do not transfer: the original Spider is saturated, and even enterprise-scale benchmarks such as Spider 2.0 differ from your schema, conventions and data quality, so only your own golden set tells you whether to ship.
 
 ```python
 def execution_match(pred_rows, ref_rows, float_tol=1e-6) -> bool:
@@ -193,7 +199,8 @@ def execution_match(pred_rows, ref_rows, float_tol=1e-6) -> bool:
     if len(pred_rows) != len(ref_rows):
         return False
     norm = lambda rows: sorted(
-        tuple(sorted(round_floats(r.values(), float_tol))) for r in rows
+        (tuple(sorted(round_floats(r.values(), float_tol), key=repr)) for r in rows),
+        key=repr,                                    # mixed types (str/int/None) sort safely
     )
     return norm(pred_rows) == norm(ref_rows)
 ```
@@ -214,7 +221,7 @@ Per question, average 1.4 generation calls (self-correction included):
 - Answer synthesis (small model, result table ~1k tokens): ~$0.0005
 - **≈ $0.032/question → 20k/day ≈ $640/day ≈ ~$19k/month.**
 
-Offline: table-card generation for 10k tables ≈ one-time ~$100-300 on a batch API (~2k in / 300 out per table at batch prices), refreshed incrementally.
+Offline: table-card generation for 10k tables at ~2k in / 300 out per table ≈ 20M in + 3M out → ~$50 one-time at frontier batch prices (~$1.50/M in, ~$7.50/M out), refreshed incrementally. The real cost is analyst time reviewing the top-used cards, not tokens.
 
 **The number to say out loud:** warehouse compute usually rivals or exceeds LLM spend - 20k questions × 1.5 executions × even ~$0.02-0.10/query of scan cost = $600-3,000/day. That's why the dry-run byte-cap and partition-filter enforcement are cost features, not just safety features, and why result caching (identical/similar questions at quarter-end) pays for itself.
 
@@ -248,3 +255,4 @@ Offline: table-card generation for 10k tables ≈ one-time ~$100-300 on a batch 
 4. **"What breaks when two tables both plausibly answer the question but disagree?"** - Detect via retrieval returning near-duplicate candidates with different freshness/lineage; prefer certified/curated lineage, surface the choice ("using `fct_revenue` (certified); `raw_billing` also matched"), and file the conflict to the data team - the agent is now a data-quality detector.
 5. **"How do you keep this from becoming a DDoS on your data team's trust?"** - Governance loop: every flagged answer triaged weekly, wrong-answer taxonomy tracked, metric-layer coverage expanded where questions cluster, and the data team owns the certified layer the agent prefers - the agent's quality becomes an incentive to invest in the semantic layer.
 6. **"A user asks a question whose correct answer requires a table they lack access to. What should happen?"** - The query fails at the credential layer; the answer must not confirm the table's existence or contents beyond what the user's grants allow. Respond with "you don't have access to data required for this question, request access to <dataset>" only if dataset *names* are non-sensitive in your org - otherwise a generic denial plus an access-request pathway. Never fall back to an agent-privileged role "just for aggregates" - that's the bypass.
+7. **"Your warehouse vendor now ships its own NL-to-SQL agent (Snowflake Cortex Analyst, Databricks Genie-class), and other teams want their agents to call yours over MCP. Build, buy, or both?"** - The generation call was never the moat: the semantic layer, verified example store, golden set and permission model are. Run the vendor agent against your golden set before deciding - native agents inherit engine-side governance with no extra data movement, but they tie you to one warehouse and still need your certified metrics and evals to be trustworthy. If you expose your agent as an MCP server, offer coarse, safe tools (`ask_question`, `get_certified_metric`) rather than raw `execute_sql`, carry the end user's identity through delegated OAuth so warehouse RLS applies to the human behind the calling agent (never a shared service token), and return SQL plus provenance so the caller can cite it. Treat the calling agent as an untrusted client: its questions can carry instructions injected by whatever it read upstream.

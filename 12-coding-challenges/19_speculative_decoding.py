@@ -54,17 +54,22 @@ A strong solution demonstrates:
   Raising the batch size makes the target pass compute-bound, the spare
   arithmetic disappears and the wasted work becomes real time: a latency
   optimisation for small-batch serving that can cut throughput on a saturated
-  server. Too big a draft pays its own latency gamma times per step; too weak
-  a draft drives a towards zero.
+  server. The exception is long context, where KV-cache reads keep even large
+  batches memory-bound and speculation can pay again. Too big a draft pays its
+  own latency gamma times per step; too weak a draft drives a towards zero.
+  Serving engines therefore tune gamma per workload or adapt it at runtime.
 Common mistakes: resampling from p rather than the residual after a rejection
 (nothing crashes, output silently drifts towards what the draft over-proposes);
 accepting on argmax agreement, defensible only at temperature 0 and still
 biased once you sample; forgetting the bonus token; not rolling back BOTH KV
 caches past the rejected position; measuring the win in FLOPs.
 Follow-ups: tree or multi-candidate drafting; n-gram or prompt-lookup drafting
-with no draft model at all; self-speculation via early-exit layers; lenient
-acceptance thresholds that buy speed by giving up exactness; ragged batching
-when sequences accept different numbers of tokens. References: Leviathan et
+with no draft model at all; self-speculation via early-exit layers; draft
+heads on the target's own hidden states (Medusa, EAGLE) and multi-token
+prediction heads trained with the model (DeepSeek-V3), both of which often
+replace a separate draft model in production; lenient acceptance
+thresholds that buy speed by giving up exactness; ragged batching when
+sequences accept different numbers of tokens. References: Leviathan et
 al., 2023, "Fast Inference from Transformers via Speculative Decoding"; Chen
 et al., 2023, "Accelerating Large Language Model Decoding with Speculative
 Sampling".
@@ -204,6 +209,22 @@ if __name__ == "__main__":
     assert z_scores(naive).max() > 10.0, "naive variant should fail 3 sigma"
     top = int(np.argmax(p_row))
     assert abs(naive[top] / TRIALS - (q_row[top] + (1 - q_row[top]) * p_row[top])) < 0.01
+
+    #    Position 1 with gamma=2 goes through accept/reject too, so it checks that
+    #    row i of the target pass is paired with draft step i. Given an accepted
+    #    first token x, the second must follow p(. | x) = target.table[x]. Pairing
+    #    every drafted token with row 0 passes the test above and fails this one.
+    rng = np.random.default_rng(29)
+    obs, expect, var = np.zeros(VOCAB), np.zeros(VOCAB), np.zeros(VOCAB)
+    for _ in range(60_000):
+        out, _ = speculative_step(target.batch_probs, base_draft.next_probs, PREFIX, 2, rng)
+        if len(out) >= 2:
+            p_next = target.table[out[0]]
+            obs[out[1]] += 1
+            expect += p_next
+            var += p_next * (1.0 - p_next)
+    assert obs.sum() > 20_000  # enough accepted first tokens to mean something
+    assert (np.abs(obs - expect) / np.sqrt(var)).max() < 3.0
 
     def acceptance_rate(draft: TableModel, steps: int = 4000) -> float:
         """Fraction of gamma=1 proposals accepted, so output length 2 not 1."""

@@ -118,9 +118,13 @@ General guidance only - do your own research with current data:
 - **Comp research sources**: levels.fyi, H-1B salary disclosures (public record in the US), recruiter conversations at peer companies, and simply asking your network. Never negotiate from a single data point.
 - **Non-comp terms that matter in AI roles**: compute/GPU access, publication policy, IP carve-outs for side projects, on-call expectations, and remote policy. For research-adjacent roles, publication rights can be worth more than a pay bump for your long-term market value.
 
+## Mock interviews and mentorship
+
+Reading answers is not the same as giving them under pressure. Before a real loop, run at least one full mock: use the [mock interview kit](mock-interview-kit.md) with a friend, or book a session with an experienced interviewer for honest scoring and a prep plan built around your gaps, at [enginebogie.com/u/om](https://enginebogie.com/u/om) or [topmate.io/ombharatiya](https://topmate.io/ombharatiya).
+
 ## Interview questions
 
-22 behavioural and experience questions specific to AI work, with answer guidance, in [questions.md](questions.md).
+42 behavioural and experience questions specific to AI work, with answer guidance, in [questions.md](questions.md).
 
 ## Red flags interviewers watch for
 

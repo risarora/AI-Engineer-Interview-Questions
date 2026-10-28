@@ -1,10 +1,10 @@
 # 📏 Scale AI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- Typical loop: recruiter screen → timed HackerRank coding screen → hiring-manager screen → virtual onsite of 4-5 rounds (coding, object-oriented/applied design, debugging, system design, behavioural). ML roles often add a take-home (CV or NLP, ~1 week) and ML deep-dive rounds.
+- Typical loop: recruiter screen → timed HackerRank coding screen → hiring-manager screen → virtual onsite of 4-5 rounds (coding, object-oriented/applied design, debugging, system design, behavioural). ML roles often add a take-home (CV or NLP, ~1 week) and ML deep-dive rounds. Mid-2026 prep guides describe the debugging round as a now-standard onsite fixture (unfamiliar code, a failing test, ~45 minutes, explain as you go) and the whole process as about three weeks from first call to offer (reported, varies).
 - System design is **not generic web-scale trivia** - expect their actual problems: data labelling platforms, human-in-the-loop pipelines, LLM evaluation systems, RAG backends, multi-tenant data isolation.
 - ML deep dives cover transformers/attention, decoding, post-training (SFT/RLHF/DPO/RLVR), evaluation methodology, and adversarial robustness; some candidates report a research-paper discussion round.
 - The behavioural round is a genuine filter: Scale's published credos ("Ownership is the job," "Results speak loudest," and a broader emphasis on truth-seeking and high standards) translate into probing for urgency, extreme ownership, and comfort with intensity. A relaxed, process-heavy vibe reads badly here.
@@ -40,7 +40,7 @@ Scale does not publish an official interview guide; the picture below is assembl
 | ML take-home | CV or NLP task, ~1 week | Practical modelling, code quality, evaluation rigour. ML roles only. (reported, varies) |
 | Onsite: coding (x1-2) | 1 hr each | Medium-hard DSA; interval/scheduling patterns show up in reports; speed and edge cases. |
 | Onsite: applied / OOD | 1 hr | Object-oriented modelling of a stateful system (card/poker-game simulators are a recurring reported theme); extensibility, state management. (reported, varies) |
-| Onsite: debugging | ~1 hr | Finding logic bugs in an unfamiliar codebase within the hour. (reported, varies) |
+| Onsite: debugging | ~45-60 min | Finding logic bugs in an unfamiliar codebase, often starting from a failing test, while narrating your reasoning. Described as standard in mid-2026 reports. (reported, varies) |
 | Onsite: system design | 1 hr | Their real problems: labelling platforms, human-in-the-loop orchestration, LLM eval systems, RAG backends, multi-tenant isolation, data flywheels. |
 | Onsite: ML deep dive | 1 hr (ML roles) | Transformers/attention, decoding, post-training (SFT/RLHF/DPO), evals, adversarial attacks; sometimes a paper discussion. (reported, varies) |
 | Onsite: behavioural | 45-60 min | Values fit: ownership, urgency, results orientation, customer focus. |
@@ -177,7 +177,7 @@ def peak_load(sessions: list[tuple[int, int]]) -> tuple[int, list[tuple[int, int
     return peak, intervals
 ```
 
-Edge cases to raise unprompted: does a session ending at *t* overlap one starting at *t*? The sort key `(t, delta)` processes ends first, treating [1,5) and [5,9) as non-overlapping - state the convention and ask. Empty input (return `(0, [])`), zero-length sessions, and duplicate timestamps all fall out correctly. Second pass could be fused into the first by collecting candidate intervals whenever `cur == peak`, but two clean passes beat one clever one under interview time pressure.
+Edge cases to raise unprompted: does a session ending at *t* overlap one starting at *t*? The sort key `(t, delta)` processes ends first, treating [1,5) and [5,9) as non-overlapping - state the convention and ask. Empty input (return `(0, [])`) and duplicate timestamps fall out correctly. Filter zero-length sessions up front: the ends-first ordering processes their end before their start, which briefly dips the counter and can split one peak interval into two. Second pass could be fused into the first by collecting candidate intervals whenever `cur == peak`, but two clean passes beat one clever one under interview time pressure.
 
 Interval/scheduling patterns recur in Scale candidate reports because they mirror the real domain: annotator capacity planning, task-queue load, overlapping labelling shifts.
 
@@ -346,6 +346,7 @@ Name the constraint first: this data cannot be scraped. It is produced one inter
 
 - https://www.tryexponent.com/blog/scale-ai-interview-process
 - https://www.techprep.app/blog/scale-ai-interview-process
+- https://www.techinterview.org/post/3233476369/scale-ai-interview-after-meta-deal/ (July 2026: debugging round now standard, ~3-week timeline)
 - https://dataford.io/interview-guides/scale/ai-engineer
 - https://www.interviewquery.com/interview-guides/scaleai-machine-learning-engineer
 - https://scale.com/careers/4593571005 (Forward Deployed Engineer, GenAI posting)

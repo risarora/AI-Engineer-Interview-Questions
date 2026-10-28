@@ -1,18 +1,18 @@
 # 🎙️ ElevenLabs - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - Reported loop is five stages: recruiter screen, async coding screen (~90 min on CoderPad, 2-3 practical problems), project deep-dive/behavioural, a live practical coding round framed as a customer problem, and a **Product Decomposition** round. The official careers page adds that most processes end with a founder or Bar Raiser conversation.
 - **Product Decomposition is the round candidates fail.** It is not infra system design. You get a messy real-world workflow and must decompose it into UI, API, data model and backend, then defend the trade-offs. One publicly shared Forward Deployed Engineer report describes the interviewer role-playing an airline CTO whose team reschedules flights by hand.
-- Before your first live recruiter call you may meet an **ElevenLabs conversational agent**. The company has publicly described voice agents cloned from two of its own recruiters that answer candidate questions ahead of the human screen. Treat it as an FAQ, not a scored stage (reported, varies).
-- Coding leans practical: data manipulation, API logic, "build something a customer would actually use." One report describes live Python in a Google Doc rather than an IDE (reported, varies). Individual ownership is weighted heavily throughout - team-level language is explicitly discounted in several reports.
-- Public loop information is **moderate**: third-party guides broadly agree on the five stages, plus a small number of first-hand candidate write-ups. Timeline is reported at roughly 3-5 weeks, with at least one report closer to six. Treat stage details as "reported, varies" and confirm with your recruiter.
+- Before your first live recruiter call you may meet an **ElevenLabs conversational agent**. The company has publicly described voice agents cloned from two of its own recruiters that answer candidate questions ahead of the human screen (2026 guides name them Becky and Oscar). Treat it as an FAQ, not a scored stage (reported, varies).
+- Coding leans practical: data manipulation, API logic, "build something a customer would actually use." One report describes live Python in a Google Doc rather than an IDE (reported, varies). But at least one 2026 software-engineer guide describes the async screen as two LeetCode-medium problems plus a separate 60-minute live algorithmic screen (tree traversal, cycle detection, string manipulation) before the virtual onsite, so do not skip standard medium problems (reported, varies). Individual ownership is weighted heavily throughout - team-level language is explicitly discounted in several reports.
+- Public loop information is **moderate**: third-party guides broadly agree on the five stages, plus a small number of first-hand candidate write-ups. Timeline is reported at roughly 2-5 weeks, with at least one report closer to six. Treat stage details as "reported, varies" and confirm with your recruiter.
 
 ## Company context
 
-ElevenLabs builds audio AI: text to speech, speech to text (Scribe), voice cloning, dubbing, music, and an Agents platform that stitches ASR, an LLM and TTS into real-time voice agents over web and telephony. The technical centre of gravity is **latency under a hard real-time deadline** - their own guidance targets sub-700 ms end-to-end for natural conversation, with Flash v2.5 quoted at roughly 75 ms model inference and Scribe v2 Realtime at 30-80 ms. "AI engineer" here rarely means training foundation models; outside the research group it means shipping product on top of speech models fast, usually full-stack, often with a customer on the call. The company is a heavy hirer of **Forward Deployed Engineers** and Enterprise Solutions Engineers across dozens of countries, and the interview loop is shaped around that: can you take an ambiguous customer workflow and ship an end-to-end thing that works.
+ElevenLabs builds audio AI: text to speech, speech to text (Scribe), voice cloning, dubbing, music, and an Agents platform that stitches ASR, an LLM and TTS into real-time voice agents over web and telephony. The technical centre of gravity is **latency under a hard real-time deadline** - their own guidance targets sub-700 ms end-to-end for natural conversation. As of October 2026 the models docs list Flash v2.5 at roughly 75 ms model inference, **Eleven v4 Turbo** as the most expressive real-time model at a median of roughly 100 ms across 90+ languages, Eleven v3 Conversational at roughly 280 ms, and Scribe v2 Realtime partial transcripts at roughly 150 ms (its launch post quoted 30-80 ms). Eleven v3 itself went GA in February 2026 as the expressive but non-real-time flagship. "AI engineer" here rarely means training foundation models; outside the research group it means shipping product on top of speech models fast, usually full-stack, often with a customer on the call. The company is a heavy hirer of **Forward Deployed Engineers** and Enterprise Solutions Engineers across dozens of countries, and the interview loop is shaped around that: can you take an ambiguous customer workflow and ship an end-to-end thing that works.
 
 ## Roles & titles they hire
 
@@ -39,13 +39,14 @@ Public information is moderate. There is no official process page beyond a short
 |---|---|---|
 | Recruiter agent (pre-screen) | Self-serve conversation with an ElevenLabs voice agent modelled on a real recruiter | Not a scored stage. Answers process, benefits and culture questions before the human call (reported, varies) |
 | Recruiter screen | ~30 min call, sometimes with the head of HR | Background, motivation, genuine interest in audio, and specifically what *you* built end to end |
-| Async coding screen | ~90 min timed, CoderPad, reported as 2-3 medium to medium-hard problems. Some reports describe a CodeSignal-style 3-question hour instead | Practical data manipulation and API logic rather than algorithm puzzles. Front-end tracks may get a React take-home (reported, varies) |
+| Async coding screen | ~60-90 min timed, CoderPad, reported as 2-3 medium to medium-hard problems. Some reports describe a CodeSignal-style 3-question hour instead | Practical data manipulation and API logic rather than algorithm puzzles. Front-end tracks may get a React take-home (reported, varies) |
+| Live technical screen (some 2026 reports) | ~60 min live with a peer engineer | Algorithmic problem-solving such as tree traversal, cycle detection and string manipulation. Not every report includes this stage (reported, varies) |
 | Project deep-dive / behavioural | 45-60 min | Projects you personally led. Probes decisions, failures, cost, deployment. Side projects with real users reportedly land well (reported, varies) |
 | Practical coding | ~60 min live, framed as a customer problem | Requirements clarification then working code, usually Python. One report describes coding in a Google Doc, not an IDE (reported, varies) |
 | Product decomposition | ~60 min, no code | Decompose a workflow into UI, API, data model and backend, and defend trade-offs. One FDE report: interviewer role-plays an airline CTO with manual flight rescheduling (reported, varies) |
 | Final: hiring manager, founder or Bar Raiser | Conversation | The careers page states most processes end with a founder or Bar Raiser round |
 
-Reported timeline is roughly 3-5 weeks, with at least one first-hand account nearer six. Candidate sentiment on Glassdoor is mixed: interviews are rated moderately difficult, and the recurring complaints are patchy communication between rounds and rejections without feedback. Drive the process actively and ask for timelines in writing.
+Reported timeline is roughly 2-5 weeks, with at least one first-hand account nearer six. For account executive roles, 2026 guides report that the CEO personally holds the final conversation (reported, varies). Candidate sentiment on Glassdoor is mixed: interviews are rated moderately difficult, and the recurring complaints are patchy communication between rounds and rejections without feedback. Drive the process actively and ask for timelines in writing.
 
 ## What they emphasise
 
@@ -69,9 +70,9 @@ Name the target first. ElevenLabs' public guidance puts natural conversation bel
 In a cascade the floors add, so budget term by term:
 
 - **Turn detection.** Silence-based VAD costs whatever hangover you configure, commonly 200-500 ms. This is usually the cheapest place to buy time back, which is why semantic turn prediction using prosody and syntax beats a fixed silence timer.
-- **ASR finalisation.** Scribe v2 Realtime is quoted at 30-80 ms.
+- **ASR finalisation.** Scribe v2 Realtime was quoted at 30-80 ms at launch, and the current models docs give roughly 150 ms for partial transcripts. Measure it on your own audio rather than trusting either number.
 - **LLM time-to-first-token.** ElevenLabs' own writing calls this the single biggest contributor in most systems. Model choice and system prompt length are your levers.
-- **TTS time-to-first-audio.** Flash v2.5 is quoted at ~75 ms model inference, with ~135 ms end-to-end to first audio byte.
+- **TTS time-to-first-audio.** Flash v2.5 is quoted at ~75 ms model inference, with ~135 ms end-to-end to first audio byte. Eleven v4 Turbo, the more expressive real-time option, is quoted at a median of ~100 ms.
 - **Network.** 20-200 ms per hop depending on geography, largely irreducible.
 - **Player jitter buffer.** A 500 ms buffer is common and can silently dominate everything above it.
 
@@ -82,7 +83,7 @@ The difference from text TTFT is the deadline that starts *after* the first toke
 ```mermaid
 flowchart LR
     A["User stops speaking"] --> B["Turn detection<br/>VAD plus semantic"]
-    B --> C["ASR finalise<br/>30-80 ms"]
+    B --> C["ASR finalise<br/>~30-150 ms"]
     C --> D["LLM TTFT<br/>usually the largest term"]
     D --> E["TTS first audio<br/>~75 ms inference"]
     E --> F["Jitter buffer<br/>~500 ms typical"]
@@ -389,11 +390,31 @@ Text LLM serving optimises tokens per second per GPU, and you buy throughput by 
 
 **Traffic shape is different.** Agent traffic is bursty and correlated with business hours per region, and a call holds a slot for minutes rather than seconds. Autoscaling on GPU utilisation lags badly against that; scale on concurrent sessions and admission-control at the edge, because rejecting a session at connect time is far better than degrading fifty live calls.
 
-**Model tiering is the main cost lever.** Flash-class models for interactive agents, larger expressive models for asynchronous generation such as audiobooks and dubbing, which *is* a throughput problem and can be batched hard on cheaper capacity. Routing correctly between the two tiers matters more than kernel work.
+**Model tiering is the main cost lever.** Low-latency real-time models (Flash v2.5, Eleven v4 Turbo) for interactive agents, larger expressive models for asynchronous generation such as audiobooks and dubbing, which *is* a throughput problem and can be batched hard on cheaper capacity. Routing correctly between the two tiers matters more than kernel work.
 
 Also: geography. A model close to the caller saves 20-200 ms of the budget, so replication is a latency decision, not just a redundancy one.
 
 **Follow-ups:** How would you drain a region for a deploy without dropping live calls? What is your admission-control policy when demand exceeds real-time capacity by 20%?
+
+</details>
+
+### 13. A customer's voice agent runs on Flash v2.5. Product wants the newer, more expressive real-time model. How do you decide, and how do you roll it out?
+
+<details><summary><b>Answer</b></summary>
+
+Treat it as a product experiment with a latency and risk budget, not a model upgrade. In 2026 the lineup forces a real choice: Flash v2.5 at roughly 75 ms, Eleven v4 Turbo described as the most expressive real-time model at a median of roughly 100 ms, and Eleven v3 Conversational at roughly 280 ms for dramatic, multi-speaker delivery. The question is whether the expressiveness buys task outcomes worth the added milliseconds and new failure modes.
+
+**Latency.** Put the new median into the Q1 budget, but decide on p95 and p99 TTFA measured from the customer's regions over their telephony path. A 25 ms median gap is noise next to LLM TTFT, while a fatter tail is not. A 280 ms model eats much of a sub-700 ms budget on its own.
+
+**Behaviour.** Expressive models interpret text. That is the point, and also the risk: a cheerful lilt on "your claim was denied", inconsistent delivery of the same scripted line across calls, or a regulated disclosure read with the wrong emphasis. If emotion is steered by tags the LLM emits, those tags are now model output that needs guardrails, because a prompt-injected caller can influence them.
+
+**Consistency.** The same voice ID can sound different on a different model. For a brand voice, rerun cloning and voice-design checks, and get the customer to sign off on samples before any live traffic.
+
+**Evaluation.** Re-run the WER-on-own-output suite, including numbers, names and normalisation edge cases, because a new model can regress them. Then A/B on live traffic, split by call rather than by turn so a caller never hears the voice change mid-conversation. Score containment, repeat-request rate, interruption rate, abandonment and CSAT, not a naturalness rating.
+
+**Rollout.** Model choice should be per agent and ideally per intent: expressive for sales or companionship flows, Flash for authentication and payments, where clarity and predictability beat warmth. Keep instant rollback to the old model with the old voice settings.
+
+**Follow-ups:** The A/B shows higher CSAT but a small rise in "can you repeat that?". What do you ship? How would you guardrail emotion tags without flattening delivery?
 
 </details>
 
@@ -413,7 +434,7 @@ Also: geography. A model close to the caller saves 20-200 ms of the budget, so r
 **Company-specific moves:**
 
 1. **Build something on their API before the interview.** Wire up a voice agent, measure your own time-to-first-audio, break it deliberately. Public reports say side projects with real users are premium material, and "I built X and hit Y ms" is the strongest possible opener.
-2. **Read their latency material closely.** The docs page on latency, the conversational AI latency posts, the Flash and Scribe announcements. Memorise the per-stage numbers so you can build a budget out loud in Q1's shape.
+2. **Read their latency material closely.** The docs page on latency, the conversational AI latency posts, the Flash and Scribe announcements, and the current models overview, which is where newer real-time models such as Eleven v4 Turbo appear first. Memorise the per-stage numbers so you can build a budget out loud in Q1's shape.
 3. **Rehearse Product Decomposition as a format, not a topic.** Take three messy manual workflows you know, and for each produce the unit of work, data model, API, UI surface and a one-week thin slice in twenty minutes. Ask diagnostic questions before designing.
 4. **Convert every project story to first person and to shipped outcomes.** Multiple reports say interviewers actively separate your work from your team's. Have the deploy, the cost and the thing that broke ready.
 5. **If you are interviewing for FDE or Enterprise Solutions Engineer,** prepare for role-play. Practise being handed a hostile, vague customer problem and asking five sharp questions before saying a single word about architecture.
@@ -428,7 +449,8 @@ Also: geography. A model close to the caller saves 20-200 ms of the budget, so r
 - [ElevenLabs docs - Understanding latency](https://elevenlabs.io/docs/eleven-api/concepts/latency) (time-to-first-audio components, buffering, model trade-offs)
 - [ElevenLabs - How do you optimize latency for Conversational AI?](https://elevenlabs.io/blog/how-do-you-optimize-latency-for-conversational-ai) (per-stage budget and the sub-700 ms target)
 - [ElevenLabs - Scribe v2 Realtime in ElevenLabs Agents](https://elevenlabs.io/blog/scribe-v2-realtime-in-elevenlabs-agents) (30-80 ms ASR latency, FLEURS WER claim)
-- [ElevenLabs - Meet Flash](https://elevenlabs.io/blog/meet-flash) and [Models overview](https://elevenlabs.io/docs/overview/models)
+- [ElevenLabs - Meet Flash](https://elevenlabs.io/blog/meet-flash) and [Models overview](https://elevenlabs.io/docs/overview/models) (fetched October 2026; Eleven v4 Turbo ~100 ms median, Eleven v3 Conversational ~280 ms, Scribe v2 Realtime partials ~150 ms, Agents Platform model recommendations)
+- [TechPrep - ElevenLabs's interview process (2026)](https://www.techprep.app/blog/elevenlabs-interview-process) (third-party guide; recruiter agents, two-problem async screen, live algorithmic screen, 2-4 week timeline)
 - [ElevenLabs - Eleven v3](https://elevenlabs.io/blog/eleven-v3)
 - [ElevenLabs - Safety](https://elevenlabs.io/safety) (layered defences, no-go voices, AI Speech Classifier, C2PA, traceability)
 - [Exponent - ElevenLabs Forward Deployed Engineer interview experience](https://www.tryexponent.com/experiences/eleven-labs-solutions-architect-interview-ce0689) (first-hand: five rounds, airline CTO case study, Google Doc coding, six-week timeline)

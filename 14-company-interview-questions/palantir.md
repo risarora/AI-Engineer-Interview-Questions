@@ -1,10 +1,10 @@
 # 🔮 Palantir - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- Reported loop: recruiter screen (a real filter, not a formality - motivation and mission alignment) → technical phone screen (~60 min live coding, sometimes via Karat) → ~3-hour onsite drawing 3-4 rounds from a menu of **decomposition, coding, system design, and re-engineering/learning** → hiring manager final (~45-60 min, project deep-dive + values).
+- Reported loop: recruiter screen (a real filter, not a formality - motivation and mission alignment) → technical screen (~60 min live coding, sometimes via Karat or CodePair, or a ~90 min HackerRank assessment mixing a coding problem, a SQL join-and-aggregate query and a small REST API task - reported, varies) → ~3-hour onsite drawing 3-4 rounds from a menu of **decomposition, coding, system design, and re-engineering/learning** → hiring manager final (~45-60 min, project deep-dive + values).
 - The **decomposition interview is the signature round** and the biggest differentiator: a vague, messy operational problem ("reduce unplanned downtime for a rail operator") that you must scope, constrain, and turn into a concrete engineering plan while the interviewer keeps adding constraints. LeetCode grinding does not transfer here.
 - Two engineering tracks, officially documented: **Forward Deployed Software Engineer** (internally "Delta") embeds with customers; **Software Engineer** ("Dev") builds the platform. AI engineer roles (e.g., "Forward Deployed AI Engineer") sit closer to Delta: LLM workflows on Foundry/AIP, built next to the customer.
 - The coding bar is real but practical: narrative, real-world-framed problems with messy inputs and progressive constraints; working, defensible code beats clever optimality. Python is the safe default.
@@ -12,7 +12,7 @@
 
 ## Company context
 
-Palantir builds data platforms for large institutions: Foundry (data integration + the Ontology, a semantic layer of an organisation's objects, links, and actions), Gotham (government/defence), and AIP - the Artificial Intelligence Platform that connects LLMs and agents to enterprise data and operations through the Ontology, with tooling like AIP Logic, Agent Studio, and AIP Evals. Engineers join for outsized ownership: the forward-deployed model puts you at a customer site solving a real operational problem end-to-end, often as the de-facto CTO of that deployment. "AI engineer" at Palantir means shipping production LLM workflows on top of the Ontology - pipelines, ontology-grounded RAG, agents that take governed write actions - not model research.
+Palantir builds data platforms for large institutions: Foundry (data integration + the Ontology, a semantic layer of an organisation's objects, links, and actions), Gotham (government/defence), and AIP - the Artificial Intelligence Platform that connects LLMs and agents to enterprise data and operations through the Ontology, with tooling like AIP Logic, Agent Studio, and AIP Evals. The Ontology is now also reachable from outside the platform: Ontology MCP (documented as beta) exposes an application's object types, action types and query functions as Model Context Protocol tools that external agents can call, scoped per application. Engineers join for outsized ownership: the forward-deployed model puts you at a customer site solving a real operational problem end-to-end, often as the de-facto CTO of that deployment. "AI engineer" at Palantir means shipping production LLM workflows on top of the Ontology - pipelines, ontology-grounded RAG, agents that take governed write actions - not model research.
 
 ## Roles & titles they hire
 
@@ -31,14 +31,14 @@ Palantir is unusually public about its process - the careers site has a "Getting
 | Stage | Format | What's evaluated |
 |---|---|---|
 | Recruiter screen | 30-45 min call | Motivation, mission alignment, why Palantir specifically - reportedly filters harder than most companies (reported, consistent across sources) |
-| Technical phone screen | ~60 min live coding, sometimes via Karat | 2-3 progressive problems framed as real-world narratives; requirement-gathering before coding; working code + communication (coding focus confirmed on official careers pages; details reported) |
+| Technical screen | ~60 min live coding, sometimes via Karat or CodePair; some candidates instead get a ~90 min HackerRank assessment with a coding problem, a SQL join-and-aggregate query and a small REST API task (reported, varies) | 2-3 progressive problems framed as real-world narratives; requirement-gathering before coding; working code + communication (coding focus confirmed on official careers pages; details reported) |
 | Onsite: decomposition | ~60 min, little or no code | The signature round: turn a vague real-world problem into scope, constraints, data models, and an architecture; iterate as constraints are added (widely reported, consistent) |
 | Onsite: coding | DSA with realistic constraints and messy inputs | Correctness, tradeoff discussion (caching, performance), code hygiene (reported) |
 | Onsite: system design | Standard-format architecture round | Data-heavy design, scaling, pragmatic tradeoffs (reported, varies by level/track) |
 | Onsite: re-engineering / learning | Work inside ~200-1000 lines of unfamiliar code | Reading speed, bug-finding, how fast you become productive in someone else's system (reported, varies) |
 | Hiring manager final | 45-60 min | Deep dive on past projects, values fit, unresolved concerns from earlier rounds (reported) |
 
-Onsites are typically 3 of the 4 round types, chosen per role; behavioural/values probing is woven into every round rather than isolated in one. Reported timeline: ~3-6 weeks. AI-engineer-flavoured loops reportedly add LLM system design and ML-fundamentals content on top of the standard loop, not instead of the coding bar - third-party guides agree that the candidates who fail are usually the ones who under-prepared for coding, not for AI content (reported, varies).
+Onsites are typically 3 of the 4 round types, chosen per role; behavioural/values probing is woven into every round rather than isolated in one. Reported timeline: ~3-6 weeks. AI-engineer-flavoured loops reportedly add LLM system design and ML-fundamentals content on top of the standard loop, not instead of the coding bar - third-party guides agree that the candidates who fail are usually the ones who under-prepared for coding, not for AI content (reported, varies). On AI tools: Palantir's Getting Hired pages publish no candidate AI rule, but 2026 candidate guides report that AI use is not allowed during the process; prepare with AI, interview without it (reported, varies).
 
 ## What they emphasise
 
@@ -266,6 +266,28 @@ A strong answer has three parts. First, an actual, thought-through position: Pal
 
 </details>
 
+### 13. A customer wants agents running on other vendors' platforms, outside Foundry, to read and act on their ontology over MCP. How do you expose it without losing the governance that made the ontology worth building?
+
+<details><summary><b>Answer</b></summary>
+
+Expose a narrow, scoped MCP server and enforce every guarantee on the server side, because you control nothing about the client: not its model, its prompt, or what else is in its context. Palantir's Ontology MCP (documented as beta) has this shape: an application's object types, action types and query functions become MCP tools that external agents discover and call, limited by application scopes.
+
+**Curate the tool surface.** Publish a purpose-built application, not the whole ontology: a few object types, read-only query functions, and only the action types this use case needs. Tool descriptions are now prompts to someone else's model, so write them for an unknown agent: precise parameter semantics, units, and when not to call the tool.
+
+**Identity and permissions.** The external agent acts as a specific authenticated user or a narrowly scoped service identity, and the ontology's own permissions and markings filter every result. The MCP layer must never become a super-user bridge. Application scopes cap what an agent can call even when the user could do more by hand.
+
+**Writes stay governed actions.** Mutations go only through action types with typed parameters, server-side validation and submission criteria, so a malformed or injected call fails at the action rather than in the ERP. High-impact actions keep a human approval step the external client cannot skip.
+
+**Assume the client is compromised.** External agents read untrusted email, web pages and documents, so prompt injection arrives through a channel you never see. Least-privilege scopes, rate and volume limits on reads (bulk exfiltration looks like pagination), and query functions that return answers rather than whole tables are the defences that do not depend on the client behaving.
+
+**Audit and evaluate.** Log every call with client, user, tool, parameters and result, and replay realistic agent sessions against a staging branch before widening scopes.
+
+The tradeoff to name: MCP brings the ontology to wherever users already work, which drives adoption, but you give up control of the prompt and the model. Governance has to live entirely in the tools.
+
+**Follow-ups:** How would you detect an external agent slowly exfiltrating data through many small, individually permitted reads? Which actions would you refuse to expose over MCP at all, and why?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -282,7 +304,7 @@ A strong answer has three parts. First, an actual, thought-through position: Pal
 **Company-specific moves:**
 
 1. Read Palantir's own "Getting Hired" pages end-to-end - they publish per-stage guidance most companies keep internal - plus the official blog posts "Interviewing at Palantir" and "Dev versus Delta," and decide which track you're actually interviewing for before the recruiter call.
-2. Read the public AIP and Foundry docs (Ontology, AIP Logic, Agent Studio, AIP Evals) until you can explain the ontology → LLM → governed action loop in your own words; it's the vocabulary of every AI design conversation there.
+2. Read the public AIP and Foundry docs (Ontology, AIP Logic, Agent Studio, AIP Evals, Ontology MCP) until you can explain the ontology → LLM → governed action loop in your own words; it's the vocabulary of every AI design conversation there.
 3. Drill decomposition out loud: once or twice a week, take a messy operational problem (hospital bed allocation, port congestion, food-bank logistics), set 30 minutes, and practise scope → constraints → data model → staged plan, ideally with someone injecting constraints midway.
 4. Read Nabeel Qureshi's "Reflections on Palantir" for an unvarnished ex-FDE view of the Delta/Dev split and what the culture actually selects for.
 5. Prepare the mission conversation like a technical round: know Palantir's public positions, know your own, and have specifics - this is reportedly where otherwise-strong candidates get filtered.
@@ -293,6 +315,8 @@ A strong answer has three parts. First, an actual, thought-through position: Pal
 - [Dev versus Delta: Demystifying engineering roles at Palantir - Palantir Blog](https://blog.palantir.com/dev-versus-delta-demystifying-engineering-roles-at-palantir-ad44c2a6e87)
 - [Interviewing at Palantir: Our advice - Palantir Blog](https://blog.palantir.com/interviewing-at-palantir-advice-from-palantirians-88444a90e7c4)
 - [AIP Overview - Palantir Documentation](https://www.palantir.com/docs/foundry/aip/overview)
+- [Ontology MCP Overview - Palantir Documentation](https://palantir.com/docs/foundry/ontology-mcp/overview/) - ontology resources exposed as MCP tools for external agents, application scopes, beta status
+- [Palantir Interview Process 2026 - Ophy AI](https://ophyai.com/blog/company-guides/palantir-interview-guide) - 90 min HackerRank variant of the technical screen, reported no-AI policy (updated September 2026)
 - [Palantir's Interview Process & Questions - interviewing.io](https://interviewing.io/palantir-interview-questions)
 - [Palantir's Interview Process (2026) - TechPrep](https://www.techprep.app/blog/palantir-interview-process)
 - [Palantir AI Engineer Guide - DataInterview](https://www.datainterview.com/blog/palantir-ai-engineer-interview)

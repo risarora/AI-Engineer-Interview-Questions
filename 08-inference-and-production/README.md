@@ -1,6 +1,6 @@
 # ⚡ Inference, Serving & Production LLM Systems
 
-This is the topic that separates "I call the API" from "I can own an LLM feature in production" - and it dominates system-design rounds for AI Engineer roles at labs, big tech, and startups alike. Infra-flavoured teams will drill into KV cache math and batching schedulers; product-flavoured teams will drill into SLOs, cost engineering, and reliability. Either way, you're expected to reason quantitatively: bytes, tokens/sec, dollars.
+This is the topic that separates "I call the API" from "I can own an LLM feature in production" - and it dominates system-design rounds for AI Engineer roles at labs, big tech, and startups alike. Infra-flavoured teams will drill into KV cache maths and batching schedulers; product-flavoured teams will drill into SLOs, cost engineering, and reliability. Either way, you're expected to reason quantitatively: bytes, tokens/sec, dollars.
 
 ## Crash course
 
@@ -32,20 +32,20 @@ Worked example - Llama-3-70B-shaped model (80 layers, 8 KV heads via GQA, head_d
 128K-token context  → ~41 GB per sequence (!)
 ```
 
-On an 80 GB GPU already holding ~40 GB of INT4 weights, KV cache is what caps concurrent sequences - **batch size, and therefore throughput, is limited by KV memory**, not compute. Hence GQA (fewer KV heads), MLA (low-rank KV compression), KV-cache quantization (FP8/INT8 KV), and paged allocation.
+On an 80 GB GPU already holding ~40 GB of INT4 weights, KV cache is what caps concurrent sequences - **batch size, and therefore throughput, is limited by KV memory**, not compute. Hence GQA (fewer KV heads), MLA (low-rank KV compression), KV-cache quantization (FP8/INT8 KV), paged allocation, and hybrid architectures (e.g. Jamba, Nemotron-H) that replace most attention layers with state-space or linear-attention layers holding a fixed-size state instead of a growing KV cache.
 
 ### Making decode fast: the serving playbook
 
 - **Continuous (in-flight) batching** (Orca, now universal): compose the batch *per decode step*, not per request. Finished sequences exit immediately; queued ones join mid-flight. Fixes static batching's convoy problem (whole batch waits for the longest output) and typically lifts throughput several-fold at similar latency.
 - **PagedAttention** (vLLM): allocate KV cache in fixed-size blocks (e.g. 16 tokens) mapped through a block table - virtual memory for KV. Kills the internal/external fragmentation of contiguous per-sequence allocations (which wasted most of KV memory), enables near-zero-copy prefix sharing, and lets you safely run much larger batches.
 - **Chunked prefill** (Sarathi-Serve): split long prefills into chunks and mix them into decode batches, so one 50K-token prompt doesn't stall every other user's token stream. Trades slightly worse TTFT for that prompt against stable inter-token latency for everyone.
-- **Prefix / prompt caching**: reuse the KV cache of a shared prefix (system prompt, few-shot examples, long documents, conversation history) across requests. Self-hosted: prefix-aware routing + radix trees (SGLang) or hash-based block reuse (vLLM). API providers bill cached input tokens at a steep discount (~90% off reads on Anthropic, with a small write premium; ~50-75% off on OpenAI, applied automatically) - structuring prompts as *stable prefix first, variable content last* is one of the highest-ROI cost optimisations available.
-- **Speculative decoding**: a cheap drafter proposes k tokens; the target model verifies them in one parallel pass; accepted tokens are emitted, the first rejection is replaced by a sample from the target. With the right accept/reject rule the output distribution is *exactly* the target model's - it's a latency optimisation with no quality tradeoff. Wins (~2-3× on ITL) when acceptance rate is high and there's spare compute; loses at high batch sizes or with poorly matched drafters.
+- **Prefix / prompt caching**: reuse the KV cache of a shared prefix (system prompt, few-shot examples, long documents, conversation history) across requests. Self-hosted: prefix-aware routing + radix trees (SGLang) or hash-based block reuse (vLLM). API providers bill cached input tokens at a steep discount: Anthropic charges ~0.1× base input for cache reads with a 1.25× write premium at the default 5-minute TTL; OpenAI caches automatically above ~1K tokens, at ~90% off on its recent models (older generations ~50-75%); Gemini offers both implicit and explicit caching. Multipliers shift between model generations, so check the current price page. Structuring prompts as *stable prefix first, variable content last* is one of the highest-ROI cost optimisations available.
+- **Speculative decoding**: a cheap drafter proposes k tokens; the target model verifies them in one parallel pass; accepted tokens are emitted, the first rejection is replaced by a sample from the target. With the right accept/reject rule the output distribution is *exactly* the target model's - it's a latency optimisation with no quality tradeoff. Wins (~2-3× on ITL) when acceptance rate is high and there's spare compute; loses at high batch sizes or with poorly matched drafters. Drafters range from a small same-tokenizer model, to self-drafting heads (Medusa, EAGLE), to multi-token-prediction heads trained into the model itself (DeepSeek-V3), to free n-gram/prompt-lookup drafting for extraction and editing workloads.
 
 ### Quantization
 
 - **Weights-only** (W4A16, W8A16): shrink weights to 4/8-bit, compute in FP16. Since decode is weight-bandwidth-bound, 4-bit weights ≈ up to ~4× faster batch-1 decode *and* 4× less memory. GPTQ (Hessian-based rounding) and AWQ (activation-aware scaling of salient channels) are the standard 4-bit PTQ methods; GGUF k-quants are the llama.cpp/Ollama ecosystem equivalent.
-- **Weights + activations** (W8A8 INT8/FP8): also accelerates the *matmuls* themselves via INT8/FP8 tensor cores - this is what helps at high batch/prefill (compute-bound). FP8 is the workhorse on Hopper; FP4 variants (NVFP4/MXFP4) arrive with Blackwell-era hardware and some open-weight releases ship in MXFP4.
+- **Weights + activations** (W8A8 INT8/FP8): also accelerates the *matmuls* themselves via INT8/FP8 tensor cores - this is what helps at high batch/prefill (compute-bound). FP8 is the default workhorse on Hopper and Blackwell. Blackwell adds native FP4 tensor cores (NVFP4/MXFP4), and open-weight releases such as gpt-oss already ship their MoE weights in MXFP4.
 - **Typical quality cost**: 8-bit ≈ negligible; good 4-bit ≈ small but measurable (evaluate on *your* task, not just perplexity); below 4-bit gets rough. **KV-cache quantization** (FP8 KV) is a separate lever that directly buys batch size.
 
 ### Metrics, SLOs, and the throughput - latency curve
@@ -62,7 +62,7 @@ Total latency ≈ `TTFT + TPOT × output_tokens`. Throughput and latency trade o
 
 **Streaming** is the UX half of latency: SSE (`text/event-stream`) delivers deltas as they're generated, so perceived latency ≈ TTFT (hundreds of ms) instead of full completion (tens of seconds). Tool calls and JSON arrive as partial fragments - buffer per-block, or use incremental/partial JSON parsing for progressive UI.
 
-### GPU memory math & parallelism one-liners
+### GPU memory maths & parallelism one-liners
 
 ```
 GPU memory ≈ weights (params × bytes/param)
@@ -71,9 +71,18 @@ GPU memory ≈ weights (params × bytes/param)
 ```
 
 - 8B model: FP16 ≈ 16 GB, INT4 ≈ ~4.5 GB (runs on a laptop).
-- 70B model: FP16 ≈ 140 GB (needs 2× 80 GB GPUs), INT4 ≈ ~40 GB (fits one 80 GB GPU with room for KV).
+- 70B model: FP16 ≈ 140 GB (needs 2× 80 GB GPUs, or one ~180 GB Blackwell-class GPU), INT4 ≈ ~40 GB (fits one 80 GB GPU with room for KV).
 - **Tensor parallelism (TP)**: shard every layer's matrices across GPUs, all-reduce each layer - cuts per-token latency, needs NVLink-class interconnect, standard within a node.
 - **Pipeline parallelism (PP)**: shard by layer ranges across GPUs/nodes - tolerates slower interconnect, adds latency and pipeline bubbles; used when the model can't fit in one node.
+- **Expert parallelism (EP)**: for mixture-of-experts models, spread the experts across GPUs and dispatch tokens to them with an all-to-all per MoE layer. Total parameters set the memory bill, active parameters set per-token compute and bandwidth; routing imbalance and all-to-all latency become the new bottlenecks.
+
+### Scaling past one replica
+
+- **Prefill/decode disaggregation** (DistServe, Splitwise; productised in NVIDIA Dynamo, llm-d, vLLM and SGLang): run prefill and decode on separate GPU pools and ship the KV cache between them over NVLink or RDMA. Each pool gets its own parallelism and size, and long prefills stop disturbing other users' ITL. It pays off at scale with long prompts; for small fleets the KV transfer and operational cost usually outweigh the gain.
+- **KV cache tiers**: offload cold KV blocks to CPU DRAM, local NVMe or a shared store (e.g. LMCache) so prefixes survive eviction. Reloading beats recomputing when the prefix is long and the transfer path is fast.
+- **Cache-aware routing**: round-robin across replicas scatters shared prefixes and destroys hit rate. Route on prefix hash or reported KV state, with a load cap so hot prefixes don't melt one replica.
+- **Multi-LoRA serving**: one base model in memory, many small adapters swapped per request in the same batch (S-LoRA/Punica-style kernels, built into vLLM and SGLang). Hundreds of customer fine-tunes can share a handful of GPUs.
+- **Constrained decoding** for structured output: the engine compiles a JSON schema or grammar into a per-step token mask (XGrammar, llguidance, Outlines). This guarantees syntactic validity, not semantic correctness, and modern engines overlap the mask computation with GPU work so the overhead is small.
 
 ### Choosing a serving stack
 
@@ -81,22 +90,23 @@ GPU memory ≈ weights (params × bytes/param)
 |---|---|
 | **vLLM** | default open-source choice; PagedAttention, continuous batching, huge model/hardware coverage |
 | **SGLang** | shared-prefix-heavy and agentic workloads (RadixAttention prefix reuse), fast structured output |
-| **TensorRT-LLM** | max performance on NVIDIA when you'll invest in engine builds/tuning |
-| **TGI** | Hugging Face ecosystem integration, solid general-purpose server |
+| **TensorRT-LLM** | max performance on NVIDIA when you'll invest in tuning; PyTorch-based runtime by default since 1.0, first-class FP8/FP4 |
+| **TGI** | in maintenance mode since late 2025, with Hugging Face pointing users to vLLM and SGLang: a migration item, not a choice for new deployments |
 | **llama.cpp / Ollama / MLX** | CPU/edge/laptop and Apple Silicon; GGUF quants; dev-friendly local serving |
+| **NVIDIA Dynamo / llm-d** | not engines but the cluster layer above them: disaggregated prefill/decode, KV-aware routing, KV offload across a fleet |
 
 ### Production patterns (the other half of the interview)
 
-- **Self-host vs API**: decide on utilization (steady high volume favours self-host; spiky/low favours API), privacy/residency, model needs (frontier quality → API; fine-tuned/custom → self-host), team (inference infra is an oncall commitment), and unit economics (GPU-$/hr ÷ achievable tokens/hr vs per-token API price - batching efficiency dominates this math).
+- **Self-host vs API**: decide on utilisation (steady high volume favours self-host; spiky/low favours API), privacy/residency, model needs (frontier quality → API; fine-tuned/custom → self-host), team (inference infra is an oncall commitment), and unit economics (GPU-$/hr ÷ achievable tokens/hr vs per-token API price - batching efficiency dominates this maths).
 - **Reliability**: retries with **exponential backoff + full jitter** on 429/5xx (respect `Retry-After`), client-side concurrency caps, **circuit breakers** per provider, layered timeouts (connect, TTFT, inter-chunk inactivity, total), idempotency keys for side-effectful pipelines, fallback provider/model chains.
-- **Cost engineering**: output tokens cost ~3-5× input tokens, and reasoning tokens bill as output - control `max_tokens` and reasoning effort. Levers, in rough ROI order: prompt/prefix caching, model tiering/cascades (cheap model + escalation), context truncation/summarization, batch APIs (~50% off for async work), semantic caching. Attribute cost per request/feature/user from day one.
-- **Capacity & autoscaling**: GPU cold starts are minutes (node provision + image pull + weight load), so autoscale on queue depth/KV utilization with warm pools and predictive scaling - not CPU%.
-- **Observability**: dashboard TTFT/ITL percentiles, queue depth, batch size, KV-cache utilization, preemptions, tokens in/out, error/429 rates, cost per request. GPU "utilization" alone is misleading - a memory-bound decode can show 100% while doing little compute.
+- **Cost engineering**: output tokens cost ~4-8× input tokens on current frontier price lists, and reasoning tokens bill as output - control `max_tokens` and reasoning effort. Levers, in rough ROI order: prompt/prefix caching, model tiering/cascades (cheap model + escalation), context truncation/summarisation, batch APIs (~50% off for async work), semantic caching. Attribute cost per request/feature/user from day one.
+- **Capacity & autoscaling**: GPU cold starts are minutes (node provision + image pull + weight load), so autoscale on queue depth/KV utilisation with warm pools and predictive scaling - not CPU%.
+- **Observability**: dashboard TTFT/ITL percentiles, queue depth, batch size, KV-cache utilisation, preemptions, tokens in/out, error/429 rates, cost per request. GPU "utilisation" alone is misleading - a memory-bound decode can show 100% while doing little compute.
 - **Graceful degradation**: under overload, shed or queue low-priority traffic, fall back to smaller models, truncate history, cap output length, serve cached answers - degrade quality before availability.
 
 ## Interview questions
 
-See [questions.md](questions.md) - 36 questions across basic, intermediate, and advanced.
+See [questions.md](questions.md) - 56 questions across basic, intermediate, and advanced.
 
 ## Red flags interviewers watch for
 
@@ -107,15 +117,16 @@ See [questions.md](questions.md) - 36 questions across basic, intermediate, and 
 - Designs SLOs around average latency only; never mentions P99, TTFT vs ITL, or goodput; can't sketch the throughput - latency tradeoff.
 - Cost blindness: doesn't know output tokens cost more than input, never mentions prompt caching, batch APIs, or model tiering when asked to cut a bill.
 - Naive reliability: retries without jitter or budget (amplifying outages), one global timeout for a streaming call, no fallback plan for provider incidents.
-- Chooses self-hosting "for cost" with zero utilization math, or an API "for simplicity" where privacy/latency constraints clearly forbid it.
+- Chooses self-hosting "for cost" with zero utilisation maths, or an API "for simplicity" where privacy/latency constraints clearly forbid it.
 
 ## Further reading
 
 - [Efficiently Scaling Transformer Inference (Pope et al., 2022)](https://arxiv.org/abs/2211.05102) - the canonical treatment of prefill/decode, batching, and parallelism tradeoffs.
-- [Transformer Inference Arithmetic (kipply)](https://kipp.ly/transformer-inference-arithmetic/) - the classic back-of-envelope guide to KV cache, bandwidth, and latency math.
+- [Transformer Inference Arithmetic (kipply)](https://kipp.ly/transformer-inference-arithmetic/) - the classic back-of-envelope guide to KV cache, bandwidth, and latency maths.
 - [Efficient Memory Management for LLM Serving with PagedAttention (Kwon et al., 2023)](https://arxiv.org/abs/2309.06180) - the vLLM paper.
 - [Orca: A Distributed Serving System for Transformer-Based Generative Models (Yu et al., OSDI 2022)](https://www.usenix.org/conference/osdi22/presentation/yu) - where continuous batching comes from.
 - [Fast Inference from Transformers via Speculative Decoding (Leviathan et al., 2022)](https://arxiv.org/abs/2211.17192) - speculative decoding with the correctness proof.
 - [Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve (Agrawal et al., 2024)](https://arxiv.org/abs/2403.02310) - chunked prefill and stall-free scheduling.
+- [DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving (Zhong et al., 2024)](https://arxiv.org/abs/2401.09670) - the case for separate prefill and decode pools, and goodput as the target metric.
 - [vLLM documentation](https://docs.vllm.ai/) - the practical reference for a modern serving stack.
 - [Exponential Backoff and Jitter (AWS Architecture Blog)](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) - the standard reference for retry design.

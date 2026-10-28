@@ -1,6 +1,6 @@
 # 🧱 Databricks - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -12,7 +12,7 @@
 
 ## Company context
 
-Databricks builds the lakehouse platform - Spark, Delta Lake, MLflow, Unity Catalog - plus a first-party GenAI stack (Mosaic AI, from the 2023 MosaicML acquisition): model serving, vector search, fine-tuning, agent tooling, and the DBRX open model. Engineers want in because it's one of the few places where hard distributed-systems problems (query engines, storage, streaming) and applied GenAI ship in the same product to thousands of enterprises. "AI engineer" at Databricks means two distinct things: product/research engineers building the Mosaic AI platform itself, and field-side engineers (FDE, Specialist SA) building production GenAI systems *on* the platform for customers - the interview loops differ accordingly.
+Databricks builds the lakehouse platform - Spark, Delta Lake, MLflow, Unity Catalog - plus a first-party GenAI stack (Mosaic AI, from the 2023 MosaicML acquisition): model serving with an AI Gateway, vector search, fine-tuning, Agent Bricks for building agents, MLflow 3 for GenAI tracing and evaluation, and Lakebase, a managed serverless Postgres for operational data next to the lakehouse. DBRX, its 2024 open MoE model, is no longer part of that story: it was fully retired from Databricks hosting in December 2025, and the hosted catalogue now serves third-party frontier and open models. Data + AI Summit 2026 (June) leaned further into agents and operational data: an expanded Agent Bricks with sandboxed execution and memory, Lakebase branching and in-Postgres hybrid search (beta), and an announced LTAP architecture to unify transactional and analytical storage. Engineers want in because it's one of the few places where hard distributed-systems problems (query engines, storage, streaming) and applied GenAI ship in the same product to thousands of enterprises. "AI engineer" at Databricks means two distinct things: product/research engineers building the Mosaic AI platform itself, and field-side engineers (FDE, Specialist SA) building production GenAI systems *on* the platform for customers - the interview loops differ accordingly.
 
 ## Roles & titles they hire
 
@@ -43,6 +43,8 @@ Public information is good: Databricks publishes an official interview-prep page
 | References + committee | Formal stage | Reference checks are on the official process page; reports describe a hiring-committee review and late team matching - a sizable minority of candidates pivot teams post-onsite. |
 
 Reported end-to-end timeline: ~3-8 weeks depending on role and scheduling.
+
+The official prep page (consulted October 2026) names "skill assessments" as a stage before interviewing and states that interviews are virtual unless your recruiter specifies otherwise. It publishes no policy on AI-assistant use during interviews, so ask your recruiter before using one in any round.
 
 ## What they emphasise
 
@@ -322,6 +324,26 @@ The same discipline applies whether the agent was assembled through the low-code
 
 </details>
 
+### 13. An agent needs durable operational state - conversation memory, pending human approvals, idempotency records for tool calls - and the business wants analytics over all of it. With managed Postgres (Lakebase) next to your Delta tables, how do you split the data and why?
+
+<details><summary><b>Answer</b></summary>
+
+State the agent reads and writes inside a request goes in Postgres; history and analytics go in Delta; the bridge between them is one-directional and boring.
+
+**Why Postgres for the hot path.** Approvals and idempotency need transactions and row-level concurrency. "Insert the idempotency key; on conflict, return the stored result" is one statement against a unique constraint. An approval state machine (pending, approved, executed) needs a conditional update or `SELECT ... FOR UPDATE` so two workers can never both execute the same approved action. Millisecond single-row reads and writes are what an OLTP engine is for. Delta commits are file-level and built for throughput: thousands of tiny concurrent writes produce commit conflicts and small-file debt, and there are no row locks.
+
+**Memory.** Per-user memory is small and read on every turn, so it belongs in Postgres too; in-Postgres vector search (in beta on Lakebase as of mid-2026) is enough for thousands of items per user. The large shared document corpus stays in the lakehouse vector index. Do not conflate the two.
+
+**Delta for analytics.** Completed sessions, traces, approval latency and tool error rates flow from Postgres into Delta through CDC or a scheduled export, where they join with business data under Unity Catalog. Databricks has announced LTAP to remove that hop by writing row data to columnar Delta/Iceberg; until it ships and proves out, budget for sync lag and schema evolution. Never point dashboards at the OLTP primary.
+
+**Branching** is the underrated feature: a copy-on-write branch of production state lets you test a new agent version or schema migration against realistic data, then throw it away.
+
+Governance cuts across both: the agent's database role is scoped to its own schema, and a deletion request must propagate to Postgres, Delta and the trace store.
+
+**Follow-ups:** A user invokes the right to be forgotten - walk the deletion through every store. Two workers pick up the same approved action at once - what prevents double execution?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
@@ -340,16 +362,18 @@ Company-specific moves:
 1. **Read their official interview-prep page and download the Engineering prep guide** from databricks.com/company/careers/interview-prep - few companies publish this much; not reading it is self-sabotage.
 2. **Use the platform seriously.** Get a free Databricks account (they offer a free edition) and build something end-to-end: a Delta table, a vector search index, a served model endpoint. Field-role interviews reward candidates who've touched the actual product.
 3. **Know Spark mechanics one level deeper than API calls**: shuffles, wide vs. narrow transformations, AQE, skew handling, broadcast joins. Even AI-role loops draw interviewers from a distributed-systems culture.
-4. **Read the Databricks engineering blog and Mosaic AI research posts** - especially anything on DBRX, agent evaluation, and serving - to speak their vocabulary (lakehouse, Unity Catalog governance, MLflow) in design rounds.
+4. **Read the Databricks engineering blog and Mosaic AI research posts** - especially anything on agent evaluation, Agent Bricks, Lakebase, and serving - to speak their vocabulary (lakehouse, Unity Catalog governance, MLflow) in design rounds.
 5. **Prepare the customer-advisory story** if you're interviewing for FDE/SA: two real anecdotes where you scoped an ambiguous stakeholder problem and one where you pushed back on a bad technical idea without losing the relationship.
 
 ## Sources
 
-- [Databricks official interview prep page](https://www.databricks.com/company/careers/interview-prep) - process stages, behavioural guidance, compliance rules (fetched July 2026)
+- [Databricks official interview prep page](https://www.databricks.com/company/careers/interview-prep) - process stages, virtual-by-default interviews, behavioural guidance, compliance rules (fetched October 2026)
 - [Databricks careers / open positions](https://www.databricks.com/company/careers/open-positions) - role titles including AI Engineer - FDE and Specialist Solutions Architect - GenAI & LLM
 - [interviewing.io - Databricks interview process & questions](https://interviewing.io/databricks-interview-questions) - SWE loop structure, difficulty, Google-Docs design round, references/committee details (fetched July 2026)
 - [Dataford - Databricks AI Engineer interview guide](https://dataford.io/interview-guides/databricks/ai-engineer) - AI-engineer-specific loop and topic areas (third-party; fetched July 2026)
 - [Blind - Databricks interview discussions](https://www.teamblind.com/company/Databricks/posts/databricks-interview) - candidate reports on loop length and coding bar (consulted via search)
 - [MLflow 3 for GenAI - Databricks documentation](https://docs.databricks.com/aws/en/mlflow3/genai/) - tracing, built-in judges and custom scorers, evaluation datasets, prompt registry, Unity Catalog governance (fetched August 2026)
 - [Databricks newsroom - Agent Bricks launch](https://www.databricks.com/company/newsroom/press-releases/databricks-launches-agent-bricks-new-approach-building-ai-agents) - the low-code agent-building path alongside the code-first framework
+- [Databricks documentation - retired models](https://docs.databricks.com/aws/en/machine-learning/retired-models-policy) - DBRX retirement dates (pay-per-token April 2025, provisioned throughput December 2025)
+- [Flexera - Data + AI Summit 2026 recap](https://www.flexera.com/blog/perspectives/databricks-data-ai-summit-2026-recap-genie-one-ltap-lakehouse-rt-and-every-major-launche/) - third-party; Agent Bricks, Lakebase branching and search, LTAP announcements
 - [levels.fyi - Databricks](https://www.levels.fyi/companies/databricks) - for compensation data (not covered here)

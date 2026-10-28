@@ -8,7 +8,8 @@ The titles are a mess and the loops are not. "ML Engineer" postings now regularl
 - **Classic MLE loops grew an LLM section.** Even recsys/fraud/forecasting loops now include "would you use an LLM here, and where would it break?" MLEs who dismiss the app layer get flagged the same way a 2018 candidate who dismissed deep learning did.
 - **AI engineer loops professionalised around evals.** In 2024, a chatbot take-home judged on vibes was common. By 2026 the differentiator round is eval design: build a golden set, calibrate an LLM judge, wire a regression gate into CI. Candidates who can't measure quality don't pass, regardless of demo polish.
 - **ML-breadth trivia got de-emphasised for app-layer roles.** Bias/variance drills, deriving losses, XGBoost-vs-NN debates rarely appear in AI engineer loops anymore. They remain fully alive in classic MLE loops at ranking/ads/risk shops - which is exactly why you must identify the loop before you prep.
-- **Fine-tuning questions shifted from "how" to "whether."** Interviewers care less about your LoRA hyperparameters and more about whether you can justify fine-tuning against prompting/RAG with an eval and a cost model. "We fine-tuned because we could" is a downlevel answer in both loops.
+- **Fine-tuning questions shifted from "how" to "whether."** Interviewers care less about your LoRA hyperparameters and more about whether you can justify fine-tuning against prompting/RAG with an eval and a cost model. "We fine-tuned because we could" is a downlevel answer in both loops. The 2026 extension is reinforcement fine-tuning with programmatic graders (GRPO-style trainers in open source, managed offerings from some providers and clouds): the question is no longer "can you run it" but "can you write a grader worth optimising against."
+- **AI-assisted coding rounds arrived, and AI-tool fluency is graded.** Meta has run an AI-enabled coding round since October 2025, Google began piloting a Gemini-assisted code-comprehension round for some SWE roles in 2026, and Amazon has added AI-assisted repository tasks to some assessments (all reported, varies by team and role family). AI-native companies often allow Cursor, Claude Code or similar throughout the practical. For MLEs the twist is that assistants write ML code that runs and prints a plausible number, so the round rewards catching leakage and evaluation bugs, not typing speed. Ask which mode each round uses.
 - **The hybrid question became standard:** "when do you replace the LLM API with a trained model?" Distillation, cascade routing, and cost-crossover math sit exactly on the MLE/AI-engineer boundary, and both roles now get asked about them.
 - **Research Engineer and Applied Scientist loops split further away.** RE loops went deeper into distributed training and performance engineering; AS loops kept stats and experiment-design depth. Neither converged with the app layer - mistaking one of these loops for an AI engineer loop is the worst-case prep error.
 
@@ -49,6 +50,9 @@ The titles are a mess and the loops are not. "ML Engineer" postings now regularl
 | "distributed training, pretraining, FSDP/Megatron, kernels" | Research Engineer - a different prep track entirely |
 | "design experiments, causal inference, define metrics" | Applied Scientist |
 | "GenAI Engineer" / "LLM Engineer" | AI Engineer |
+| "Agent Engineer" / "Applied AI Engineer (agents)" | AI Engineer with agent depth: tool design, long-running runs, evals over trajectories rather than single answers |
+| "Forward Deployed Engineer" / "Applied AI Engineer, Deployed" | AI engineering plus customer-facing discovery; see the [FDE guide](./forward-deployed-engineer.md) |
+| "post-training, RL environments, reward design, graders" | Post-training team: closer to Research Engineer than AI Engineer, even when the req says "ML Engineer" |
 | "ML Engineer (LLM applications / GenAI team)" | AI Engineer wearing an MLE title - the most common mislabel of 2025-2026 |
 | "Full-stack AI Engineer" | Product engineer: prompts + APIs + React. Expect more frontend than ML |
 | "MLOps Engineer / ML Platform" | Infrastructure role - more Kubernetes than models |
@@ -137,7 +141,7 @@ Decide on five axes: label availability, volume, latency budget, cost, and taxon
 
 **If volume is low** (thousands/day) and accuracy is acceptable, stop - the API bill is noise and you keep zero training infrastructure.
 
-**If volume is high** (hundreds of thousands to millions/day) and the taxonomy is stable, **distill**: use the LLM to label a large corpus of real tickets, train a small model - a compact fine-tuned transformer, or even logistic regression over embeddings as the honest baseline - and take the roughly 10-100x unit-cost and latency win (an API call runs seconds and real money per thousand tickets; a self-hosted small model runs tens of milliseconds and fractions of a cent).
+**If volume is high** (hundreds of thousands to millions/day) and the taxonomy is stable, **distill**: use the LLM to label a large corpus of real tickets, train a small model - a compact fine-tuned transformer, or even logistic regression over embeddings as the honest baseline - and take the unit-cost and latency win, often one to two orders of magnitude (an API call typically takes hundreds of milliseconds to seconds and is billed per token; a self-hosted small model runs in tens of milliseconds at a tiny marginal cost). Cheap small API tiers have narrowed this gap, so do the arithmetic at your volume rather than assuming the win.
 
 **Classical from scratch first** only if you already have abundant labelled data and the taxonomy is frozen - then the LLM adds nothing but cost.
 
@@ -243,7 +247,7 @@ LLM apps invert part of that: **the world moves and so does the model.** New cha
 
 Input drift monitoring still exists but changes form: inputs are text, so you track intent/topic distribution via embedding clusters rather than per-feature statistics. Output monitoring becomes: refusal rate, format/schema-validation failure rate, output length distribution, judge-scored quality on sampled traffic, and user signals (retries, edits, abandonment mid-stream).
 
-The hardest difference: **most generative tasks never get ground-truth labels.** A fraud model gets chargebacks eventually; a summarizer gets nothing. You substitute sampled human review plus an LLM judge that you periodically calibrate against those human labels - and you monitor the judge too, because it's also a model that can drift.
+The hardest difference: **most generative tasks never get ground-truth labels.** A fraud model gets chargebacks eventually; a summariser gets nothing. You substitute sampled human review plus an LLM judge that you periodically calibrate against those human labels - and you monitor the judge too, because it's also a model that can drift.
 
 What transfers untouched: the alerting discipline, cost dashboards, slice-based analysis, and the instinct that a quality metric that never fluctuates means your monitoring is broken, not that the quality is stable.
 
@@ -259,7 +263,7 @@ Distill when four things align: the task is **narrow and stable** (classificatio
 
 Pipeline: sample representative inputs from production traces (not synthetic data - that's how you distill a model for traffic you don't have). Label with the teacher LLM, using majority-vote over multiple samples or rationale-then-answer prompting to raise label quality. Filter: drop low-agreement examples, human-audit a slice to estimate teacher error rate - your student's ceiling. Train the student: a small fine-tuned transformer, or embeddings-plus-logistic-regression as the baseline you must beat. Evaluate both teacher and student on a **human-labelled** golden set, never on teacher labels alone (that measures agreement, not accuracy). Ship as a **cascade**: student serves high-confidence predictions, low-confidence routes to the LLM - you keep most of the cost win and cap the accuracy loss. Then treat it like the classical model it now is: drift monitoring, periodic re-labelling with fresh traffic, retraining cadence.
 
-Typical outcome is a 10-100x unit-cost reduction with single-digit accuracy loss on the covered traffic. This is *the* boundary task - an ML training job whose data engine is an LLM - which is why both MLE and AI-engineer loops ask it.
+When the preconditions hold, the unit-cost reduction is often one to two orders of magnitude; the accuracy loss on covered traffic is something you measure on the human-labelled set, not assume. This is *the* boundary task - an ML training job whose data engine is an LLM - which is why both MLE and AI-engineer loops ask it.
 
 **Follow-ups:** How do you pick the confidence threshold for the cascade? The teacher is wrong in a systematic way on one class - what now?
 
@@ -295,6 +299,58 @@ The honest caveat: at 15 people the titles converge. The right hire is the perso
 
 </details>
 
+### 13. A team wants to run reinforcement fine-tuning on an open-weights model to make our extraction agent more reliable. Whose job is that, and how do you decide whether to do it at all?
+
+<details><summary><b>Answer</b></summary>
+
+It's a boundary job. The AI engineer owns the task definition, the grader and the eval; whoever owns training (often an MLE) owns the run, data hygiene and serving. The go/no-go rests on one question: can we write a cheap, reliable programmatic grader for this task? If not, RL is the wrong tool.
+
+What RFT does: sample several outputs per prompt, score each with a grader (schema validity plus field-level F1 against a reference, tests passing, a calibrated judge), and push the policy towards the above-average samples. GRPO-style methods compute advantages relative to the group of samples, so there is no separate value model. Unlike SFT, you need prompts and a grader rather than gold demonstrations, and you optimise the metric you actually care about.
+
+Escalate in order. Format errors are fixed by structured outputs or constrained decoding, not RL. Knowledge gaps are fixed by retrieval. Behaviour gaps with good demonstrations go to SFT or distillation. RFT is for residual reasoning errors where the answer is checkable.
+
+Preconditions: the grader agrees with human labels on a held-out set; a few hundred representative prompts or more; and the base model already succeeds some of the time. RL sharpens behaviour the model can sometimes produce. If pass@k is near zero, there is no reward signal to learn from.
+
+Risks to name: reward hacking (outputs that pass the schema with empty fields, judge-pleasing verbosity), regressions on general instruction-following, rollout cost (many samples per prompt), and a new ops burden - you now own a model that ages as base models improve, so the fine-tune has to beat next quarter's frontier model with a prompt, not just today's.
+
+**Worth sketching.** RFT is the last rung, gated on a trustworthy grader and a base model that is sometimes right.
+
+```mermaid
+flowchart TD
+    A["Reliability problem on a narrow task"] --> B{"Format errors only?"}
+    B -->|"yes"| C["Structured outputs or constrained decoding"]
+    B -->|"no"| D{"Grader agrees with humans?"}
+    D -->|"no"| E["Better prompts, SFT or distillation"]
+    D -->|"yes"| F{"Base model sometimes right?"}
+    F -->|"no"| E
+    F -->|"yes"| G["RFT with held-out eval<br/>and reward-hacking audits"]
+```
+
+**Follow-ups:** Training reward keeps climbing but human-rated quality is flat. What's happening? How would you measure pass@k on the base model before committing GPU budget?
+
+</details>
+
+### 14. In an AI-assisted coding round you fix a training and eval pipeline with an assistant. What ML bugs do assistants write or miss, and how do you catch them in the time available?
+
+<details><summary><b>Answer</b></summary>
+
+Assistants write ML code that runs and prints a plausible number, and that is the dangerous case: the most damaging ML bugs raise no errors. The round grades whether your reaction to "it runs, 97% accuracy" is suspicion.
+
+What to hunt for:
+
+- **Leakage.** Scalers, encoders or TF-IDF fitted on the full dataset before splitting; random splits on time-ordered or grouped data (the same user in train and test); features derived from the target; near-duplicates across splits, which is common when part of the data is LLM-generated.
+- **Evaluation errors.** Metrics computed on the training set, accuracy on heavily imbalanced classes, thresholds or early stopping tuned on the test set, micro versus macro averaging that doesn't match the brief.
+- **Silent tensor bugs.** `(n,)` against `(n, 1)` broadcasting inside the loss, softmax on the wrong axis, labels shuffled independently of features, eval run in train mode so dropout and batch norm misbehave, gradients never zeroed.
+- **LLM-specific.** A chat template or tokenizer that differs between fine-tuning and inference, loss computed on prompt tokens, wrong padding side for batched decoder-only generation, eval prompts assembled differently from serving.
+
+How to catch them fast, narrating as you go: overfit a tiny batch to near-zero loss (if it can't, the pipeline is broken); train on shuffled labels and expect chance (if not, something leaks); compare against a majority-class or logistic-regression baseline; assert split disjointness by ID and by time; run the metric on a hand-computed toy input.
+
+Use the assistant for the checks, not just the code: ask it to write the leakage assertions and the shuffled-label test, then read them, because a generated test can assert the wrong thing just as confidently. The skill on display is the one MLE loops always graded, applied to code you didn't type: a number that looks too good is a bug report until proven otherwise.
+
+**Follow-ups:** The assistant's fix lifted validation accuracy from 81% to 96%. What do you check before believing it? Which of these checks would you make permanent in CI?
+
+</details>
+
 ## Portfolio moves
 
 - **A three-way bake-off on one task.** Same problem (e.g., ticket classification or entity extraction), three implementations: embeddings + logistic regression, a fine-tuned small transformer, and a few-shot frontier LLM - one shared eval harness, one README table with quality/latency/cost per 1k requests. *Demonstrates:* you sit above the tooling war and choose by measurement - the exact judgement both loops screen for.
@@ -310,6 +366,7 @@ The honest caveat: at 15 people the titles converge. The right hire is the perso
 - **Title inflation:** "fine-tuning experience" that turns out to be few-shot prompting, "built agents" that means one tool call in a loop. One probing follow-up exposes it, and it poisons the rest of the loop.
 - **Wrong-loop calibration:** deriving attention math in an app-layer interview while unable to answer "how do you know your RAG system got better" - or the reverse, LangChain fluency in a ranking-team loop with nothing on skew or experimentation. Depth in the wrong layer reads worse than honest scoping.
 - **Vibes-based evaluation:** demos instead of metrics, no golden set, "it looked good when we tried it." Fatal in both loops - eval discipline is the shared bar in 2026.
+- **Trusting generated ML code because it runs:** in an AI-assisted round, accepting a pipeline and a suspiciously good metric without a leakage check or a baseline. Assistant-written code shifts the job to verification, and skipping it is the clearest fluency failure.
 - **No cost arithmetic:** can't estimate when API spend crosses the self-hosting line, or conversely trains and operates a model where the API bill was trivial. Both are the same failure - choosing infrastructure by identity instead of by math.
 
 ---

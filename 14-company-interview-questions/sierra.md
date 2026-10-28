@@ -1,6 +1,6 @@
 # 🏔️ Sierra - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,20 +8,21 @@
 - Candidate reports add a practical **debugging round** (small agent codebase, find and fix real bugs) and, for Agent Engineer roles, a **take-home agent build** presented onsite. Behavioural/hiring-manager round closes it out; reported timeline 2-5 weeks.
 - Signals they say they're hunting: **agency, judgment, initiative, and system understanding** - one engineer who can scope, build, and ship across the stack with AI leverage, not a syntax athlete.
 - The company's entire engineering culture is **agent reliability**: they invented τ-bench and the pass^k reliability metric, and their "Agent Development Life Cycle" doctrine (declarative guardrails, immutable releases, conversation simulation as regression tests) is the intellectual backdrop for every technical conversation.
-- Languages: Python and TypeScript dominate; Agent Engineer tracks reportedly lean on **TypeScript/React** for the debugging round. Interviews are conducted in-person at their offices - the culture is explicitly in-person-first.
+- Languages: Python and TypeScript dominate; Agent Engineer tracks reportedly lean on **TypeScript/React** for the debugging round. Interviews are conducted in-person at their offices - the culture is explicitly in-person-first, and the careers page still states this as of October 2026.
+- New in 2026: **Ghostwriter**, Sierra's "agent-building agent", generates and edits customer agents from plain-English instructions, SOPs and transcripts, and runs simulations on every change. Expect agent-builder and meta-agent reliability to surface in design conversations, and note the Agent Engineer track now splits by industry vertical (reported, varies).
 
 ## Company context
 
-Sierra (founded 2023 by Bret Taylor, former Salesforce co-CEO and OpenAI board chair, and Clay Bavor, former Google VP) builds customer-facing conversational AI agents - chat and voice - for brands, on top of its Agent OS platform, Agent SDK, and Experience Manager tooling. It is one of the fastest-scaling applied-AI companies (reported valuation moved from ~$10B in September 2025 to ~$15.8B after a $950M raise in May 2026; figures move fast, verify current numbers), with offices in San Francisco, New York, Atlanta, London, Singapore, Tokyo, Paris, Madrid, Toronto, Munich, and Sydney. "AI engineer" at Sierra means **agent engineering**: building production conversational agents that take real actions (refunds, rebookings, order changes) reliably, plus the platform underneath - it is applied product engineering with an evals-heavy reliability culture, not model research (though Sierra does have a research arm, best known for τ-bench).
+Sierra (founded 2023 by Bret Taylor, former Salesforce co-CEO and OpenAI board chair, and Clay Bavor, former Google VP) builds customer-facing conversational AI agents - chat, voice and email - for brands, on top of its Agent OS platform, Agent SDK, Agent Studio, Experience Manager tooling, and Ghostwriter, an agent that builds and tunes other agents from natural-language descriptions. It is one of the fastest-scaling applied-AI companies (reported valuation moved from ~$10B in September 2025 to over $15B after a $950M raise in May 2026, with ~$150M ARR reported at the time; figures move fast, verify current numbers), with offices in San Francisco, New York, Atlanta, London, Singapore, Tokyo, Paris, Madrid, Toronto, Munich, and Sydney. "AI engineer" at Sierra means **agent engineering**: building production conversational agents that take real actions (refunds, rebookings, order changes) reliably, plus the platform underneath - it is applied product engineering with an evals-heavy reliability culture, not model research (though Sierra does have a research arm, best known for τ-bench).
 
 ## Roles & titles they hire
 
-From Sierra's careers page (July 2026):
+From Sierra's careers page (July 2026, rechecked October 2026; openings rotate quickly):
 
 - **Agent Engineer** - the signature role: builds and tunes customer agents, blends coding, product sense, and customer work (closest to the forward-deployed archetype)
-- **Software Engineer, Agent** - with specialisations: *Agent Architecture*, *Agent Builder*, *Agent Data Platform*
-- **Forward Deployed Infrastructure Engineer**
-- **Software Engineer** - *Frontend*, *Infrastructure*, *Voice*, *Site Reliability (SRE)*
+- **Software Engineer, Agent** - with specialisations: *Agent Architecture*, *Agent Builder*, *Agent Data Platform*. By October 2026 the listings also split by industry vertical (*Financial Services*, *Healthcare*, *Insurance*, *Public Sector*, *Retail*, *Tech, Media & Telecom*, *Travel & Hospitality*) and by customer language
+- **Deployed Infrastructure Engineer** (earlier listings used the title Forward Deployed Infrastructure Engineer)
+- **Software Engineer** - *Frontend*, *Infrastructure*, *Voice*, *Site Reliability (SRE)*, plus newer platform teams such as *Agent Runtime*, *Context Engine*, *Insights* and *Payments Infrastructure*
 - **Security Engineer**, **Support Engineer**
 - Early-career: internships and an **APX / Early Career Program** (SF onsite; Agent Engineering in SF and NY)
 
@@ -254,6 +255,26 @@ Avoid: stories where ownership means "I worked hard on my assigned piece," blami
 
 </details>
 
+### 13. We have an agent that builds and edits customer agents from plain-English instructions, SOPs and call transcripts. How do you stop it shipping a broken or unsafe agent?
+
+<details><summary><b>Answer</b></summary>
+
+Treat the builder as a fast, prolific engineer whose changes you cannot fully trust: everything it produces is a reviewable diff, gated by tests it does not control, released as an immutable snapshot you can roll back.
+
+**Constrain the output space.** The builder should emit structured, declarative artefacts (journeys, tool bindings, guardrail configs, tone settings) validated against a schema, not free-form prompts or arbitrary code. A narrow surface is a checkable surface.
+
+**Split privileges by the invariant/preference line.** Tone, phrasing and flow ordering can change freely. Anything touching invariants (refund caps, authentication gates, PII rules, which write tools are bound) needs explicit human sign-off, and the policy layer sits outside the builder's write scope. Otherwise the builder will "fix" a failing simulation by loosening a guardrail, which is reward hacking against your own test suite.
+
+**Do not let it grade its own homework.** Builder-generated simulations are useful but additive. The release gate is a held-out, human-owned regression suite (scenarios mined from production conversations plus adversarial cases) that the builder can neither read nor edit. Compare pass^k per scenario class against the current release, and block on any invariant regression.
+
+**Distrust the inputs.** SOPs contradict each other and go stale; transcripts encode human agents' bad habits, such as unauthorised goodwill credits, so imitating them imports policy violations. Every extracted rule should carry provenance (which SOP line or transcript produced it) and be confirmed by the customer. Uploaded content is data, never instructions to the builder.
+
+**Ship like any other release.** Staged rollout, live monitoring of escalation, resolution and policy-violation rates, automatic rollback on breach. For the self-improvement loop on production traffic, the builder proposes and a human approves, and you track what share of proposals get accepted as a quality signal on the builder itself.
+
+**Follow-ups:** How would you tell a genuine improvement from overfitting to last week's failures? A customer wants changes auto-shipped with no review - what, if anything, do you allow?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -285,3 +306,5 @@ Avoid: stories where ownership means "I worked hard on my assigned piece," blami
 - [Exponent - Sierra Agent Engineer Interview Guide](https://www.tryexponent.com/guides/sierra-agent-engineer-interview)
 - [Gaijineer - Sierra Software Engineer, Agent interview experience (candidate report)](https://gaijineer.co/sierra-software-engineer-agent-interview-experience)
 - [levels.fyi - Sierra](https://www.levels.fyi/companies/sierra)
+- [Sierra - Ghostwriter product page](https://sierra.ai/product/ghostwriter)
+- [SiliconANGLE - Sierra valued at $15B after $950M round (May 2026)](https://siliconangle.com/2026/05/04/ai-agent-startup-sierra-valued-15b-new-950m-funding-round)

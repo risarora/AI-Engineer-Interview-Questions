@@ -1,13 +1,13 @@
 # 🪟 Microsoft - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **A classic big-tech loop with an AI layer on top.** Recruiter screen → technical screen (or online assessment) → 4-5 round virtual onsite on Teams → final round with a senior leader (still informally called the "AA" / as-appropriate round). AI teams add an ML/"AI fluency" round; the rest is standard coding + design + behavioural.
-- **DSA still gates everything.** Unlike some frontier labs, Microsoft runs LeetCode-style coding rounds even for AI teams - candidates report classic data-structures problems up to and including senior/principal loops (reported, varies by team).
+- **DSA still gates everything.** Unlike some frontier labs, Microsoft runs LeetCode-style coding rounds even for AI teams - candidates report classic data-structures problems up to and including senior/principal loops (reported, varies by team). 2026 reports also describe more "read and extend this existing code" problems in place of write-from-scratch puzzles, still in a plain shared editor with no AI autocomplete (reported, varies).
 - **Growth mindset is graded, not decoration.** Microsoft's official interview guidance names six competencies - collaboration, drive for results, customer focus, influencing for impact, judgment, adaptability - and recommends STAR(R) stories (the extra R is *Reflection*). "Learn-it-all over know-it-all" is the cultural bar every behavioural round checks.
-- **Three distinct AI orgs, three flavours of role.** CoreAI (platform: Azure AI Foundry, dev tools, agent stack), Microsoft AI / MAI (consumer Copilot, Bing, in-house MAI models), and product Copilot teams inside M365/Dynamics/Security. GitHub runs its own separate hiring process (reported).
+- **Three distinct AI orgs, three flavours of role.** CoreAI (platform: Microsoft Foundry, formerly Azure AI Foundry, plus dev tools and the agent stack), Microsoft AI / MAI (consumer Copilot, Bing, in-house MAI models), and product Copilot teams inside M365/Dynamics/Security. GitHub runs its own separate hiring process (reported).
 - **Enterprise constraints are the home-field advantage.** Design rounds reward candidates who reflexively handle tenancy, permissions/ACL trimming, compliance, and cost at hundreds-of-millions-of-users scale - that's what shipping Copilot actually looks like.
 
 ## Company context
@@ -16,7 +16,7 @@ Microsoft is executing the largest AI product rollout in the industry: Copilot e
 
 ## Roles & titles they hire
 
-- **Software Engineer / Senior / Principal SWE** - the bulk of AI hiring; posted into CoreAI, Azure AI Foundry, M365 Copilot, and platform teams
+- **Software Engineer / Senior / Principal SWE** - the bulk of AI hiring; posted into CoreAI, Microsoft Foundry, M365 Copilot, and platform teams
 - **AI Engineer** - increasingly used as a posting title for applied LLM roles (RAG, agents, evals on the Copilot/Foundry stack)
 - **Applied Scientist / Senior Applied Scientist** - Microsoft's title for ML-heavy product science roles (modelling, experimentation, relevance/ranking); a distinct loop with more ML theory
 - **Machine Learning Engineer** - appears on some teams; overlaps heavily with SWE + Applied Scientist
@@ -33,7 +33,7 @@ Public confidence here is high for the general shape - Microsoft publishes its o
 |---|---|---|
 | Recruiter screen | 30-45 min phone/Teams | Background, motivation, communication, alignment with the role and Microsoft's competencies |
 | Hiring manager screen | 30-60 min (reported, varies) | Resume deep dive, behavioural competencies, team fit |
-| Technical screen / online assessment | Either a Codility-style OA or a 45-60 min live coding session in a shared editor (reported, varies by role and level) | DSA correctness, code quality, thinking out loud |
+| Technical screen / online assessment | Either a Codility-style OA or a 45-60 min live coding session in a shared editor (reported, varies by role and level). 2026 reports mention more reading, debugging, and extending existing code, with no AI assistance in the live editor (reported, varies) | DSA correctness, code quality, code-reading speed, thinking out loud |
 | Virtual onsite loop | 4-5 back-to-back rounds, 45-60 min each, on Teams, usually one day | 2-3 coding rounds (classic DSA, sometimes low-level design), one system design round (high-level design; AI teams often make this an AI/LLM system design), one behavioural round woven throughout |
 | AI/ML depth round | For AI/Applied Scientist roles: ML fundamentals, LLM concepts, RAG/agent/eval design - an "AI fluency" round (reported, varies) | Applied AI judgment: prompting vs RAG vs fine-tuning, evals, production tradeoffs |
 | Final senior-leader round | 45-60 min with the hiring manager or a senior leader; informally the "as-appropriate"/AA round - the name is a historical holdover per Microsoft's own devblog, but the gap-filling final round persists in reports | Reviews all prior feedback, probes weak spots, behavioural depth; effectively the final hire/no-hire signal |
@@ -185,7 +185,7 @@ The single biggest UX lever is **streaming**: "first useful content" means first
 
 - **Cut prefill cost**: trim retrieved context (fewer, better chunks - this is where retrieval quality buys latency), and use prompt/prefix caching so the static system prompt and stable conversation prefix aren't recomputed - KV-cache reuse slashes TTFT for long shared prefixes.
 - **Model routing**: classify request complexity and route simple turns to a small model (Microsoft's public Phi-family investment is exactly this economics), reserving the frontier model for hard queries.
-- **Parallelize**: run retrieval and any safety pre-checks concurrently with query rewriting where dependencies allow; speculative decoding on the serving side raises tokens/sec.
+- **Parallelise**: run retrieval and any safety pre-checks concurrently with query rewriting where dependencies allow; speculative decoding on the serving side raises tokens/sec.
 - **Capacity/queueing**: p95 is often queueing at peak - provisioned throughput and admission control matter as much as model choice.
 
 Close the loop with per-stage tracing (spans for rewrite/retrieve/rerank/prefill/decode) so regressions are attributable.
@@ -198,7 +198,7 @@ Close the loop with per-stage tracing (spans for rewrite/retrieve/rerank/prefill
 
 <details><summary><b>Answer</b></summary>
 
-This is the Copilot-in-Excel shape, and Microsoft's platform vocabulary for it is agents + tool use (Azure AI Foundry Agent Service, Microsoft Agent Framework - the successor to Semantic Kernel and AutoGen).
+This is the Copilot-in-Excel shape, and Microsoft's platform vocabulary for it is agents + tool use (Foundry Agent Service in Microsoft Foundry, formerly Azure AI Foundry, and Microsoft Agent Framework - the successor to Semantic Kernel and AutoGen).
 
 **Tool design first.** Don't expose "execute arbitrary formula" - expose a curated, typed tool surface: `get_sheet_schema()`, `read_range(range)`, `create_pivot(source, rows, cols, aggregations)`, each with JSON-schema parameters and machine-readable error returns. Tool granularity is the key design decision: too fine (one tool per keystroke) blows up plan length and error surface; too coarse (one mega-tool) hides intent from the model and from audit logs.
 
@@ -300,6 +300,40 @@ flowchart LR
 
 </details>
 
+### 13. A coding assistant generated a retry helper for calls to a model endpoint: catch any exception, sleep `2 ** attempt` seconds, try up to five times, return `None` if all fail. It passes the unit tests. Review it as if it were going into a Copilot backend: what is wrong, and what would you change?
+
+<details><summary><b>Answer</b></summary>
+
+The code under review:
+
+```python
+import time
+
+def call_model(client, prompt, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            return client.complete(prompt, timeout=30)
+        except Exception:
+            time.sleep(2 ** attempt)
+    return None
+```
+
+It works on the happy path, which is why the tests pass. Every problem is in failure behaviour, and that is what a read-and-extend round is probing.
+
+1. **It retries everything.** `except Exception` treats a 400 (malformed request), a 401, or a content-filter rejection the same as a 429 or a 503. Non-retryable errors burn five attempts and ~30 s of sleep before failing. Classify: retry throttling, 5xx, and connection resets, and fail fast on other 4xx.
+2. **It ignores the server.** A 429 from a model endpoint usually carries a `Retry-After` header. Honour it instead of guessing.
+3. **No jitter.** Thousands of instances throttled at the same moment retry on the same schedule and get throttled together again. Use capped exponential backoff with full jitter.
+4. **No overall deadline.** The worst case is five 30 s timeouts plus 1+2+4+8+16 s of sleep, about three minutes, against a chat budget of a few seconds. Pass a deadline in and stop when the remaining budget cannot fit another attempt. It also sleeps after the final attempt for no reason.
+5. **`return None` hides failure.** Callers either crash later on `None` or render an empty answer. Raise a typed exception carrying the last error so the caller can fall back to a smaller model, a cached answer, or an honest error message.
+6. **Retrying a timeout is neither free nor always safe.** The first request may have completed server-side: you pay for prefill twice, and if the call drives tools with side effects you may act twice. Use idempotency keys where the API supports them.
+7. **No observability.** Without attempt counts, status codes, and latency metrics, a sustained outage just looks like slowness. A circuit breaker stops every request from waiting out the full budget during one.
+
+Then extend it with the missing tests: a 400 that must not retry, a 429 with `Retry-After`, and a deadline that expires mid-backoff.
+
+**Follow-ups:** Should this policy live in every caller, in the SDK client, or in a gateway in front of the model? How do retries work when a streaming response fails halfway through?
+
+</details>
+
 ## How to prepare
 
 Repo topics, in priority order for Microsoft specifically:
@@ -308,7 +342,7 @@ Repo topics, in priority order for Microsoft specifically:
 - **[11-ai-system-design](../11-ai-system-design/)** - the design round for AI teams is where you differentiate. Closest case studies to their products: [Meeting Assistant](../11-ai-system-design/case-studies/08-meeting-assistant.md) (Teams/M365 Copilot recap is a flagship feature), [Enterprise RAG Assistant](../11-ai-system-design/case-studies/01-enterprise-rag-assistant.md) (the M365 Copilot / Graph-grounding shape, permissions and all), and [AI Code Assistant](../11-ai-system-design/case-studies/02-ai-code-assistant.md) (GitHub Copilot).
 - **[04-rag-and-retrieval](../04-rag-and-retrieval/)** - hybrid search + reranking + security trimming is the publicly documented Azure AI Search / M365 Copilot pattern; expect it in any grounding discussion.
 - **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - CoreAI's stated mission is the agent stack (Foundry Agent Service, Agent Framework, Copilot Studio); tool design, orchestration, and agent failure handling are squarely in-distribution.
-- **[07-evaluation-and-observability](../07-evaluation-and-observability/)** - Azure AI Foundry ships groundedness/relevance/safety evals as product features; being fluent in eval design signals you can work on or with that stack.
+- **[07-evaluation-and-observability](../07-evaluation-and-observability/)** - Microsoft Foundry ships groundedness/relevance/safety evals as product features; being fluent in eval design signals you can work on or with that stack.
 - **[09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/)** - go deeper here than for most companies: 2026 candidate reports describe responsible-AI questioning (bias detection and mitigation, fairness, explaining a model decision to a non-technical user, hallucination evaluation) appearing in nearly every round of AI engineer loops, not as a single checkbox round. Microsoft publishes its Responsible AI Standard and ships enterprise products, so injection defence, content safety, and governance questions are all fair game.
 - **[08-inference-and-production](../08-inference-and-production/)** - latency decomposition, prompt caching, and small-model routing (the economics behind their Phi family) for Copilot-scale serving.
 
@@ -316,7 +350,7 @@ Company-specific moves:
 
 1. **Read Microsoft's own hiring pages** - the [interview tips](https://careers.microsoft.com/v2/global/en/hiring-tips/interview-tips.html) and technical-interviewing pages on their careers site. They tell you the grading rubric: six competencies, STAR(R), clarifying questions, thought process out loud.
 2. **Prepare growth-mindset stories like a technical round.** Map 4-6 STAR(R) stories to the six competencies, each with a genuine reflection and changed behaviour. This is weighted more heavily than at most tech companies.
-3. **Use the stack you'd be building.** Get an Azure account, build a small RAG app or agent on Azure AI Foundry (model catalog, Agent Service, evals, Azure AI Search hybrid retrieval), and use M365 Copilot or GitHub Copilot seriously enough to critique it. "I built X on Foundry and here's what was rough" is a strong differentiator.
+3. **Use the stack you'd be building.** Get an Azure account, build a small RAG app or agent on Microsoft Foundry (model catalog, Agent Service, evals, Azure AI Search hybrid retrieval), and use M365 Copilot or GitHub Copilot seriously enough to critique it. "I built X on Foundry and here's what was rough" is a strong differentiator.
 4. **Learn the org map before team-match conversations.** Read the [CoreAI announcement](https://blogs.microsoft.com/blog/2025/01/13/introducing-core-ai-platform-and-tools/) and browse [microsoft.ai/careers](https://microsoft.ai/careers/) - knowing whether a role sits in CoreAI (platform), MAI (consumer Copilot + in-house models), or a product Copilot team tells you what the loop will emphasise and what you should ask.
 5. **Don't skip DSA because it's an "AI role."** Timed classic problems, in Python, narrating as you go - this is the round that most often ends Microsoft loops, not the AI round.
 
@@ -332,7 +366,8 @@ Compensation: no numbers here - see [levels.fyi](https://www.levels.fyi/companie
 - [Exponent - Microsoft interview process](https://www.tryexponent.com/blog/microsoft-interview-process) - stage-by-stage loop shape, round counts, timelines
 - [Interview Query - Microsoft AI Engineer interview guide](https://www.interviewquery.com/prep-guides/microsoft-ai-engineer) - AI-engineer-specific round descriptions (consulted via search results)
 - [Blind - Microsoft interview discussions](https://www.teamblind.com/company/Microsoft/posts/microsoft-interview) - candidate reports incl. CoreAI loops (DSA/LLD/HLD/"AI fluency" rounds); anecdotal, varies
-- [Azure AI Foundry product page](https://azure.microsoft.com/en-us/products/ai-foundry/) - platform scope referenced for role/skill expectations
+- [What is Microsoft Foundry? - Microsoft Learn](https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry) - platform scope referenced for role/skill expectations (Azure AI Foundry was renamed Microsoft Foundry at Ignite, November 2025)
+- [Levelop - Microsoft coding interviews in 2026](https://levelop.dev/blog/microsoft-coding-interviews-in-2026-the-problem-solving-conversation) - third-party write-up of the shift toward reading and extending existing code in a plain shared editor (unofficial, reported)
 - [Microsoft Responsible AI Standard, v2 - General Requirements (official PDF)](https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/final/en-us/microsoft-brand/documents/Microsoft-Responsible-AI-Standard-General-Requirements.pdf) - the six principles and the three fairness goals (quality of service, allocation, stereotyping/demeaning/erasing)
 - [Fairlearn](https://fairlearn.org/) - Microsoft-originated open-source toolkit for disaggregated fairness assessment
 - [Observability in generative AI - Microsoft Learn](https://learn.microsoft.com/en-us/azure/foundry/concepts/observability) - built-in quality, safety, and agent evaluators shipped with the Foundry evaluation SDK

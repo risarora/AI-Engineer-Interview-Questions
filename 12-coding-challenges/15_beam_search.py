@@ -31,8 +31,10 @@ Implement:
 INTERVIEW NOTES
 ---------------
 A strong solution demonstrates:
-- Why decoding lives in log space: an 800-token sequence has probability near
-  1e-500, exactly 0.0 in float64. Sums stay representable, products do not.
+- Why decoding lives in log space: 800 tokens at an average probability of
+  0.25 each is 0.25**800 ~ 2e-482, far below float64's smallest subnormal
+  (~5e-324), so the product is exactly 0.0. Sums stay representable,
+  products do not.
 - Beam width is one dial, greedy decode at one end (B=1) and exhaustive search
   at the other (B >= V**max_len). Everything between is a heuristic with no
   optimality guarantee, so a wider beam can still score worse on the metric
@@ -41,16 +43,21 @@ A strong solution demonstrates:
   negative log-prob, so EOS looks attractive early. Length normalization
   divides that bias out, and alpha is a real tuning knob.
 - Finished beams are results, not candidates. Parking them leaves the live set
-  free for hypotheses that can still improve.
+  free for hypotheses that can still improve. This version lets the live set
+  shrink as beams finish; Hugging Face transformers instead keeps the top 2B
+  candidates per step so B beams stay alive, a trade of compute for recall.
 Common mistakes: multiplying probabilities and underflowing to zero;
 re-expanding a beam that already emitted EOS, which puts EOS mid-output;
 killing the whole search when the top beam finishes; ranking raw log-probs
 against normalized scores in the same list; sorting all B*V candidates when a
-partition suffices; normalizing by len**alpha, a different penalty.
+partition suffices; quoting a length_penalty value without saying which
+formula it feeds (transformers divides by len**alpha, not the GNMT form).
 Follow-ups: the GNMT coverage penalty; diverse beam search; batching all B
-prefixes through one forward pass with a shared KV cache; min_len by masking
-EOS; when sampling (top-k, nucleus) beats search, and why search wins on
-translation.
+prefixes through one forward pass with a shared, copy-on-write KV cache;
+min_len by masking EOS; why search suits closed-ended tasks (translation, ASR) while
+open-ended generation samples instead, since high-likelihood text degenerates
+into repetition (Holtzman et al., 2020); why chat LLM serving rarely offers
+beam search (up to B times the KV cache, poor fit with continuous batching).
 """
 
 import itertools

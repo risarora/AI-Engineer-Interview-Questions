@@ -7,8 +7,9 @@ Implement the standard LLM decoding toolbox over a 1-D logits vector
 
 1. apply_temperature(logits, temperature) -> logits / T          (T > 0)
 2. apply_repetition_penalty(logits, generated_ids, penalty)
-   CTRL-style: for every token already generated, divide its logit by
-   `penalty` if positive, multiply if negative (penalty > 1 discourages).
+   CTRL-style, with the sign fix used by Hugging Face transformers: for
+   every token already generated, divide its logit by `penalty` if
+   positive, multiply if negative (penalty > 1 discourages).
 3. top_k_filter(logits, k)   -> keep the k highest logits, others -> -inf
 4. top_p_filter(logits, p)   -> nucleus: keep the smallest set of tokens
    (by descending probability) whose cumulative probability >= p
@@ -35,7 +36,11 @@ unique token, not per occurrence.
 Follow-up variations: why min-p adapts better than top-p when the
 distribution is flat vs peaked; greedy vs T->0 equivalence; frequency and
 presence penalties (additive, per the OpenAI API) vs multiplicative CTRL
-penalty; beam search and why it's rare for open-ended chat generation.
+penalty; some stacks offer a temperature-last order so truncation sees the
+unscaled distribution - what changes?; beam search and why it's rare for
+open-ended chat generation; why you should check which sampling knobs a
+hosted model actually honours (some reasoning models restrict or ignore
+temperature/top_p overrides).
 """
 from __future__ import annotations
 
@@ -165,5 +170,13 @@ if __name__ == "__main__":
     # filters actually constrain the support
     draws = {sample(logits, top_p=0.75, rng=rng) for _ in range(500)}
     assert draws <= {0, 1}
+
+    # --- sample(): temperature runs BEFORE top-p, so it changes the nucleus ---
+    # At T=1, p=0.75 keeps {0, 1}. At T=0.25 probs are ~[0.88, 0.11, ...], so
+    # token 0 alone crosses 0.75 and must be the only survivor.
+    sharp = softmax(apply_temperature(logits, 0.25))
+    assert sharp[0] > 0.75
+    draws = {sample(logits, temperature=0.25, top_p=0.75, rng=rng) for _ in range(200)}
+    assert draws == {0}, f"temperature must be applied before top-p, got {draws}"
 
     print("All tests passed.")

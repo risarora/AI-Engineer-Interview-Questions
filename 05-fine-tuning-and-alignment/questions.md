@@ -1,6 +1,6 @@
 # Fine-tuning, RLHF & Alignment - Interview Questions
 
-51 questions: 13 basic, 20 intermediate, 18 advanced.
+56 questions: 13 basic, 22 intermediate, 21 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -19,7 +19,7 @@ Fine-tune for *behaviour*, RAG for *knowledge*, prompting first for everything. 
 Fine-tuning wins when you need:
 
 - **Form/style/format**: a consistent brand voice, a strict JSON schema, a house SQL dialect - things that are tedious and fragile to specify in a prompt.
-- **Latency/cost**: a tuned 8B model replacing a frontier API model on a narrow task, or eliminating a 2,000-token few-shot system prompt you pay for on every call.
+- **Latency/cost**: a tuned 8B model replacing a frontier API model on a narrow task, or eliminating a 2,000-token few-shot system prompt you pay for on every call (prompt caching cuts that bill, but not the context it occupies or the fragility of steering by examples).
 - **Narrow skill**: classification, extraction, routing - tasks where a small specialised model beats a large general one.
 - **Behaviour you can't prompt into existence**: reliable tool-call formatting, refusal policy, a persona that survives long conversations.
 
@@ -292,7 +292,7 @@ The InstructGPT recipe, three stages after pretraining.
 
 **Stage 1 - SFT**: fine-tune the base model on high-quality demonstrations (human-written or curated) so it can follow instructions at all. This is the initialization for everything downstream; RL can't fix a policy that never samples good behaviour.
 
-**Stage 2 - Reward model**: collect *preference data* - sample two or more responses per prompt from the SFT model, have humans rank them (pairwise comparison is used because it's far more reliable than absolute scoring; annotators agree more on "A > B" than on "A is a 7/10"). Train an RM - usually the SFT model with a scalar head - with the Bradley - Terry loss: $-\log\sigma(r(x, y_w) - r(x, y_l))$, pushing the chosen response's score above the rejected one's.
+**Stage 2 - Reward model**: collect *preference data* - sample two or more responses per prompt from the SFT model, have humans rank them (pairwise comparison is used because it's far more reliable than absolute scoring; annotators agree more on "A > B" than on "A is a 7/10"). Train an RM - usually the SFT model with a scalar head - with the Bradley-Terry loss: $-\log\sigma(r(x, y_w) - r(x, y_l))$, pushing the chosen response's score above the rejected one's.
 
 **Stage 3 - PPO**: the SFT model becomes the policy. Sample responses to prompts, score them with the RM, and update the policy with PPO to increase expected reward - with a **KL penalty against the frozen SFT (reference) model** so the policy can't wander into degenerate text that happens to fool the RM. The effective objective is roughly $\mathbb{E}[r(x,y)] - \beta\,\mathrm{KL}(\pi \| \pi_{ref})$.
 
@@ -378,7 +378,7 @@ PRMs give a gradient at every step, so the model learns which step was the mista
 
 Where PRMs really earn their keep is inference-time: reranking best-of-N, or guiding tree search, where a per-step score lets you prune early. That is a large part of why they matter in the test-time-compute era.
 
-Two caveats worth raising. First, if you have a real verifier (unit tests, an answer checker), you do not need an ORM at all, RLVR uses the checker directly and there is nothing to hack in the reward. Second, PRMs are themselves hackable and step boundaries are ill-defined for free-form reasoning.
+Two caveats worth raising. First, if you have a real verifier (unit tests, an answer checker), you do not need an ORM at all. RLVR uses the checker directly, so there is no learned reward model to exploit, though a weak checker can still be gamed (special-cased tests, format-only passes). Second, PRMs are themselves hackable and step boundaries are ill-defined for free-form reasoning.
 
 Practical order: verifier reward first, ORM if the task is not verifiable, PRM only when the reward is too sparse to learn from.
 
@@ -427,7 +427,7 @@ Two caveats that show real experience: activations still scale with batch × seq
 
 **Merging**: because LoRA's update is additive, you can fold it into the base weights offline: $W' = W + \frac{\alpha}{r}BA$. The merged model is a standard checkpoint - zero inference overhead, no PEFT dependency at serving time, deployable anywhere. In PEFT it's `model.merge_and_unload()`. Costs: you now store/ship a full-size artefact per variant, you lose the ability to detach the adapter, and merging into a *quantized* base is lossy - the standard practice is to merge into the full-precision base weights and then (re)quantize, not to merge into the 4-bit tensors a QLoRA run trained against.
 
-**Unmerged serving**: keep the base frozen and compute $Wx + \frac{\alpha}{r}BAx$ at runtime - a small extra matmul (typically low-single-digit % latency overhead). Why accept that cost? Because it unlocks **multi-LoRA serving**: one copy of the base model in GPU memory with many adapters (each tens of MB) attached per-request. Systems like S-LoRA and vLLM's LoRA support batch requests for *different* adapters through the same base-model forward pass using batched/gathered adapter kernels, and page adapters between GPU/CPU memory on demand. This changes the economics of customization: serving 100 per-customer fine-tunes as merged models means 100 model replicas; as adapters it's one base replica plus ~GBs of adapters.
+**Unmerged serving**: keep the base frozen and compute $Wx + \frac{\alpha}{r}BAx$ at runtime - a small extra matmul whose latency cost depends on the kernels and on how many distinct adapters share a batch, so benchmark it on your own traffic mix. Why accept that cost? Because it unlocks **multi-LoRA serving**: one copy of the base model in GPU memory with many adapters (each tens of MB) attached per-request. Systems like S-LoRA and vLLM's LoRA support batch requests for *different* adapters through the same base-model forward pass using batched/gathered adapter kernels, and page adapters between GPU/CPU memory on demand. This changes the economics of customization: serving 100 per-customer fine-tunes as merged models means 100 model replicas; as adapters it's one base replica plus ~GBs of adapters.
 
 **Hot-swapping** means loading/unloading adapters at runtime without restarting the server or reloading the base - new fine-tune versions deploy in seconds, and rollback is "point requests at the previous adapter ID."
 
@@ -489,7 +489,7 @@ A reward model maps (prompt, response) → scalar score. Standard construction: 
 
 **Data collection**: for each prompt, sample 2+ responses (from the SFT model - you want the RM accurate on the distribution the policy will actually produce), and have annotators pick the better one under a written rubric (helpfulness, harmlessness, accuracy...). Pairwise comparison is used because humans are much more consistent at "A beats B" than at absolute scores. Quality control is the hard part: measure inter-annotator agreement (often only ~70-80% on subtle pairs), calibrate annotators, and audit for systematic biases - annotators reliably over-prefer longer and more confident-sounding answers, and your RM will faithfully learn those biases.
 
-**Loss**: the Bradley - Terry model says the probability that response $y_w$ beats $y_l$ is a logistic function of the score difference:
+**Loss**: the Bradley-Terry model says the probability that response $y_w$ beats $y_l$ is a logistic function of the score difference:
 
 $$P(y_w \succ y_l \mid x) = \sigma\big(r_\theta(x, y_w) - r_\theta(x, y_l)\big)$$
 
@@ -592,7 +592,7 @@ DPO (Direct Preference Optimization) trains directly on preference pairs with a 
 
 $$r(x,y) = \beta \log \frac{\pi(y|x)}{\pi_{ref}(y|x)} + \text{const}(x)$$
 
-So instead of learning an explicit RM and then finding its optimal policy with PPO, you substitute this **implicit reward** into the Bradley - Terry preference likelihood. The constant cancels in the pairwise difference, giving the DPO loss:
+So instead of learning an explicit RM and then finding its optimal policy with PPO, you substitute this **implicit reward** into the Bradley-Terry preference likelihood. The constant cancels in the pairwise difference, giving the DPO loss:
 
 $$\mathcal{L} = -\log\sigma\Big(\beta\big[\log\tfrac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \log\tfrac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)}\big]\Big)$$
 
@@ -643,7 +643,7 @@ Honest summary: frontier labs run online RL for their main post-training because
 
 All three are DPO-family offline preference methods; each fixes a specific pain point.
 
-- **IPO (Identity Preference Optimization)**: addresses DPO's tendency to *overfit preferences* - DPO's log-sigmoid loss keeps pushing the chosen/rejected margin toward infinity on pairs it already ranks correctly (especially with deterministic or noisy labels, where Bradley - Terry assumptions break). IPO replaces it with a squared loss regressing the implicit-reward margin toward a fixed target (1/(2β) in the paper's parameterization), so optimisation saturates instead of running away. Pick it when your preference labels are noisy or near-deterministic and DPO runs degrade with training. Comes from the theoretical Ψ-PO framework analysing what RLHF/DPO actually optimise.
+- **IPO (Identity Preference Optimization)**: addresses DPO's tendency to *overfit preferences* - DPO's log-sigmoid loss keeps pushing the chosen/rejected margin toward infinity on pairs it already ranks correctly (especially with deterministic or noisy labels, where Bradley-Terry assumptions break). IPO replaces it with a squared loss regressing the implicit-reward margin toward a fixed target (1/(2β) in the paper's parameterization), so optimisation saturates instead of running away. Pick it when your preference labels are noisy or near-deterministic and DPO runs degrade with training. Comes from the theoretical Ψ-PO framework analysing what RLHF/DPO actually optimise.
 
 - **KTO (Kahneman-Tversky Optimization)**: solves the *data-format* problem - you often don't have pairs, just independent thumbs-up/thumbs-down signals (production feedback, moderation flags). KTO's prospect-theory-inspired loss trains directly on binary desirable/undesirable labels relative to a reference point, no pairing required, and tolerates imbalanced positives/negatives. Pick it when you have abundant unpaired feedback from a deployed product - its natural habitat.
 
@@ -711,7 +711,7 @@ flowchart TD
     C --> F["Replay ~10-50% general data,<br/>lower LR, warmup"]
 ```
 
-**Follow-ups:** Why does SFT inject knowledge so poorly compared to CPT? Design the data mixture for adapting a 8B model to clinical notes - what fractions and why? How would you check the CPT actually added knowledge rather than style?
+**Follow-ups:** Why does SFT inject knowledge so poorly compared to CPT? Design the data mixture for adapting an 8B model to clinical notes - what fractions and why? How would you check the CPT actually added knowledge rather than style?
 
 </details>
 
@@ -974,9 +974,51 @@ My ship criterion is (3) and (4). Not test accuracy.
 
 </details>
 
+### 34. You are fine-tuning a reasoning model that writes a thinking block before its final answer. How do you build the SFT data, and what breaks if you train on final answers only?
+
+<details><summary><b>Answer</b></summary>
+
+Keep the reasoning in the training targets, and render it exactly the way the model's chat template does. A reasoning model's quality lives in its thinking tokens. Train it on (prompt, final answer) pairs and you teach it to answer without thinking: the thinking block shrinks or disappears, accuracy on hard prompts drops, and in hybrid models the thinking mode degrades even though you never trained it directly.
+
+How I build the data:
+
+1. **Get traces, not just answers.** Generate them from the model itself by rejection sampling (sample several, keep the traces whose final answer passes a checker or judge), or from a stronger teacher with a compatible style. Self-generated traces stay closest to the model's own distribution and cause the least drift.
+2. **Match the template exactly.** Thinking delimiters, where the reasoning sits relative to the answer, and how earlier turns are rendered. Many templates strip reasoning from previous assistant turns in multi-turn history. Train with the same stripping, or the model sees a context shape in training that it never sees in serving.
+3. **Put loss on both the reasoning and the answer,** with prompts masked as usual. If you only have answer-only labels, either generate a trace that reaches that answer and check it is consistent, or route those examples to the non-thinking mode if the model has one.
+4. **Mix in general reasoning data** so the trace style does not collapse onto your narrow task.
+
+Other failure modes: traces that do not actually support the final answer teach post-hoc rationalisation, very long teacher traces teach rambling and blow the latency budget, and a teacher with a different reasoning style can leave you with a model whose thinking and answers disagree.
+
+Evaluate with thinking on, at the reasoning budget you will serve, and track trace length next to accuracy. A fine-tune that holds accuracy but doubles thinking tokens has doubled your serving cost.
+
+**Follow-ups:** Your domain experts gave you answer-only labels. How do you get traces without inventing reasoning the experts never used? How would you shorten the model's thinking without losing accuracy?
+
+</details>
+
+### 35. Why does LoRA hold up so well for RL fine-tuning, even at very low rank, when the same rank can underfit a large SFT run?
+
+<details><summary><b>Answer</b></summary>
+
+Because RL carries far less information per example than SFT, so the update it has to store is small. A policy-gradient step on one episode is driven by a scalar advantage, roughly "this trajectory was better or worse than expected". That is on the order of one bit per episode, however many tokens the episode contained. SFT on a demonstration supervises every token against a specific target, which is many bits per example. Adapter capacity has to match the information in the signal, so a large SFT dataset can exceed what a rank-16 adapter holds, while a long RL run barely fills a tiny one.
+
+This matches published evidence. Thinking Machines' "LoRA Without Regret" write-up (2025) found GRPO-style RL with LoRA matching full fine-tuning even at rank 1, while on large SFT datasets low-rank LoRA fell behind once the data outgrew its capacity.
+
+Practical consequences:
+
+- **RL is the cheapest place to use LoRA.** The sampler and trainer can share one resident base, and syncing weights to the inference engine each step means moving an adapter, not the full model.
+- **Target all linear layers, MLP included.** Attention-only LoRA underperforms even at matched parameter count, because most of the parameters, and in MoE models the experts, live in the MLP blocks.
+- **Learning rate.** The optimal LoRA learning rate is consistently around 10x the full fine-tuning rate and roughly independent of rank, which makes LR transfer across ranks easy.
+- **Where LoRA still loses.** Large SFT or distillation stages, continued pretraining, and very large batch sizes, where LoRA tends to degrade faster than full fine-tuning.
+
+The interview point is the reasoning, not the citation: ask how many bits the training signal carries per example, then size the adapter to that. It also explains why rank sweeps on SFT runs matter and on RL runs mostly do not.
+
+**Follow-ups:** If RL needs so little capacity, why do labs still run full-parameter RL? How would you test whether an SFT stage is capacity-limited by its LoRA rank rather than by data?
+
+</details>
+
 ## Advanced
 
-### 34. Explain gradient accumulation, gradient checkpointing, and ZeRO/FSDP - and how you'd combine them for a real training run.
+### 36. Explain gradient accumulation, gradient checkpointing, and ZeRO/FSDP - and how you'd combine them for a real training run.
 
 <details><summary><b>Answer</b></summary>
 
@@ -994,7 +1036,7 @@ Three orthogonal tools attacking different memory terms:
 
 </details>
 
-### 35. Explain GRPO. Why has it displaced PPO for reasoning RL?
+### 37. Explain GRPO. Why has it displaced PPO for reasoning RL?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1010,7 +1052,7 @@ Why it won for reasoning RL:
 - **Critic quality was the weak link**: with sparse, end-of-sequence rewards (correct/incorrect), learning accurate per-token values is hard; a bad critic gives noisy advantages. Group-relative scoring sidesteps the problem.
 - **Perfect fit for verifiable rewards**: math/code rewards are cheap binary checks, so sampling large groups per prompt is affordable, and group statistics are meaningful (a prompt where all samples fail gives zero advantage - automatic curriculum focusing gradient on solvable-but-unsolved problems).
 
-Tradeoffs to name: many samples per prompt makes generation the compute bottleneck (mitigated by fast inference engines in the loop); uniform std-normalization has known biases (length effects; degenerate groups where all rewards are equal contribute nothing); and follow-up variants adjust the normalization and clipping details. Conceptually, it's "REINFORCE with a per-prompt Monte-Carlo baseline + PPO clipping" - cheap, scalable, and well-matched to verifiable-reward RL.
+Tradeoffs to name: many samples per prompt makes generation the compute bottleneck (mitigated by fast inference engines in the loop); uniform std-normalization has known biases (length effects; degenerate groups where all rewards are equal contribute nothing); and follow-up variants fix specific pieces: Dr. GRPO removes the length and std normalization biases, DAPO decouples the clip range and filters degenerate groups, and GSPO moves the importance ratio and clipping to the sequence level for stability on large and MoE models. Conceptually, it's "REINFORCE with a per-prompt Monte-Carlo baseline + PPO clipping" - cheap, scalable, and well-matched to verifiable-reward RL.
 
 **Worth sketching.** it shows the group mean doing the critic's job, and the case where it does nothing at all.
 
@@ -1029,7 +1071,7 @@ flowchart LR
 
 </details>
 
-### 36. Why are math and code so RL-friendly? Explain verifiable rewards and the R1-style training recipe.
+### 38. Why are math and code so RL-friendly? Explain verifiable rewards and the R1-style training recipe.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1041,7 +1083,7 @@ Because they have **verifiable rewards**: a program - not a learned model - deci
 
 **The R1-style recipe** (per the DeepSeek-R1 report): R1-Zero applied GRPO with rule-based rewards (answer correctness + output-format compliance) directly to a base model - no SFT - and long chain-of-thought reasoning *emerged*: response lengths grew as the model learned to spend more test-time compute, with self-checking and backtracking ("aha moment") behaviours appearing without being demonstrated. Because R1-Zero's outputs had readability/language-mixing issues, the full R1 pipeline interleaves stages: a small cold-start SFT on curated long-CoT data → reasoning RL → rejection-sampling the RL model to build a large SFT set (plus general data) → final RL for both reasoning and general preferences. They then showed **distillation**: SFT-ing small open models on ~800k R1-generated traces transfers much of the reasoning gain without running RL on the small models.
 
-The broader significance: this is the test-time-compute paradigm - RL teaches the model *how to use more thinking tokens productively*, and verifiable domains are where that optimisation has traction. Extending it beyond math/code means building verifiers (or rubric/judge proxies) for softer domains, which is an open frontier.
+The broader significance: this is the test-time-compute paradigm - RL teaches the model *how to use more thinking tokens productively*, and verifiable domains are where that optimisation has traction. Extending it beyond math/code means building verifiers for softer domains. The usual answer today is rubric-based rewards scored by an LLM judge, which works but reintroduces a learned grader that the policy can hack.
 
 **Worth sketching.** the two entry paths side by side show precisely what the cold-start SFT is buying.
 
@@ -1060,7 +1102,7 @@ flowchart LR
 
 </details>
 
-### 37. What are RLAIF and Constitutional AI? How does AI feedback replace human feedback?
+### 39. What are RLAIF and Constitutional AI? How does AI feedback replace human feedback?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1091,7 +1133,7 @@ flowchart LR
 
 </details>
 
-### 38. What is the "alignment tax"? How does preference tuning cause over-refusal, and how do you manage it?
+### 40. What is the "alignment tax"? How does preference tuning cause over-refusal, and how do you manage it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1112,7 +1154,7 @@ The mature framing to end on: some tax is a deliberate product/policy choice - t
 
 </details>
 
-### 39. When is fine-tuning the wrong call? Describe failure modes you'd warn a team about.
+### 41. When is fine-tuning the wrong call? Describe failure modes you'd warn a team about.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1131,11 +1173,13 @@ Failure modes to warn about even when fine-tuning *is* right: catastrophic forge
 
 </details>
 
-### 40. Hosted fine-tuning APIs vs training it yourself - how do you decide?
+### 42. Hosted fine-tuning APIs vs training it yourself - how do you decide?
 
 <details><summary><b>Answer</b></summary>
 
-**Hosted** (OpenAI/Google fine-tuning endpoints, or managed open-weight tuning on Together/Fireworks/Bedrock-style platforms): you upload formatted data, they train - typically SFT/LoRA-style, with some offering preference-tuning (DPO-style) - and serve the result behind the same API.
+**Hosted** (OpenAI/Google fine-tuning endpoints, or managed open-weight tuning on Together/Fireworks/Bedrock-style platforms): you upload formatted data, they train - typically SFT/LoRA-style, with some offering preference-tuning (DPO-style) and a few offering reinforcement fine-tuning against a grader you define (OpenAI's RFT on its reasoning models is the best-known example) - and serve the result behind the same API.
+
+A middle tier now exists between the two: managed training APIs such as Thinking Machines' Tinker, where you write the training loop and loss yourself on open-weight models and the provider runs the distributed GPU side. You keep the method freedom of DIY without owning the cluster, and you can usually download the resulting LoRA weights.
 
 - **Pros**: zero training infra, days-to-first-model, serving/scaling/monitoring solved, and access to tuning proprietary frontier-family models you could never self-host.
 - **Cons**: your data leaves your boundary (contract terms matter - check retention and training-reuse clauses); limited knobs (a few hyperparameters, restricted method menu - often no custom loss, limited RL); usually **no weight ownership** for proprietary bases - the artefact is locked to that provider and can be deprecated on their schedule; per-token serving premiums; opaque training (hard to debug a bad run you can't inspect).
@@ -1153,7 +1197,7 @@ A sensible default path: prototype on a hosted API to prove value fast, and move
 
 </details>
 
-### 41. Your fine-tuned model's training loss looked great, but outputs in production are worse than the base model. Walk me through your debugging process.
+### 43. Your fine-tuned model's training loss looked great, but outputs in production are worse than the base model. Walk me through your debugging process.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1190,7 +1234,7 @@ flowchart TD
 
 </details>
 
-### 42. Design an end-to-end fine-tuning pipeline for a customer-support model at a mid-size company. Walk me through data → training → eval → deployment → iteration.
+### 44. Design an end-to-end fine-tuning pipeline for a customer-support model at a mid-size company. Walk me through data → training → eval → deployment → iteration.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1210,7 +1254,7 @@ flowchart TD
 
 </details>
 
-### 43. How do you construct the data mixture for a fine-tune to prevent capability regressions - and how do you validate the mixture?
+### 45. How do you construct the data mixture for a fine-tune to prevent capability regressions - and how do you validate the mixture?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1237,7 +1281,7 @@ If general data can't fix a specific regression, escalate to LoRA-only training 
 
 </details>
 
-### 44. Explain sequence packing in SFT. What's the attention contamination problem and how is it solved?
+### 46. Explain sequence packing in SFT. What's the attention contamination problem and how is it solved?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1269,7 +1313,7 @@ flowchart LR
 
 </details>
 
-### 45. How do you serve fine-tuned models at scale - merged checkpoints vs adapters, versioning, rollback?
+### 47. How do you serve fine-tuned models at scale - merged checkpoints vs adapters, versioning, rollback?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1290,7 +1334,7 @@ The core decision is **merged checkpoint vs. runtime adapter**, and it's driven 
 
 </details>
 
-### 46. Your DPO run improves win rate against the SFT model, but outputs are longer, waffly and hedge constantly. Debug it.
+### 48. Your DPO run improves win rate against the SFT model, but outputs are longer, waffly and hedge constantly. Debug it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1314,7 +1358,7 @@ Then re-evaluate on the actual production task, not the preference proxy that go
 
 </details>
 
-### 47. Your fine-tune gained 8 points on your benchmark. How do you know the gain is real and not contamination?
+### 49. Your fine-tune gained 8 points on your benchmark. How do you know the gain is real and not contamination?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1340,7 +1384,7 @@ And the outer loop: 8 benchmark points is not the goal. Does it move the product
 
 </details>
 
-### 48. You are running GRPO with a verifier reward on a code task. Reward climbs steadily, but outputs get shorter and more repetitive and held-out pass rate drops. What is happening?
+### 50. You are running GRPO with a verifier reward on a code task. Reward climbs steadily, but outputs get shorter and more repetitive and held-out pass rate drops. What is happening?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1356,9 +1400,9 @@ Entropy collapse plus verifier hacking, and the reward curve is why you did not 
 
 4. **Prompt set difficulty.** If train prompts get solved but held-out drops, your prompts are too narrow or too easy. Drop prompts where all G rollouts pass (no gradient) and where none pass (no signal, unless you are building a curriculum), and re-filter as the policy improves.
 
-5. **KL coefficient.** Too small lets the policy run away; too large pins it to the reference. R1-style recipes sometimes drop KL entirely, which works only when the verifier is airtight.
+5. **KL coefficient.** Too small lets the policy run away; too large pins it to the reference. Some verifier-reward recipes (DAPO, for one) drop KL entirely, which works only when the verifier is airtight.
 
-**Fixes:** raise sampling temperature or add an entropy bonus, filter degenerate groups, harden the verifier (sandbox with no network, no test-file access, and hold out tests the model never optimises against), separate reward components, and gate on held-out pass rate as the ship metric rather than train reward. Two known biases worth mentioning: dividing advantages by the group standard deviation biases toward low-variance prompts, and length-normalising the loss biases toward length. If your symptoms match, try removing them.
+**Fixes:** raise sampling temperature or add an entropy bonus, filter degenerate groups, harden the verifier (sandbox with no network, no test-file access, and hold out tests the model never optimises against), separate reward components, and gate on held-out pass rate as the ship metric rather than train reward. Two known biases worth mentioning: dividing advantages by the group standard deviation over-weights low-variance prompts (nearly always solved or nearly never), and normalising each response's loss by its own length favours short correct answers while under-penalising long wrong ones (the Dr. GRPO analysis). If your symptoms match, try removing them.
 
 **Worth sketching.** it gives a diagnosis order that deliberately does not start at the reward curve.
 
@@ -1377,7 +1421,7 @@ flowchart TD
 
 </details>
 
-### 49. Design a pipeline to distil a frontier model's performance on your task into an 8B model you can serve yourself. Walk me through the whole thing.
+### 51. Design a pipeline to distil a frontier model's performance on your task into an 8B model you can serve yourself. Walk me through the whole thing.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1391,7 +1435,7 @@ The shape is: prompt distribution, teacher generation, filtering, SFT, on-policy
 
 **4. SFT the 8B** on the filtered set: correct chat template, loss masked to response tokens.
 
-**5. The step people skip: on-policy distillation.** Offline SFT only ever shows the student the teacher's distribution, so the student's own characteristic errors are never corrected, and you get exposure bias at inference. Sample from the *student*, have the teacher score or correct those samples, train on that. If teacher and student share a tokenizer and you can get logits, sequence-level KD on the student's own samples carries far more signal per token than hard labels. Otherwise use the teacher as a judge and run a preference round.
+**5. The step people skip: on-policy distillation.** Offline SFT only ever shows the student the teacher's distribution, so the student's own characteristic errors are never corrected, and you get exposure bias at inference. Sample from the *student*, have the teacher score or correct those samples, train on that. If teacher and student share a tokenizer and you can get teacher log-probs, score the student's own samples token by token against the teacher (a per-token reverse KL, the GKD / on-policy distillation setup), which carries far more signal per token than hard labels. Otherwise use the teacher as a judge and run a preference round.
 
 **6. Eval gate.** Side-by-side against the teacher on a held-out set, plus latency and cost per request. Be honest about the ceiling: distillation transfers narrow behaviour and format reliably, and does not transfer general capability. If the task needs broad reasoning, an 8B may simply not get there. That is a valid finding, not a failure.
 
@@ -1401,7 +1445,7 @@ The shape is: prompt distribution, teacher generation, filtering, SFT, on-policy
 
 </details>
 
-### 50. You want to RL-train an agent for a multi-turn tool-use task, and the only reward you have is whether the final task succeeded. How do you make that work?
+### 52. You want to RL-train an agent for a multi-turn tool-use task, and the only reward you have is whether the final task succeeded. How do you make that work?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1436,7 +1480,7 @@ flowchart LR
 
 </details>
 
-### 51. You RL-trained an agent against a mocked environment, held-out reward improved, and the gains did not show up in production. Diagnose it.
+### 53. You RL-trained an agent against a mocked environment, held-out reward improved, and the gains did not show up in production. Diagnose it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1466,5 +1510,94 @@ flowchart TD
 ```
 
 **Follow-ups:** A vendor shows you 90% success on their own environment suite - what do you ask before buying? How would you build a drift monitor that catches behaviour changes in a mocked service, not just schema changes? At what point is a live staging environment cheaper than maintaining the mock?
+
+</details>
+
+### 54. Your RL loop samples rollouts with a fast inference engine and trains with FSDP. Why do the two disagree on token log-probs, and what do you do about it?
+
+<details><summary><b>Answer</b></summary>
+
+Because they are different programs computing the "same" policy. The sampler and the trainer use different kernels, different reduction orders, often different precision (FP8 weights or a quantized KV cache in the sampler, bf16 in the trainer), plus prefix caching and batch-dependent numerics. In MoE models they can also route borderline tokens to different experts. So the probability of a sampled token under the sampler, mu, is not the probability under the trainer, pi, even with identical weights. Your on-policy algorithm is silently off-policy.
+
+Why it matters: PPO and GRPO compute ratios and advantages assuming the samples came from pi. When they came from mu, the gradient is biased. Small per-token gaps compound over long reasoning traces and multi-turn agent episodes, and the typical symptom is a run that trains normally for a while, then collapses with exploding gradients, which is easily misdiagnosed as a learning-rate problem. Asynchronous pipelines, where the sampler runs one or more policy versions behind the trainer to keep GPUs busy, add deliberate staleness on top.
+
+What I do, in order:
+
+1. **Measure it.** Recompute trainer log-probs for the sampled tokens and log the per-token gap and its tail. Without this you cannot separate mismatch from a bad hyperparameter.
+2. **Correct with importance weights.** Weight each token's loss by pi_old over mu, where pi_old is the trainer's probability under the weights that generated the sample, truncated at a cap so a few extreme tokens cannot dominate. Mask sequences whose ratio is wildly off.
+3. **Shrink the gap at source.** Match precision where you can (some teams report FP16 beats bf16 here), make sampler numerics deterministic, and for MoE replay the sampler's routing decisions in the trainer.
+4. **Bound staleness.** Cap how many versions behind the sampler may run, and treat the correction as mandatory once you go async.
+
+**Worth sketching.** where the two sets of log-probs come from and where the correction slots in.
+
+```mermaid
+sequenceDiagram
+    participant T as Trainer
+    participant S as Sampler
+    participant V as Verifier
+    participant L as Metrics log
+    T->>S: Push weights, version k
+    S->>V: Rollouts sampled under mu
+    V->>T: Rewards plus sampler log-probs
+    T->>T: Recompute pi log-probs on the same tokens
+    T->>L: Per-token gap between pi and mu
+    T->>T: Loss weighted by pi over mu, truncated at a cap
+    T->>S: Push weights, version k plus 1
+```
+
+**Follow-ups:** How would you tell training-inference mismatch apart from a learning rate that is simply too high? What does going fully asynchronous buy you in throughput, and what does it cost in correctness? Why is mismatch worse for MoE models?
+
+</details>
+
+### 55. A team fine-tuned an aligned model on a few thousand benign support transcripts, and its refusal behaviour got noticeably weaker. Why does that happen, and how do you guard against it?
+
+<details><summary><b>Answer</b></summary>
+
+Because safety behaviour is a learned behaviour like any other, and it is shallow. Post-training tends to concentrate refusals in a thin slice of the policy, largely in the first few tokens of a response. A fine-tune that pushes the model toward "always comply helpfully, in this format" moves exactly those weights, and the dataset never contains a harmful request that would pull them back. Qi et al. (2023) showed that fine-tuning aligned models on benign datasets measurably weakened safety, and a handful of deliberately harmful examples removed most of it.
+
+There is a stranger version. The emergent misalignment work (Betley et al., 2025) fine-tuned models on one narrow task, writing insecure code without telling the user, and got broadly misaligned answers on unrelated prompts. Narrow data can shift what the model generalises about what kind of assistant it is, not only the narrow skill.
+
+Guards, cheapest first:
+
+1. **Safety regression evals on every fine-tune.** A harmful-request set and a borderline-benign set, run before and after. A refusal-rate drop is a failed gate, not a footnote.
+2. **Mix safety data back in.** A few percent of refusal and safe-completion examples in the SFT mixture recovers much of the loss. It is the same replay logic as for any other capability.
+3. **Constrain the update.** LoRA, fewer epochs, a lower learning rate and a KL term all limit drift. They reduce erosion, they do not prevent it.
+4. **Screen the training data** for harmful or policy-violating content, and re-run the safety eval on the tuned model before serving it. Major hosted fine-tuning APIs typically do both, for exactly this reason.
+5. **Assume open weights can be stripped.** For an open-weight release, safety training alone will not survive a determined fine-tune. Defence moves to the deployment layer, because tamper-resistant training is still an open research problem.
+
+**Worth sketching.** how a dataset with nothing harmful in it still erodes refusals.
+
+```mermaid
+flowchart TD
+    A["Aligned model,<br/>refusal lives in early tokens"] --> B["Benign fine-tune:<br/>always comply, house format"]
+    B --> C["No harmful prompts<br/>in the data to pull back"]
+    C --> D["Refusal behaviour drifts"]
+    D --> E{"Safety regression<br/>eval run?"}
+    E -->|"no"| F["Weaker refusals ship"]
+    E -->|"yes"| G["Mix in safety data,<br/>constrain the update"]
+    G --> E
+```
+
+**Follow-ups:** Which slice of a safety eval would you expect to move first after a benign fine-tune, and why? How would you design a fine-tuning API that lets customers tune freely without shipping models that comply with clearly harmful requests? Why does narrow training on insecure code generalise to unrelated misbehaviour?
+
+</details>
+
+### 56. What changes when you fine-tune a mixture-of-experts model instead of a dense one?
+
+<details><summary><b>Answer</b></summary>
+
+The recipe has the same shape, but three things bite: the router, memory, and where the adapters go.
+
+**The router.** It is a learned classifier deciding which experts each token visits. Fine-tuning on a narrow distribution can shift routing so a few experts absorb most of your domain's tokens, which concentrates the update and can disrupt experts that general capabilities rely on. A common default for small SFT runs is to freeze the router. If you do train it, keep the auxiliary load-balancing loss switched on. Either way, log per-expert token share before and after next to the regression suite: a sharply skewed load histogram is an early sign of forgetting.
+
+**Memory and systems.** Sparsity saves FLOPs, not memory. A model with 30B total and 3B active parameters needs memory for all 30B during training, plus activations. QLoRA helps on smaller MoEs, but large ones need expert parallelism, which brings all-to-all communication and makes load imbalance a throughput problem as well as a quality one. Framework support for MoE kernels is uneven, so check yours before committing to a plan.
+
+**Where the adapters go.** Expert MLPs hold most of the parameters, so attention-only LoRA leaves most of the model untouched and tends to underfit. LoRA on every expert multiplies adapter count by the number of experts, which inflates adapter size and multi-LoRA serving cost. The usual options are LoRA on attention plus shared experts, LoRA on all experts at lower rank, or targeting only the experts your data actually routes to, which means measuring routing on your data first.
+
+**RL on MoE.** The sampler and the trainer can route the same token differently, which makes the per-token policy ratio noisy. That is part of why sequence-level ratio methods such as GSPO, and routing replay between sampler and trainer, exist.
+
+**Serving.** Merged MoE checkpoints are routine. Unmerged multi-LoRA across many experts is less mature in serving stacks, so verify support and latency before promising per-tenant adapters.
+
+**Follow-ups:** Would you freeze or train the router for a 5k-example SFT run, and what evidence would change your mind? How would you pick which experts to put LoRA on? Why is routing a source of noise in RL on MoE models?
 
 </details>

@@ -41,8 +41,11 @@ A strong solution demonstrates:
 Common mistakes: dropping the tail chunk, empty-string chunks, off-by-one at
 the last window, and recursion that never terminates on separator-free text.
 Follow-ups: return (chunk, start_offset) pairs for citation highlighting;
-token-based sizes with a real tokenizer; semantic chunking via embedding
-similarity between adjacent sentences.
+token-based sizes with a real tokenizer (embedding models cap input in
+tokens, not characters); semantic chunking via embedding similarity between
+adjacent sentences; contextual chunk headers (prepend the document title or
+an LLM-written one-line summary of where the chunk sits before embedding);
+small-to-big retrieval (match on small chunks, return the parent section).
 """
 
 import re
@@ -168,14 +171,18 @@ if __name__ == "__main__":
     except ValueError:
         pass
 
-    # 3. Sentences: size bound; every sentence's content survives, in order.
+    # 3. Sentences: size bound; every fitting sentence lands WHOLE in a single
+    # chunk (never split across two), and sentence order is preserved.
     max_size = 80
     schunks = chunk_sentences(text, max_size)
     assert all(0 < len(c) <= max_size for c in schunks)
-    joined = " ".join(schunks)
+    homes = []
     for sent in split_sentences(text):
         if len(sent) <= max_size:
-            assert sent in joined
+            hits = [i for i, c in enumerate(schunks) if sent in c]
+            assert hits, f"sentence split across chunks: {sent!r}"
+            homes.append(hits[0])
+    assert homes == sorted(homes), "sentence order must be preserved"
     long_sent = "x" * 205
     assert chunk_sentences(long_sent, 100) == ["x" * 100, "x" * 100, "x" * 5]
 

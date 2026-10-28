@@ -8,15 +8,15 @@ How to use this repo when you're a frontend engineer interviewing for AI-product
 
 - **The take-home is now "build a chat UI over this API."** The todo app is dead at AI companies. You get an OpenAI-compatible or Anthropic-style streaming endpoint and a few hours. The real rubric is rarely stated: do you stream tokens or block on the full response, do you have a stop button, what happens when the stream dies at token 200, is the markdown rendered safely. Candidates who `await` the whole response and show a spinner fail before the design review starts.
 
-- **AI-assisted coding is part of the loop itself.** Many companies now run live-coding rounds where you're *expected* to use Cursor/Copilot/Claude, and they grade how you drive it - decomposition, context you feed it, whether you read the diffs, whether you run the code. A smaller set still bans AI tools to test fundamentals. Ask which loop you're in before the round; assuming wrong is itself a signal.
+- **AI-assisted coding is part of the loop itself, and AI-tool fluency is graded.** Meta has run an AI-enabled coding round since October 2025 (a multi-file codebase plus an assistant, typically alongside one classic no-AI round), Google began piloting a Gemini-assisted code-comprehension round for junior and mid-level SWE roles on select US teams in 2026, and Amazon has added AI-assisted repository tasks to some assessments (all reported, varies by team). AI-native companies go further and hand you Cursor, Claude Code or Copilot for the whole practical. They grade how you drive the tool: decomposition, the context you feed it, whether you read the diffs, whether you run the code, and whether you catch what it gets wrong. In UI code that means accessibility, effect and state bugs, and unsafe rendering. Rules differ by company and by round, so ask the recruiter which mode you're in and practise both.
 
-- **Frontend system design converged on one question:** "design the frontend for a ChatGPT-style app" (or a variant: AI code review UI, agent dashboard, copilot sidebar). It tests streaming architecture, conversation state, error UX, and accessibility in one prompt. If you've only prepped "design an infinite-scroll feed," you're prepping for 2022.
+- **Frontend system design converged on a family of prompts:** "design the frontend for a ChatGPT-style app" and its variants - AI code review UI, copilot sidebar, and increasingly the console for a long-running background agent that keeps working after you close the tab. It tests streaming architecture, conversation and run state, error UX, and accessibility in one prompt. If you've only prepped "design an infinite-scroll feed," you're prepping for 2022.
 
 - **Product-sense rounds now include AI judgment.** When should a feature stream vs. block? How do you show uncertainty without destroying trust? When should a feature *not* be AI? Interviewers probe whether you'd ship a hallucination-prone feature with a confident-looking UI.
 
-- **A new vocabulary is assumed:** TTFT, tokens/sec, SSE, tool calls, evals, traces. Not deep theory - but if "time to first token" draws a blank, the interviewer recalibrates your seniority downward.
+- **A new vocabulary is assumed:** TTFT, tokens/sec, SSE, tool calls, reasoning ("thinking") phases, MCP, evals, traces. Not deep theory - but if "time to first token" draws a blank, the interviewer recalibrates your seniority downward.
 
-- **De-emphasised:** framework trivia (React lifecycle minutiae, CSS puzzles) and, at AI-native companies, LeetCode-style DS&A - largely replaced by practical builds. Big Tech still runs algorithm rounds, so don't drop them entirely; but the differentiator round is now the AI-flavoured one.
+- **De-emphasised:** framework trivia (React lifecycle minutiae, CSS puzzles) and, at AI-native companies, LeetCode-style DS&A - largely replaced by practical builds. Big Tech still runs algorithm rounds, so don't drop them entirely, but one coding slot is increasingly AI-assisted, and the differentiator round is now the AI-flavoured one.
 
 ---
 
@@ -58,8 +58,8 @@ If you can build a robust streaming chat interface and explain *why* each decisi
 | [08-inference-and-production](../08-inference-and-production/) | 🟢 deep* | *The streaming and latency half*: SSE, TTFT vs. throughput, timeouts, rate limits, cancellation. Skim the GPU/quantization/batching half. |
 | [09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/) | ⚪ skim | Skim overall, but read the prompt-injection and output-handling parts carefully - the render boundary is your responsibility. |
 | [10-multimodal](../10-multimodal/) | ⚪ skim | Only if the product does image/audio. File-upload + vision-input UX occasionally comes up. |
-| [11-ai-system-design](../11-ai-system-design/) | ⚪ skim | Read the framework and the chat-product case study; you'll reuse the shape in frontend system design rounds. |
-| [12-coding-challenges](../12-coding-challenges/) | ⚪ skim | Do the agent-loop and rate-limiter challenges to internalise backend behaviour you'll build UI against. Skip attention/BPE implementations. |
+| [11-ai-system-design](../11-ai-system-design/) | ⚪ skim | Read the framework plus the AI code assistant and customer support agent case studies; you'll reuse their shape in frontend system design rounds. |
+| [12-coding-challenges](../12-coding-challenges/) | ⚪ skim | Do the streaming SSE parser challenge properly (it is your take-home in miniature), then the agent-loop and rate-limiter challenges to internalise backend behaviour you'll build UI against. Skip attention/BPE implementations. |
 | [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | ⚪ skim | Standard prep; add 1-2 STAR stories about shipping an AI feature (especially one you *changed* after eval/feedback data). |
 
 ---
@@ -86,7 +86,7 @@ Handle the unhappy paths: a `[DONE]`/finish event, error events mid-stream, and 
 
 Users judge responsiveness by time-to-first-token, not completion time. A response that starts in 500ms and streams for 15 seconds feels faster than one that appears whole after 6 seconds. So: echo the user's message optimistically the instant they hit send, open the request immediately (not after animations), and render the first token the moment it arrives.
 
-When TTFT is genuinely slow - RAG retrieval, agent planning, cold model - replace the dead air with *real* progress, not a fake spinner: stream status events ("Searching your documents... found 12", "Reading results...") from the backend and render them as staged states. Honest intermediate progress buys far more patience than a pulsing dot; past a few seconds of blank waiting, users assume the app is broken and re-send (which also doubles your backend load - dedupe on client-generated message IDs).
+When TTFT is genuinely slow - RAG retrieval, agent planning, a reasoning model that thinks for tens of seconds before its first visible token - replace the dead air with *real* progress, not a fake spinner: stream status events ("Searching your documents... found 12", "Reading results...") from the backend and render them as staged states. For reasoning models, most providers can stream a reasoning summary or at least a thinking-in-progress signal; render it as a collapsible "Thinking..." section with elapsed time rather than a blank bubble. Honest intermediate progress buys far more patience than a pulsing dot; past a few seconds of blank waiting, users assume the app is broken and re-send (which also doubles your backend load - dedupe on client-generated message IDs).
 
 Second-order tricks: smooth bursty token delivery into a steady character-level reveal so the stream never appears to stall mid-burst; keep the connection warm (keep-alive, pre-established sessions); if the product allows it, kick off retrieval on keystroke pause before the user submits.
 
@@ -188,7 +188,7 @@ Also capture **implicit signals**, which dwarf explicit ones in volume: copy-to-
 
 Downstream, this feeds three things: eval datasets (thumbs-down cases become graded regression suites), prompt-iteration triage (cluster failures by reason), and A/B comparison between models or prompt versions. Privacy is part of the design: storing feedback usually means storing conversation content, which needs consent and retention policy - say this unprompted.
 
-**Follow-ups:** Explicit feedback rates are typically around or below 1% of messages. How do you design around that sparsity?
+**Follow-ups:** Most users never press either thumb, so explicit feedback covers a small fraction of messages. How do you design around that sparsity?
 
 </details>
 
@@ -242,7 +242,7 @@ Test it: click stop, then verify at the provider/billing layer that token genera
 
 </details>
 
-### 12. This coding round is AI-assisted - use Cursor/Claude however you like. How do you approach it, and what do you think we're evaluating?
+### 12. This coding round is AI-assisted - use Cursor/Claude Code however you like. How do you approach it, and what do you think we're evaluating?
 
 <details><summary><b>Answer</b></summary>
 
@@ -285,12 +285,71 @@ Frontend consequences, which is what the question is really probing:
 - **Limits and counters.** Character counts only approximate token counts - for hard limits, use a tokenizer library client-side or a server-provided count. Truncating user input by characters when the limit is tokens produces off-by-a-lot bugs.
 - **History truncation.** Long conversations get truncated or summarised server-side, meaning the model literally cannot see early messages. The UI should either signal this or the product should design around it - users interpret "it forgot" as a bug you shipped.
 - **Streaming speed.** Generation runs at some tokens-per-second rate, so long answers take tens of seconds - which is *why* streaming, stop buttons, and progress states are mandatory rather than nice-to-have.
+- **Hidden tokens.** Reasoning models spend thinking tokens you never render but still pay for as output and still wait for. A short visible answer can be slow and expensive, so neither latency nor cost estimates can be read off the visible text.
 - **Truncated outputs.** Hitting `max_tokens` cuts off mid-sentence; check the finish reason and offer a "Continue" action instead of presenting an amputated answer as complete.
 - **Cost reasoning.** Resending full history every turn multiplies input tokens; prompt caching changes that math. You should be able to reason about whether a UI behaviour (e.g., regenerating on every settings toggle) is quietly expensive.
 
 Not needed: BPE merge rules or embedding dimensionality. Recognise the terms; don't study them.
 
 **Follow-ups:** Product wants a live "tokens remaining" meter in the composer. Sketch the implementation and its failure modes.
+
+</details>
+
+### 15. Our coding agent runs for twenty minutes in the background. Design the frontend so a user can close the tab, come back on their phone, and approve a risky step.
+
+<details><summary><b>Answer</b></summary>
+
+The run lives on the server, not in the tab. The browser is a viewer that subscribes to a durable event log and can detach at any time. Get that inversion right and the rest is mechanics.
+
+`POST /runs` returns a run ID immediately. The server appends every step, tool call, status change and approval request to an append-only log with a monotonic sequence number. Any client subscribes with `GET /runs/{id}/events?after=<seq>` over SSE: the server replays the gap, then tails live. UI state is a pure reducer over events, so replay and live rendering share one code path, and deduping by sequence number makes reconnects idempotent. For long runs, serve a compacted snapshot at sequence N plus the tail, so opening a 20,000-event run does not replay everything.
+
+Closing the tab is an unsubscribe, never a cancel. Cancel is an explicit `POST`, because a dropped connection is not user intent.
+
+Approvals are the hard part. The run enters `awaiting_approval` and emits an event; since nobody may be watching, it also triggers a push notification. The card shows the concrete action (the diff, the command, the target) in plain language. The approve request carries the sequence number of the request it answers, so a stale card on a second device cannot approve a different action, and the server applies first-writer-wins: the other device renders "approved on your laptop". Decide what happens on approval timeout - pause indefinitely or skip the step - and show it.
+
+Surface state outside the thread: a runs list with "running / needs you / failed / done" badges, a title or favicon badge, and notification permission requested in context, not on page load. Keep a polling fallback for networks whose proxies buffer SSE.
+
+**Worth sketching.** The run survives the tab, and any device resumes from its last sequence number.
+
+```mermaid
+sequenceDiagram
+    participant L as Laptop tab
+    participant A as Runs API
+    participant G as Agent worker
+    participant P as Phone
+    L->>A: POST /runs
+    A->>G: start run
+    A-->>L: run ID, then events 1 to 40
+    Note over L: tab closed at seq 40, run continues
+    G->>A: approval needed at seq 57
+    A-->>P: push notification
+    P->>A: events after seq 40
+    A-->>P: replay 41 to 57, then live tail
+    P->>A: approve seq 57
+    A->>G: resume run
+```
+
+**Follow-ups:** The user approves on the phone while the laptop, reconnected, still shows the approval card. What does each screen show, and who wins? How do you test reconnection at every possible sequence number?
+
+</details>
+
+### 16. Most of your team's UI code is now written with AI agents. What do you review for that tests and linters won't catch?
+
+<details><summary><b>Answer</b></summary>
+
+Generated UI code fails in predictable places, and they cluster where bugs are invisible in a screenshot: accessibility semantics, effect and state lifecycles, render-boundary security, and design-system drift. I review those deliberately, then turn every recurring finding into an automated check or an agent instruction so I never review the same bug twice.
+
+**Accessibility.** Clickable `div`s instead of buttons, inputs without labels, modals that don't trap or restore focus, ARIA attributes sprinkled on incorrectly (wrong ARIA is worse than none). It looks right, so I walk the keyboard path myself; automated scanners catch only part of WCAG.
+
+**Effects and state.** Missing or over-broad effect dependencies, stale closures in handlers and intervals, fetches with no abort so a fast prop change renders the older response last, props copied into local state, missing cleanup, index keys on reorderable lists. All pass happy-path tests.
+
+**Security.** `dangerouslySetInnerHTML` added "to make the markdown render", unvalidated URLs in `href`, secrets in client-exposed env vars (anything prefixed `NEXT_PUBLIC_` or `VITE_` ships in the bundle).
+
+**Drift and bloat.** Hard-coded colours and spacing instead of tokens, a reimplemented component the library already has, a new dependency for one helper, props from an older library version that no longer exist, and 300-line diffs for 30-line changes. I ask for smaller diffs; reviewability is a requirement, not a preference.
+
+Making it systemic: a repo instruction file (AGENTS.md, CLAUDE.md or Cursor rules) naming the design system and banned patterns; `jsx-a11y`, `react-hooks/exhaustive-deps` and `no-danger` lint rules as errors; axe and visual regression in CI; a bundle-size budget. Review shifts from reading every line to verifying the risky categories and tightening the guardrails. In an AI-assisted round, narrating this checklist over the assistant's output is precisely the signal being graded.
+
+**Follow-ups:** The agent keeps reintroducing the same effect bug despite the rules file. What do you change? How would you measure whether agent-written PRs are raising or lowering UI quality over a quarter?
 
 </details>
 

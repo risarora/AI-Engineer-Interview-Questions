@@ -10,9 +10,9 @@ Build a Copilot-class assistant for a company with 50,000 developers (or as a pr
 
 | Question | Assumption |
 |---|---|
-| Internal tool or product? Scale? | 50k developers, ~60% daily active |
-| Completion volume? | ~400 completion requests/dev/day after debouncing → **~20M/day, peak ~2,500 QPS** (follow-the-sun flattens it somewhat) |
-| Chat/agent volume? | ~15 chat messages/dev/day (~750k/day); ~3 agent tasks/dev/day (~150k/day) |
+| Internal tool or product? Scale? | 50k developers, ~60% daily active (~30k DAU) |
+| Completion volume? | ~650-700 completion requests per active dev/day after debouncing → **~20M/day, peak ~2,500 QPS** (follow-the-sun flattens it somewhat) |
+| Chat/agent volume? | ~25 chat messages per active dev/day (~750k/day); ~5 agent tasks per active dev/day (~150k/day) |
 | Repo shape? | Mix of monorepo (10M+ files) and thousands of smaller repos; average file 100-500 lines |
 | Latency bar? | Completion: **TTFT < 200ms** or devs disable it; chat: TTFT < 1.5s streamed; agent: minutes acceptable with progress UI |
 | Privacy constraints? | Code never used for provider training; zero-data-retention agreements or self-hosting; secrets must not leave the client |
@@ -97,11 +97,12 @@ sequenceDiagram
 
 | Tier | Surface | Model | TTFT target | Why |
 |---|---|---|---|---|
-| 1 | Inline completion | Small code model (~1-15B class), FIM-trained, self-hosted on GPUs near users | < 200ms | Fires constantly; latency is the feature. A frontier API model is both too slow (network + queue) and ~40x+ more expensive at 20M req/day |
+| 1 | Inline completion | Small code model (~1-15B class), FIM-trained, self-hosted on GPUs near users | < 200ms | Fires constantly; latency is the feature. A frontier API model is both too slow (network + queue) and ~30-60x more expensive at 20M req/day |
 | 2 | Chat | Mid-tier or frontier API model | < 1.5s | Quality matters more; users tolerate streaming latency for better answers |
 | 3 | Agent | Frontier model with tool use (+ small models for sub-tasks like search query generation) | seconds/step | Multi-step reasoning quality dominates; total task time is minutes anyway |
 
-- Tier 1 is **self-hosted almost by necessity**: 2,500 QPS peak of latency-critical small-model inference. Serve with vLLM/TensorRT-LLM-class stacks, continuous batching tuned for low latency (small max batch), quantized weights (FP8/INT8), regional GPU pools to cut RTT.
+- Tier 1 is **self-hosted almost by necessity**: 2,500 QPS peak of latency-critical small-model inference. Serve with vLLM/SGLang/TensorRT-LLM-class stacks, continuous batching tuned for low latency (small max batch), quantized weights (FP8/INT8, or FP4 on Blackwell-class GPUs if evals hold), regional GPU pools to cut RTT.
+- Two serving techniques do most of the work at this tier: **automatic prefix caching** (consecutive requests from the same file share almost the whole prompt, so KV-cache reuse removes most prefill and keeps TTFT flat) and **speculative decoding**, where cheap n-gram or prompt-lookup drafts work well because completions and edits often copy nearby code. Route a session's requests to the same replica (sticky routing) or the prefix cache never hits.
 - Tiers 2-3 start on APIs (fastest to ship, frontier quality); revisit self-hosting only if scale economics or data residency force it.
 - A **router** can upgrade a completion request to a bigger model when the client signals high intent (e.g., explicit "next edit" invocation vs passive typing pause).
 
@@ -142,7 +143,7 @@ Chat and agent quality is mostly a **context-building problem**. Sources, in pri
 | Tier | Budget | Composition |
 |---|---|---|
 | Completion | ~1-4k | Prefix/suffix windows + a few cross-file snippets; every token adds prefill latency |
-| Chat | ~20-40k | System + repo map + retrieved code + conversation; prompt-cache the stable prefix |
+| Chat | ~10-40k (typical ~15k) | System + repo map + retrieved code + conversation; prompt-cache the stable prefix |
 | Agent | up to ~100-200k | Working set per step + running state note; **compaction** (summarise completed steps and old tool outputs) instead of unbounded growth |
 
 ### Agent mode
@@ -198,7 +199,7 @@ CompletionEvent = {
 }
 ```
 - Guard metrics: show rate (over-filtering kills value), latency p95, "annoyance" proxies (explicit dismissals).
-- Offline: internal HumanEval-style exec-based suite + curated real-world FIM cases replayed against candidate models; gates model/prompt updates before A/B.
+- Offline: internal exec-based suite built from your own code (public HumanEval-style sets are saturated and likely in training data) + curated real-world FIM cases replayed against candidate models; gates model/prompt updates before A/B.
 
 **Chat:** thumbs + rubric-scored LLM-judge evals on a golden set of repo-grounded questions (correctness, grounding in actual repo code); copy-to-editor rate as an implicit success signal.
 
@@ -213,13 +214,13 @@ Assumed ~prices for illustration (label all as approximate):
 | Item | Math | ~Cost |
 |---|---|---|
 | **Tier 1 completions (self-hosted)** | 20M req/day, ~2k in + 50 out. Peak 2,500 QPS → with cancellation savings and quantized small model, roughly 40-80 H100-class GPUs across regions | GPUs at ~$2/hr → **~$2-4k/day** (~$0.0001-0.0002/completion) |
-| - same volume on a frontier API (why we don't) | 20M × 2k × ~$3/M input alone | ~$120k/day - 40x+ worse |
+| - same volume on a frontier API (why we don't) | 20M × 2k × ~$3/M input alone | ~$120k/day - ~30-60x worse |
 | **Tier 2 chat (API)** | 750k msg/day × (~15k in cached-heavy + 500 out); prompt caching on system+repo-map prefix; ~70% mid-tier (~$0.5/M in) | **~$6-10k/day** |
-| **Tier 3 agent (API)** | 150k tasks/day × ~300k in / 8k out tokens (multi-step, cache-heavy). Naive: 150k × 300k × $3/M ≈ $135k/day → with ~80% cache-hit pricing and tiered sub-steps | **~$25-40k/day** - the dominant cost; per task ~$0.20-0.30 |
+| **Tier 3 agent (API)** | 150k tasks/day × ~300k in / 8k out tokens per task (multi-step, cache-heavy). Naive: 150k × 300k × ~$3/M ≈ $135k/day input + 150k × 8k × ~$15/M ≈ $18k/day output. With ~85% of input as cache reads at ~10% price, input falls to ~$32k/day; routing sub-steps to small models trims another ~15-25% | **~$37-50k/day** - the dominant cost; per task ~$0.25-0.33 |
 | Code indexing/embeddings | Incremental on push; ~small | ~$1k/day |
-| **Total** | | **~$35-55k/day ≈ ~$0.75-1.10/dev/day** |
+| **Total** | | **~$45-65k/day ≈ ~$0.90-1.30 per seat/day** (50k seats) |
 
-Framing for the interviewer: at ~$1/dev/day against a fully-loaded dev cost of ~$500-1,000/day, a few percent productivity gain pays for it. Agent mode dominates spend → per-task cost caps, aggressive prompt caching (agent loops re-send huge shared context - caching is *the* lever, often 5-10x on input cost), and routing sub-steps to small models.
+Framing for the interviewer: at ~$1/dev/day against a fully-loaded dev cost of ~$500-1,000/day, a few percent productivity gain pays for it. Agent mode dominates spend → per-task cost caps, aggressive prompt caching (agent loops re-send huge shared context - caching is *the* lever, typically ~3-5x on input cost at 80-90% hit rates, never more than the ~10x read discount), and routing sub-steps to small models.
 
 ## Failure modes & mitigations
 
@@ -252,9 +253,10 @@ Framing for the interviewer: at ~$1/dev/day against a fully-loaded dev cost of ~
 
 ## Likely interviewer follow-ups
 
-- *"Why can't you serve completions from a frontier API model? Walk me through the numbers."* (TTFT: network + prefill on a huge model blows the 200ms budget; cost: ~40x+ worse at 20M req/day - the table above; and cancellation support is limited through third-party APIs.)
+- *"Why can't you serve completions from a frontier API model? Walk me through the numbers."* (TTFT: network + prefill on a huge model blows the 200ms budget; cost: ~30-60x worse at 20M req/day - the table above; and cancellation support is limited through third-party APIs.)
 - *"Acceptance rate dropped 5% after your last model update but offline evals improved. What happened, and what do you do?"* (Offline suite distribution drift from real usage; check per-language/length slices, latency regression masquerading as quality, suggestion-length shift. Roll back via flag, then reconcile the eval suite with fresh traced data.)
 - *"How does the agent safely run tests on code that includes a malicious dependency?"* (Sandbox with no secrets, blocked egress, resource limits; treat all repo content as untrusted input; the agent's tool layer enforces policy regardless of what the model 'wants'.)
 - *"An enterprise customer demands nothing leaves their VPC. What changes?"* (Self-host all tiers in their VPC - completion model already is; chat/agent move to open-weight frontier-class models with an eval-quantified quality gap; index and telemetry stay in-VPC; ships as a different deployment profile, not a fork.)
 - *"How do you build the context for a 200-file refactor without blowing the context window?"* (Repo map for orientation, retrieval + LSP for precision, plan-then-execute with per-file working sets, compaction of completed steps; the agent doesn't need everything in context at once - it needs the right working set per step.)
+- *"Developers want to plug third-party MCP servers (issue tracker, internal docs, databases) into agent mode. What's your policy?"* (Org-admin allowlist of vetted servers, pinned by version or hash, because tool names and descriptions are model input and a silent upstream change can poison them; per-user delegated OAuth scopes, never a shared service token; every MCP call goes through the same policy engine, sandbox egress rules and audit log as built-in tools; tool results are untrusted data, so an issue body that says "run this script" carries no authority; read-only servers by default, write-capable ones need explicit org opt-in.)
 - *"What's your single highest-leverage investment after launch?"* (The feedback-to-eval flywheel: traced accept/reject data → better offline suites → confident model/prompt iteration; secondarily, distilling a stronger in-house completion model from that data.)

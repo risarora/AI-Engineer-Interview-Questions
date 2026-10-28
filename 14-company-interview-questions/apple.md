@@ -1,18 +1,19 @@
 # 🍎 Apple - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - **There is no single "Apple loop."** Apple does not publish an interview guide, and hiring is famously decentralized: each team designs its own process, and interviewers write their own questions. Two ML candidates in the same month can have meaningfully different loops. Everything below is a composite of public reports - verify specifics with your recruiter.
-- **On-device is the differentiator.** Apple ships a ~3B-parameter on-device foundation model (2-bit quantization-aware training, KV-cache sharing) plus a server model on Private Cloud Compute. Expect quantization, latency, memory-budget, and efficiency questions that a generic "big tech ML" playbook won't cover.
+- **On-device is the differentiator.** The third generation of Apple Foundation Models (June 2026) pairs AFM 3 Core, a 3B dense on-device model, with AFM 3 Core Advanced, a 20B sparse on-device model that keeps its full weights in flash and activates roughly 1-4B parameters at a time, plus a family of server models on Private Cloud Compute. The 2025 generation's published techniques (2-bit quantization-aware training, KV-cache sharing) are still the best-documented background. Expect quantization, latency, memory-budget, and efficiency questions that a generic "big tech ML" playbook won't cover.
+- **Apple now builds on a partner base.** In January 2026 Apple and Google announced that the next generation of Apple Foundation Models would be based on Gemini models and cloud technology, and Apple's June 2026 write-up credits the collaboration, including running its most capable server model on NVIDIA GPUs in Google Cloud under Private Cloud Compute. Expect "adapt and compress a model you didn't pretrain" questions alongside the classic efficiency ones (reported, varies by team).
 - **Privacy is a first-class design constraint, not a compliance checkbox.** Candidates consistently report that treating privacy as an afterthought in system-design answers is a noticed failure mode. Know differential privacy, federated learning, and the Private Cloud Compute model at a conversational level.
 - **The typical shape (reported):** recruiter screen → 1-2 technical phone screens (CoderPad, LeetCode-medium plus ML fundamentals) → a 5-7 round onsite mixing coding, ML depth, ML system design, domain deep-dive, and behavioural/hiring-manager rounds. Reported timelines run ~4-6 weeks.
 - **Domain fit matters more than at peers.** You're hired by a specific team (foundation models, CV, speech/NLP, ML infra, applied research), and the technical rounds are built around that team's daily work. Research the team, and have a team-specific "why Apple" ready.
 
 ## Company context
 
-Apple's AI work centers on Apple Intelligence - generative features (writing tools, summarization, image generation, Siri, semantic search) integrated across iPhone, iPad, Mac, and Vision Pro - built by the AIML org and product teams on top of in-house foundation models. The engineering identity is hybrid AI at consumer scale: a compact on-device model running on Apple silicon for latency and privacy, escalating to a larger server model on Private Cloud Compute, with third-party models as a further fallback. "AI engineer" at Apple usually means one of: training/adapting foundation models, squeezing models onto the Neural Engine (quantization, adapters, serving), building ML infrastructure and data pipelines, or shipping ML-powered product features - nearly always with hardware-software co-design and privacy in the job description.
+Apple's AI work centres on Apple Intelligence - generative features (writing tools, summarisation, image generation, Siri, semantic search) integrated across iPhone, iPad, Mac, and Vision Pro - built by the AIML org and product teams on top of in-house foundation models. The engineering identity is hybrid AI at consumer scale: compact on-device models running on Apple silicon for latency and privacy, escalating to larger server models on Private Cloud Compute. Since 2026 that stack has been developed in collaboration with Google, with the next-generation models based on Gemini, while Apple keeps the on-device and Private Cloud Compute privacy architecture as the non-negotiable boundary. "AI engineer" at Apple usually means one of: training/adapting foundation models, squeezing models onto the Neural Engine (quantization, adapters, serving), building ML infrastructure and data pipelines, or shipping ML-powered product features - nearly always with hardware-software co-design and privacy in the job description.
 
 ## Roles & titles they hire
 
@@ -49,7 +50,7 @@ Notes from public reports:
 
 ## What they emphasise
 
-- **Efficiency engineering.** Quantization (including quantization-aware training), pruning, distillation, KV-cache optimization, memory and power budgets, and Apple-silicon awareness (Neural Engine vs GPU vs CPU). This is the single most Apple-specific technical axis.
+- **Efficiency engineering.** Quantization (including quantization-aware training), pruning, distillation, KV-cache optimisation, memory and power budgets, and Apple-silicon awareness (Neural Engine vs GPU vs CPU). This is the single most Apple-specific technical axis.
 - **Privacy-preserving ML as architecture.** On-device processing by default, Private Cloud Compute for heavier requests (stateless, auditable, no privileged access), differential privacy, and improving models without collecting raw user data. Weave this into system-design answers unprompted.
 - **Hardware-software co-design.** Apple controls the silicon, OS, frameworks (Core ML, MLX, the Foundation Models framework), and product. They value engineers who reason across that whole stack rather than treating the model as a black box behind an API.
 - **Product and user-experience judgment.** Features ship to a billion-plus devices in dozens of locales. Evaluation rigor, graceful degradation, and "what does the user actually experience" reasoning score well.
@@ -66,7 +67,7 @@ Notes from public reports:
 
 Almost everything. In a datacenter you optimise throughput across batched requests on HBM-rich accelerators; on device you optimise latency and energy for batch size 1 on shared LPDDR memory, and the model must coexist with the OS and apps.
 
-Concretely: (1) **Weights must shrink.** A 3B model in fp16 is ~6 GB - untenable. Aggressive quantization (4-bit, and Apple has published 2-bit quantization-aware training for its on-device model) brings that under ~1 GB. Low-bit PTQ degrades badly, so you train with quantization in the loop and often add small recovery adapters. (2) **KV cache becomes the marginal cost.** With no cross-request batching, you shrink it via grouped-query attention, KV-cache sharing across layers, quantized caches, and context limits. (3) **Compute targets change.** You compile for the Neural Engine/GPU, which constrains ops, favors static shapes, and rewards architectures co-designed with the hardware. (4) **Energy and thermals are first-class.** Sustained decode drains battery and throttles; you budget tokens/joule, not just tokens/sec. (5) **One model, many features.** You can't ship a model per feature, so a shared base plus swappable LoRA adapters replaces per-task fine-tunes. (6) **No server-side telemetry.** Evaluation and debugging must work without logging user content.
+Concretely: (1) **Weights must shrink.** A 3B model in fp16 is ~6 GB - untenable. Aggressive quantization (4-bit, and Apple has published 2-bit quantization-aware training for its on-device model) brings that under ~1 GB. Low-bit PTQ degrades badly, so you train with quantization in the loop and often add small recovery adapters. (2) **KV cache becomes the marginal cost.** With no cross-request batching, you shrink it via grouped-query attention, KV-cache sharing across layers, quantized caches, and context limits. (3) **Compute targets change.** You compile for the Neural Engine/GPU, which constrains ops, favours static shapes, and rewards architectures co-designed with the hardware. (4) **Energy and thermals are first-class.** Sustained decode drains battery and throttles; you budget tokens/joule, not just tokens/sec. (5) **One model, many features.** You can't ship a model per feature, so a shared base plus swappable LoRA adapters replaces per-task fine-tunes. (6) **No server-side telemetry.** Evaluation and debugging must work without logging user content.
 
 **Follow-ups:** Which of these constraints would make you choose a different architecture (e.g., fewer, wider layers vs deeper)? When would you give up and route the request to a server model instead?
 
@@ -92,7 +93,7 @@ Recovery levers, roughly in order: mixed precision (keep sensitive layers at hig
 
 Start from the constraint hierarchy: privacy first (prefer on-device; escalate only with minimal necessary context), then quality (does the small model suffice for this task?), then latency/availability (offline must still work), then cost.
 
-**Routing signals:** task type (summarize-this-notification is on-device territory; open-ended world-knowledge questions are not), prompt length vs on-device context limit, device state (battery, thermal, memory pressure), and a learned or calibrated "capability classifier" that predicts whether the small model will produce an acceptable answer - trained offline on task distributions, since you can't log user content to learn online.
+**Routing signals:** task type (summarise-this-notification is on-device territory; open-ended world-knowledge questions are not), prompt length vs on-device context limit, device state (battery, thermal, memory pressure), and a learned or calibrated "capability classifier" that predicts whether the small model will produce an acceptable answer - trained offline on task distributions, since you can't log user content to learn online.
 
 **Escalation design:** on-device handles the request by default; if the capability check fails, escalate to the first-party server tier - Apple's public design here is Private Cloud Compute: stateless processing, no data retention, verifiable server images - sending only the needed context, never ambient device data. Third-party models (user-consented, per-request) are a separate tier for tasks the first-party stack doesn't cover; the UX must make that boundary explicit.
 
@@ -104,13 +105,13 @@ The key thing interviewers reportedly look for: privacy as a load-bearing design
 
 </details>
 
-### 4. You have one on-device base model but a dozen features - summarization, rewriting, reply suggestions, tone adjustment. How do you specialise without shipping a dozen models?
+### 4. You have one on-device base model but a dozen features - summarisation, rewriting, reply suggestions, tone adjustment. How do you specialise without shipping a dozen models?
 
 <details><summary><b>Answer</b></summary>
 
 Ship one frozen, quantized base model and a set of small task-specific **LoRA adapters** swapped in at runtime - this is publicly how Apple Intelligence works, and its Foundation Models framework exposes adapter fine-tuning to developers.
 
-Why adapters win here: each adapter is low-rank deltas on attention/MLP projections - megabytes, not gigabytes - so a dozen features cost roughly one base model plus a few percent overhead. Loading an adapter is fast enough to swap per-request; the memory-mapped base stays resident. Adapters are trained per task (instruction data for summarization style, rewriting, etc.) on top of the *quantized* base, which also recovers some quantization loss.
+Why adapters win here: each adapter is low-rank deltas on attention/MLP projections - megabytes, not gigabytes - so a dozen features cost roughly one base model plus a few percent overhead. Loading an adapter is fast enough to swap per-request; the memory-mapped base stays resident. Adapters are trained per task (instruction data for summarisation style, rewriting, etc.) on top of the *quantized* base, which also recovers some quantization loss.
 
 Engineering considerations: (1) **Base-model versioning** - every adapter is coupled to the exact base weights; a base update invalidates all adapters, so you need infrastructure to retrain and requalify the whole adapter fleet per release. (2) **Runtime** - cache hot adapters, prefetch on feature entry, and define behaviour when two features are active simultaneously. (3) **Quality isolation** - adapters can't fix base-model capability gaps; if a task consistently fails, it needs routing to a server model, not a bigger adapter. (4) **Eval per adapter** - each adapter gets its own eval suite plus a shared safety suite, because a rewrite adapter can regress safety behaviours the base model had.
 
@@ -126,7 +127,7 @@ Alternatives - prompt-only specialisation (weaker control, burns context) or mul
 
 Formula per token: `2 (K and V) × n_layers × n_kv_heads × head_dim × bytes_per_element`. Take a representative 3B-class config - 28 layers, 8 KV heads (already GQA), head_dim 128, fp16: `2 × 28 × 8 × 128 × 2 B ≈ 115 KB/token`. At 4k context that's ~470 MB - comparable to or exceeding the quantized weights themselves, on a phone where the whole feature might have a ~1 GB envelope. That's the punchline interviewers want: at long contexts, the cache, not the weights, is the memory problem.
 
-Levers: (1) **Grouped/multi-query attention** - 8 KV heads instead of, say, 24 query heads is already a 3× saving; MQA goes further at some quality cost. (2) **KV-cache quantization** - int8 or int4 cache halves or quarters it; keys are more sensitive than values. (3) **Cross-layer KV sharing** - adjacent layers share one cache (Apple's published on-device design uses KV-cache sharing), cutting the layer term. (4) **Sliding-window or local attention** in some layers so only global layers pay full-context cost. (5) **Context policy** - cap effective context, summarize or evict old turns, and cache common prefixes (system prompts) once. (6) **Prompt-cache reuse across features** sharing the same base.
+Levers: (1) **Grouped/multi-query attention** - 8 KV heads instead of, say, 24 query heads is already a 3× saving; MQA goes further at some quality cost. (2) **KV-cache quantization** - int8 or int4 cache halves or quarters it; keys are more sensitive than values. (3) **Cross-layer KV sharing** - adjacent layers share one cache (Apple's published on-device design uses KV-cache sharing), cutting the layer term. (4) **Sliding-window or local attention** in some layers so only global layers pay full-context cost. (5) **Context policy** - cap effective context, summarise or evict old turns, and cache common prefixes (system prompts) once. (6) **Prompt-cache reuse across features** sharing the same base.
 
 The design mindset: pick the architecture for the memory budget *before* training - retrofitting GQA or sharing after the fact is expensive.
 
@@ -192,7 +193,7 @@ Implementation realities: (1) **Tokenization misalignment** - grammar terminals 
 
 </details>
 
-### 9. You're shipping notification summarization to hundreds of millions of users in 30+ locales, and you cannot log user content. Design the evaluation and regression-detection story.
+### 9. You're shipping notification summarisation to hundreds of millions of users in 30+ locales, and you cannot log user content. Design the evaluation and regression-detection story.
 
 <details><summary><b>Answer</b></summary>
 
@@ -202,7 +203,7 @@ Implementation realities: (1) **Tokenization misalignment** - grammar terminals 
 
 **Rollout mechanics:** staged by locale and notification category (news and emergency categories last or excluded), per-category kill switches, and adapter-level rollback that doesn't require an OS update.
 
-**Follow-ups:** Your DP proxy metrics look flat but journalists post screenshots of bad summaries - what went wrong in your eval design? How do you decide a category (e.g., breaking news) shouldn't be summarized at all?
+**Follow-ups:** Your DP proxy metrics look flat but journalists post screenshots of bad summaries - what went wrong in your eval design? How do you decide a category (e.g., breaking news) shouldn't be summarised at all?
 
 </details>
 
@@ -272,11 +273,41 @@ flowchart TD
 
 </details>
 
+### 13. Your new on-device model is a 20B sparse model whose full weights live in flash, with only 1-4B parameters active at a time. How do you serve it on a phone?
+
+<details><summary><b>Answer</b></summary>
+
+Treat flash as the weight store and DRAM as a cache, and make expert selection coarse and infrequent. The binding constraint is flash read bandwidth, not FLOPs.
+
+Do the arithmetic first. 20B parameters at ~4 bits is ~10 GB, which cannot sit in DRAM next to the OS and foreground apps. An active set of 1-4B at the same precision is ~0.5-2 GB, which can. Phone flash reads at low single-digit GB/s, so loading an expert set costs hundreds of milliseconds: affordable once per request, fatal once per token. That rules out standard MoE routing, where every token can pick different experts. Apple's June 2026 description matches this reasoning: a lightweight dense block selects a fixed set of experts during initial processing and periodically reselects during generation, so the task, not the token, decides what is resident.
+
+Serving mechanics: (1) keep the dense shared core pinned in DRAM permanently. (2) Lay each expert out contiguously in flash and read in large chunks, since small random reads waste most of the bandwidth (Apple's 2023 "LLM in a Flash" paper made the same argument with row-column bundling). (3) Overlap expert loading with prefill of the prompt. (4) Cache recent expert sets in DRAM across requests, so a burst of summarisation calls pays the load once. (5) Add hysteresis to reselection: only swap when the new choice differs materially, and swap incrementally rather than all at once.
+
+Tradeoffs to name: quality loss versus a fully resident model (measure it offline against the same weights with every expert loaded), latency spikes when a conversation changes topic and forces a reselect, OS eviction under memory pressure, and the energy cost of flash reads on battery.
+
+**Worth sketching.** Selection happens per request, not per token, and the cache absorbs repeats.
+
+```mermaid
+flowchart LR
+    A["Request arrives"] --> B["Dense block<br/>selects experts"]
+    B --> C{"Expert set<br/>in DRAM cache?"}
+    C -->|"yes"| D["Prefill and decode"]
+    C -->|"no"| E["Stream experts from flash<br/>overlapped with prefill"]
+    E --> D
+    D --> F{"Reselect<br/>checkpoint"}
+    F -->|"set changed"| E
+    F -->|"stable"| D
+```
+
+**Follow-ups:** How would you decide how often to reselect during a long generation? What does this design do to your time-to-first-token budget on a cold start after the OS has evicted the cache?
+
+</details>
+
 ## How to prepare
 
 **Repo deep-dives, in priority order for Apple:**
 
-- **[08-inference-and-production](../08-inference-and-production/)** - the highest-leverage directory for Apple. Quantization (PTQ vs QAT, low-bit), KV-cache optimization, speculative decoding, latency/TTFT engineering, memory budgets. Nearly every Apple-specific question above lives here.
+- **[08-inference-and-production](../08-inference-and-production/)** - the highest-leverage directory for Apple. Quantization (PTQ vs QAT, low-bit), KV-cache optimisation, speculative decoding, latency/TTFT engineering, memory budgets. Nearly every Apple-specific question above lives here.
 - **[02-llm-fundamentals](../02-llm-fundamentals/)** - attention variants (GQA/MQA), sampling, tokenization, context handling; the phone screens mix these into coding rounds.
 - **[05-fine-tuning-and-alignment](../05-fine-tuning-and-alignment/)** - LoRA/adapters are the backbone of Apple's one-base-many-features architecture; know them cold, including adapter-versioning implications.
 - **[09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/)** - privacy-preserving ML (differential privacy, federated learning) is an Apple-specific emphasis most candidates under-prepare.
@@ -285,11 +316,11 @@ flowchart TD
 - **[10-multimodal](../10-multimodal/)** - required if targeting Computer Vision or Speech/NLP teams; skim otherwise.
 - **[12-coding-challenges](../12-coding-challenges/)** - LeetCode-medium DSA still appears in most reported loops; don't skip it because the role says "ML."
 
-**Closest system-design case study:** [08-meeting-assistant](../11-ai-system-design/case-studies/08-meeting-assistant.md) - speech + summarization over personal data is the closest analogue to Apple Intelligence features; practise re-answering it with an on-device-first, no-content-logging constraint. [05-content-moderation-pipeline](../11-ai-system-design/case-studies/05-content-moderation-pipeline.md) is a useful second for the safety-adapter and eval angles.
+**Closest system-design case study:** [08-meeting-assistant](../11-ai-system-design/case-studies/08-meeting-assistant.md) - speech + summarisation over personal data is the closest analogue to Apple Intelligence features; practise re-answering it with an on-device-first, no-content-logging constraint. [05-content-moderation-pipeline](../11-ai-system-design/case-studies/05-content-moderation-pipeline.md) is a useful second for the safety-adapter and eval angles.
 
 **Company-specific moves:**
 
-1. **Read the Apple Intelligence Foundation Language Models Tech Report (2025)** on machinelearning.apple.com - it's the single best public document on how Apple actually builds this stack (3B on-device model, 2-bit QAT, KV-cache sharing, PT-MoE server model, adapters, Private Cloud Compute). Multiple prep guides call it essential; they're right.
+1. **Read the Apple Intelligence Foundation Language Models Tech Report (2025)** on machinelearning.apple.com - it's still the most detailed public document on how Apple builds this stack (3B on-device model, 2-bit QAT, KV-cache sharing, PT-MoE server model, adapters, Private Cloud Compute). Then read "Introducing the Third Generation of Apple's Foundation Models" (June 2026) for what changed: the AFM 3 lineup, the 20B sparse on-device model served from flash, and the Google collaboration. Be able to explain both in your own words.
 2. **Read the Private Cloud Compute announcement** on Apple's Security Research blog and be able to explain its guarantees (stateless computation, no privileged access, verifiable images) in one minute.
 3. **Browse Apple Machine Learning Research** (machinelearning.apple.com) for posts from your target team's area - speech, CV, efficiency - and reference them in "why this team."
 4. **Use Apple Intelligence seriously** if you have compatible hardware: writing tools, summaries, Siri. Form opinions on where it's good, where it fails, and what you'd fix - product judgment questions reward this.
@@ -300,6 +331,8 @@ flowchart TD
 - [Apple Machine Learning and AI - Careers at Apple](https://www.apple.com/careers/us/work-at-apple/teams/machine-learning-and-ai.html) (org sub-teams and disciplines)
 - [jobs.apple.com - Machine Learning and AI job search](https://jobs.apple.com/en-us/search?team=machine-learning-and-ai-SFTWR-MCHLN) (current posting titles, incl. AIML Foundation Models roles)
 - [Apple Intelligence Foundation Language Models Tech Report 2025 - Apple Machine Learning Research](https://machinelearning.apple.com/research/apple-foundation-models-tech-report-2025)
+- [Introducing the Third Generation of Apple's Foundation Models - Apple Machine Learning Research](https://machinelearning.apple.com/research/introducing-third-generation-of-apple-foundation-models) (June 2026; AFM 3 Core, AFM 3 Core Advanced, server models, Google collaboration)
+- [Joint statement from Google and Apple - Google blog](https://blog.google/company-news/inside-google/company-announcements/joint-statement-google-apple/) (January 2026; next-generation Apple Foundation Models based on Gemini)
 - [Apple Machine Learning Research blog](https://machinelearning.apple.com/)
 - [Private Cloud Compute - Apple Security Research blog](https://security.apple.com/blog/private-cloud-compute/)
 - [App Intents framework - Apple Developer Documentation](https://developer.apple.com/documentation/appintents) (intents, entities, parameter resolution, disambiguation, confirmation)

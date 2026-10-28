@@ -10,7 +10,7 @@ This topic shows up in nearly every AI Engineer loop because it separates people
 
 ### SFT mechanics
 
-**Supervised fine-tuning (SFT)** = next-token prediction on curated (prompt, response) pairs rendered through the model's **chat template** - the exact special-token markup (e.g. `<|im_start|>`, `[INST]`, header tokens) the model was post-trained with. Template mismatch between training and inference is the #1 silent killer of fine-tunes.
+**Supervised fine-tuning (SFT)** = next-token prediction on curated (prompt, response) pairs rendered through the model's **chat template** - the exact special-token markup (e.g. `<|im_start|>`, `[INST]`, header tokens) the model was post-trained with. Template mismatch between training and inference is the most common silent failure in fine-tuning: loss looks fine, outputs degrade.
 
 **Loss masking:** compute cross-entropy only on response tokens; set prompt-token labels to `-100` so the model learns to *answer*, not to *reproduce prompts*:
 
@@ -31,6 +31,12 @@ $$W' = W + \frac{\alpha}{r} BA,\quad B\in\mathbb{R}^{d\times r},\ A\in\mathbb{R}
 
 **QLoRA** = frozen base quantized to 4-bit **NF4** (an information-theoretically motivated data type for normally distributed weights) + **double quantization** (quantize the quantization constants) + **paged optimizers** (spill optimizer states to CPU RAM on spikes), with LoRA trained in bf16 on top. Fine-tunes a 65-70B model on a single 48 GB GPU with little measured quality loss on benchmarks - though you're training atop a slightly noisy base.
 
+### LoRA variants and model merging
+
+Each variant patches one known weakness of vanilla LoRA. **rsLoRA** scales the update by $\alpha/\sqrt{r}$ instead of $\alpha/r$, so high ranks aren't damped into uselessness. **LoRA+** gives `B` a much higher learning rate than `A`, since the two play asymmetric roles. **DoRA** splits each weight into magnitude and direction, applies LoRA to the direction and trains the magnitude separately, closing much of the gap to full fine-tuning at low rank for some extra training compute. All stay mergeable, and none of them matters as much as data quality and target-module choice.
+
+**Model merging** combines fine-tunes of a *shared base* with no training. Task arithmetic adds task vectors $\tau = \theta_{ft} - \theta_{base}$ with weights; **TIES** trims small deltas and resolves sign conflicts before averaging; **DARE** randomly drops most delta entries and rescales the rest; **SLERP** interpolates spherically between exactly two models. It works within one loss basin (sibling fine-tunes, checkpoint soups, LoRAs on one base, pulling a narrow fine-tune back toward base to recover general capability) and fails across independently pretrained models. The weights are found by sweeping against a real eval, not by theory.
+
 ### Training memory math (why you can't full-fine-tune 7B on a 24 GB card)
 
 Mixed-precision full fine-tuning with Adam costs roughly **16 bytes/param**: 2 (bf16 weights) + 2 (grads) + 4 (fp32 master weights) + 8 (fp32 Adam m and v). A 7B model ⇒ ~112 GB before activations. Levers: **gradient checkpointing** (recompute activations, ~30% slower, big memory win), **gradient accumulation** (simulate large batches), **ZeRO/FSDP** (shard optimizer states/grads/params across GPUs), and PEFT (optimizer states only for adapter params).
@@ -39,7 +45,7 @@ Mixed-precision full fine-tuning with Adam costs roughly **16 bytes/param**: 2 (
 
 | Knob | Full FT | LoRA |
 |---|---|---|
-| LR | ~1e-5-5e-5 | ~1e-4-2e-4 |
+| LR | ~1e-5 to 5e-5 | ~1e-4 to 2e-4 |
 | Epochs | 1-3 | 1-5 |
 | Schedule | cosine + ~3% warmup | same |
 
@@ -47,19 +53,21 @@ Watch for **catastrophic forgetting** (general capability regressions): mitigate
 
 ### Preference optimisation: RLHF → DPO → GRPO
 
-**RLHF pipeline** (InstructGPT recipe): SFT → collect human preference pairs → train a **reward model** with a Bradley - Terry loss, $-\log\sigma(r(y_w) - r(y_l))$ → optimise the policy with **PPO** against that reward, with a per-token **KL penalty to the frozen reference model** so the policy can't drift into degenerate high-reward text. Remove the KL term and you get **reward hacking**: sycophancy, bloated confident-sounding answers, gibberish that spoofs the RM.
+**RLHF pipeline** (InstructGPT recipe): SFT → collect human preference pairs → train a **reward model** with a Bradley-Terry loss, $-\log\sigma(r(y_w) - r(y_l))$ → optimise the policy with **PPO** against that reward, with a per-token **KL penalty to the frozen reference model** so the policy can't drift into degenerate high-reward text. Remove the KL term and you get **reward hacking**: sycophancy, bloated confident-sounding answers, gibberish that spoofs the RM.
 
-**DPO** collapses this: the KL-constrained RLHF objective has a closed form, so the policy itself defines an *implicit reward* $\beta\log\frac{\pi(y|x)}{\pi_{ref}(y|x)}$ and you can train directly on preference pairs with a classification loss - no reward model, no RL loop, no sampling during training. Cheaper and stabler; PPO-style online RL still wins when you can generate and score fresh samples (and is the norm at frontier labs). One-liners: **IPO** (bounded objective, less overfitting to preferences), **KTO** (works on binary good/bad labels, no pairs needed), **ORPO** (folds preference loss into SFT, no reference model).
+**DPO** collapses this: the KL-constrained RLHF objective has a closed form, so the policy itself defines an *implicit reward* $\beta\log\frac{\pi(y|x)}{\pi_{ref}(y|x)}$ and you can train directly on preference pairs with a classification loss - no reward model, no RL loop, no sampling during training. Cheaper and stabler; online RL (PPO or GRPO-family methods) still wins when you can generate and score fresh samples, and is the norm in frontier post-training. One-liners: **IPO** (bounded objective, less overfitting to preferences), **KTO** (works on binary good/bad labels, no pairs needed), **ORPO** (folds preference loss into SFT, no reference model).
 
-**GRPO** (DeepSeekMath/R1): sample a *group* of responses per prompt, use each response's advantage relative to the group mean instead of a learned value network - cheap PPO. Paired with **verifiable rewards** (unit tests, math answer checkers), it drives RL for reasoning: math/code are RL-friendly because reward is programmatic, so no reward model to hack. **RLAIF/Constitutional AI** replaces human labels with AI feedback guided by an explicit set of principles.
+**GRPO** (introduced in DeepSeekMath, scaled up in DeepSeek-R1): sample a *group* of responses per prompt and use each response's reward, normalised by the group's mean and standard deviation, as its advantage instead of a learned value network - PPO without the critic, with the KL-to-reference term kept in the loss. Paired with **verifiable rewards** (RLVR: unit tests, math answer checkers), it drives RL for reasoning: math/code are RL-friendly because reward is programmatic, so there is no learned reward model to hack (a weak checker can still be gamed). Follow-up variants fix specific weaknesses: **Dr. GRPO** removes the length and std-normalisation biases, **DAPO** decouples the clip range and filters groups where every sample scores the same, **GSPO** clips at the sequence level for stability on large and MoE models.
+
+When the task isn't verifiable you need a learned reward: an **outcome reward model (ORM)** scores the whole response (cheap labels, blind credit assignment), a **process reward model (PRM)** scores each reasoning step (dense signal, expensive or rollout-derived labels, and most useful for reranking and search at inference time). **RLAIF/Constitutional AI** replaces human labels with AI feedback guided by an explicit set of principles.
 
 ### Distillation & synthetic data
 
-**Black-box distillation** = generate synthetic training data from a stronger model (most common; check the teacher's ToS - many API providers restrict training competing models on outputs). **Logit distillation** = match the teacher's full token distributions (needs open weights, more signal per example). Synthetic-data pitfalls: **mode collapse** (teacher's stylistic tics amplified), **error amplification** (teacher mistakes become ground truth), and eval contamination. Filter with verifiers/judges and keep human data in the mix.
+**Black-box distillation** = generate synthetic training data from a stronger model (most common; check the teacher's ToS - many API providers restrict training competing models on outputs). **Logit distillation** = match the teacher's full token distributions (needs the teacher's logits, so in practice open weights; more signal per example). Synthetic-data pitfalls: **mode collapse** (teacher's stylistic tics amplified), **error amplification** (teacher mistakes become ground truth), and eval contamination. Filter with verifiers/judges and keep human data in the mix.
 
 ## Interview questions
 
-All 36 questions with detailed answers: [questions.md](questions.md)
+All 56 questions with detailed answers: [questions.md](questions.md)
 
 ## Red flags interviewers watch for
 
@@ -80,5 +88,6 @@ All 36 questions with detailed answers: [questions.md](questions.md)
 - [Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/abs/2305.18290) - Rafailov et al., 2023
 - [LIMA: Less Is More for Alignment](https://arxiv.org/abs/2305.11206) - Zhou et al., 2023
 - [Constitutional AI: Harmlessness from AI Feedback](https://arxiv.org/abs/2212.08073) - Anthropic, 2022
+- [DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models](https://arxiv.org/abs/2402.03300) - where GRPO was introduced
 - [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948) - GRPO + verifiable rewards at scale
 - [Hugging Face TRL documentation](https://huggingface.co/docs/trl) and [PEFT documentation](https://huggingface.co/docs/peft) - the reference open-source post-training stack

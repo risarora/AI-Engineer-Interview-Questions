@@ -6,12 +6,13 @@ The 0→1 AI feature builder. Your loop doesn't test whether you can derive atte
 
 ## How this role's interviews changed (2024 → 2026)
 
-- **The take-home replaced the LeetCode screen.** The dominant format is now "build X with an LLM in a weekend" - a support bot over docs, a data-extraction pipeline, a small agent. It's graded on product judgment, error handling, and whether there's *any* eval harness, far more than on clever prompting. A working deployed link beats an elaborate README.
-- **AI-assisted coding is now part of the interview, not cheating.** Many loops explicitly let (or expect) you to use Cursor/Claude/Copilot in the pairing round. The signal moved from "can you write this function" to "can you direct, review, and verify AI-written code without shipping garbage."
+- **The take-home replaced the LeetCode screen.** The dominant format is now "build X with an LLM in a weekend" - a support bot over docs, a data-extraction pipeline, a small agent. It's graded on product judgment, error handling, and whether there's *any* eval harness, far more than on clever prompting. A working deployed link beats an elaborate README. Because everyone now builds with AI tools, the scope expected from a weekend went up: deployed, evaluated and handling its failure paths, not just running locally.
+- **AI-assisted coding is now part of the interview, not cheating.** Meta has run an AI-enabled coding round since October 2025 (about 60 minutes in a multi-file codebase with an assistant, typically alongside one classic no-AI round), Google began piloting a Gemini-assisted round for junior and mid-level SWE roles on select US teams in 2026, and Amazon has added AI-assisted repository tasks to some assessments (all reported, varies by team). AI-native startups go further: a 60-120 minute build in their real repo with Cursor, Claude Code or Copilot, graded on working, finished scope. The signal moved from "can you write this function" to "can you direct, review, and verify AI-written code without shipping garbage." Rules differ by company and by round, so ask the recruiter and practise both modes.
+- **AI-tool fluency is assessed outside the coding round too.** Hiring-manager and behavioural rounds now ask how you actually use coding agents day to day: what you delegate, what you never delegate, and how you verify. Shopify's 2025 internal memo making reflexive AI use a baseline expectation was an early public marker, and many product teams now probe for the same habit. "I use Copilot for autocomplete" reads as behind.
 - **"When is an LLM the wrong tool?" became a standard question.** After two years of teams bolting chatbots onto everything, interviewers filter hard for people who reach for a regex, a dropdown, or a SQL query when that's the honest answer.
 - **Eval literacy became table stakes for product engineers.** In 2024 "we eyeballed outputs" was acceptable; by 2026 they expect a golden set, assertions, and a calibrated-ish LLM judge even from someone whose title says frontend. You don't need eval-platform depth - you need the vocabulary and the habit.
 - **Cost and latency questions got sharp.** Teams that shipped 2023-24 features blew inference budgets, so expect concrete probes: cost per user action, model routing, prompt caching, and how streaming changes perceived latency.
-- **Agents moved from bonus topic to core.** Tool calling, agent-vs-workflow judgment, and human-in-the-loop design are now regular question territory for full-stack roles, because that's what's being built.
+- **Agents moved from bonus topic to core.** Tool calling, agent-vs-workflow judgment, and human-in-the-loop design are now regular question territory for full-stack roles, because that's what's being built. The newer variant runs the other way: "make our product usable from inside ChatGPT and Claude," which means designing an MCP server, and since January 2026 possibly an interactive UI via the MCP Apps extension, as a product surface in its own right.
 - **De-emphasised:** transformer math, backprop, fine-tuning theory, and framework trivia (LangChain API specifics aged badly - teams increasingly run thin clients directly against provider APIs). System design rounds mutated from "design Twitter" into "design an AI support widget," so classic distributed-systems prep still helps but is no longer the whole round.
 
 ---
@@ -48,8 +49,8 @@ What you can safely skim: training dynamics, alignment algorithms (RLHF/DPO at "
 | [09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/) | ⚪ skim | Know prompt injection and output handling cold (it comes up for tool-using features); skim the rest. |
 | [10-multimodal](../10-multimodal/) | ⚪ skim | Only if the product is vision/audio-heavy. Know that vision-capable models exist and roughly what they cost. |
 | [11-ai-system-design](../11-ai-system-design/) | 🟡 solid | Your design round is "build an AI support widget/copilot." Work the framework and the case study nearest the company's product. |
-| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Do the applied half - 08 mini-RAG, 09 chunking, 10 agent loop, 11 rate limiter, 13 streaming parser. Skip attention/BPE internals. |
-| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Your portfolio and "walk me through something you shipped" stories carry disproportionate weight for this role. |
+| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Do the applied half - 08 mini-RAG, 09 chunking, 10 agent loop, 11 rate limiter, 13 streaming parser, 16 semantic cache - and read 18 constrained JSON decoding for the mechanism behind structured-output modes. Skip attention/BPE internals. |
+| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Your portfolio and "walk me through something you shipped" stories carry disproportionate weight for this role. Add a concrete account of how you ship with coding agents and verify their output. |
 
 ---
 
@@ -95,7 +96,7 @@ The senior framing isn't "no" - it's a counter-offer: use the LLM offline to *bu
 
 <details><summary><b>Answer</b></summary>
 
-Transport first: SSE over one HTTP response is the default - simpler than WebSockets, works with standard infra, auto-reconnects. WebSockets only earn their complexity if you need bidirectional traffic (live interruption, collaborative sessions). Server-side, I proxy the provider's stream rather than exposing keys to the browser, forwarding chunks as they arrive.
+Transport first: SSE over one HTTP response is the default - simpler than WebSockets and works with standard infra. Browser `EventSource` auto-reconnects, but chat requests are usually POSTs read through `fetch`, so reconnect and resume are yours to build. WebSockets only earn their complexity if you need bidirectional traffic (live interruption, collaborative sessions). Server-side, I proxy the provider's stream rather than exposing keys to the browser, forwarding chunks as they arrive.
 
 The gotchas are where interviews go:
 
@@ -103,7 +104,7 @@ The gotchas are where interviews go:
 - **Partial JSON.** If the model streams structured output or tool calls, you can't `json.loads` until the end - either buffer tool-call segments, or use an incremental parser so the UI can show "calling search..." before arguments finish. (Challenge 13 in [12-coding-challenges](../12-coding-challenges/) is exactly this.)
 - **Errors mid-stream.** You've already sent a 200 and half a paragraph when the provider dies. You need an in-band error event in your SSE protocol, UI state for "generation failed partway," and a retry affordance that doesn't duplicate the partial text.
 - **State on disconnect.** Persist the assistant message server-side as it streams, so a refresh mid-generation recovers the conversation instead of losing it.
-- **Backpressure and cost control.** Stop generation server-side when the client disconnects - otherwise you pay for tokens nobody sees.
+- **Backpressure and cost control.** Decide what a disconnect means. Without resume support, stop generation server-side when the client disconnects, or you pay for tokens nobody sees. If you persist and resume streams (previous point), a dropped tab is not intent: keep generating, make Stop an explicit cancel call, and time out runs nobody comes back for.
 
 Also: stream because time-to-first-token is the perceived latency. A 12-second generation feels fine if text starts in 500ms.
 
@@ -152,7 +153,8 @@ Perceived-latency levers: stream tokens (time-to-first-token becomes the felt la
 
 Actual-latency levers, roughly in order of effort:
 
-- **Cut output tokens.** Generation time scales with output length; a prompt that yields 400 tokens instead of 100 is 4x slower. Tight output instructions are free speed.
+- **Cut output tokens.** Generation time scales roughly linearly with output length; a prompt that yields 400 tokens instead of 100 takes about 4x as long to generate. Tight output instructions are free speed.
+- **Turn reasoning down where it isn't earning its keep.** On reasoning models, thinking tokens are generated before the first visible token, so they hit TTFT and total time. Lower the reasoning effort or budget for easy requests, or route them to a non-reasoning model.
 - **Cut input where it's bloated** - but note input mostly affects TTFT, not per-token speed.
 - **Smaller/faster model.** Often 2-5x faster. Route by difficulty: fast model for the easy 80%, frontier for the hard 20% - with evals proving the small model holds quality.
 - **Cache.** Provider-side prompt caching for long shared prefixes (big TTFT win); application-side response caching for repeated queries.
@@ -171,7 +173,7 @@ Measure TTFT, tokens/sec, and end-to-end separately per stage before touching an
 
 Cost per action = (input tokens × input price + output tokens × output price), then multiplied by actions/user/day and your user count - do this arithmetic *before* building, because it decides the architecture.
 
-Worked example: an email-drafting assistant. System prompt + context ≈ 2,000 input tokens, draft ≈ 300 output tokens. On a frontier model at ballpark rates that might be around a cent per draft; on a small model, more like a tenth of that. Ten drafts/user/day across 10,000 users is ~100k calls/day - the frontier version costs on the order of $1,000/day, the small model ~$100/day. That 10x gap is the difference between a viable free feature and a money pit, which is why the routing decision is product-critical, not an optimisation detail.
+Worked example: an email-drafting assistant. System prompt + context ≈ 2,000 input tokens, draft ≈ 300 output tokens. On a frontier model at ballpark rates that might be around a cent per draft; on a small model, more like a tenth of that. Ten drafts/user/day across 10,000 users is ~100k calls/day - the frontier version costs on the order of $1,000/day, the small model ~$100/day. That 10x gap is the difference between a viable free feature and a money pit, which is why the routing decision is product-critical, not an optimisation detail. If the model reasons, its thinking tokens are billed as output tokens, so a draft with 300 visible tokens can bill several times that. Measure real usage per call rather than estimating from the visible text.
 
 The levers, in the order I pull them: trim the prompt (system prompts accrete cruft - audit token counts per request); cap and tighten outputs (output tokens usually cost several times input tokens); prompt caching for shared prefixes (large discounts on cached input); route easy traffic to a small model with evals guarding quality; cache identical/near-identical requests; and only then consider fine-tuning a small model to replace an expensive prompt.
 
@@ -307,6 +309,69 @@ Deliberately skipped, and stated as skipped: auth, conversation memory, rerankin
 Two failure modes I'd warn anyone about: burning the weekend on framework plumbing instead of reading your system's actual outputs, and zero evals - in 2026 that's the difference between "product engineer" and "demo builder."
 
 **Follow-ups:** They ask you to walk through it live and your first demo query fails - what do you do? What would you build with week two?
+
+</details>
+
+### 14. Walk me through how you shipped your last feature with coding agents. What did you delegate, what didn't you, and how did you know the result was right?
+
+<details><summary><b>Answer</b></summary>
+
+Lead with a specific feature, not a philosophy. The shape of a strong answer: I delegate implementation, and I keep ownership of the spec, the risky decisions and the verification.
+
+The workflow I'd describe:
+
+1. **Spec first.** A short written plan: user-visible behaviour, acceptance criteria, edge cases, what's out of scope. I ask the agent to propose an implementation plan and critique it before any code exists, because a wrong plan is cheap to fix and a wrong 600-line diff isn't.
+2. **Context, not cleverness.** A repo instructions file (an `AGENTS.md`-style file with conventions and the commands to build and test), plus a pointer to an existing feature to copy the pattern from.
+3. **Small vertical slices.** Migration, endpoint and UI per slice, each reviewable in one sitting. Review is now the bottleneck, so diff size is the lever.
+4. **Tests as the contract.** I write or at least read the tests before accepting the implementation, because agents will happily weaken an assertion to go green.
+5. **Verify like a user.** Run the app, click the unhappy paths, watch the network tab. For AI features, an agent editing a prompt is a prompt change, so the eval suite runs too.
+
+What I don't delegate, or review line by line: authorisation checks, migrations on large tables, billing, anything touching secrets, and concurrency. Typical agent failures I watch for: calls to APIs that don't exist in our version, silently swallowed errors, a new helper duplicating one we already have, and scope creep beyond the ticket.
+
+Close with evidence that you measure it: agent-heavy PRs tracked for revert rate and review comments, or a task type you stopped delegating after it burned you. Interviewers are testing two things: that you're genuinely fast with these tools, and that you can explain every line you shipped without them.
+
+**Follow-ups:** A teammate opens a 2,000-line agent-written PR that passes CI. What do you do? Which kind of task have you stopped delegating, and why?
+
+</details>
+
+### 15. The PM says: "Users should be able to use our product from inside ChatGPT and Claude." What do you build, and what changes about how you design the product?
+
+<details><summary><b>Answer</b></summary>
+
+Build a remote MCP server for the product. One server reaches ChatGPT, Claude, Copilot, Cursor and other MCP hosts, and it should be treated as a new product surface whose direct user is a model acting for a person.
+
+**Tools shaped around tasks, not endpoints.** `find_invoices(customer, status)` and `draft_reminder(invoice_id)` beat forty mirrored CRUD routes. Keep the set small, because tool descriptions are prompts and tool choice degrades as the list grows. Return compact, paginated results with IDs and human-readable fields, not 200KB of raw JSON that floods the host's context.
+
+**Auth per user.** The MCP authorisation spec builds on OAuth 2.1: your server is a resource server, the host runs the flow, and the token is scoped to that user. Never a shared API key. Ship read-only scopes first.
+
+**Writes need real gates.** Annotate destructive tools (`destructiveHint`), but don't rely on the host to honour it: prefer draft-then-confirm, require idempotency keys, and enforce authorisation server-side on every call. Your tool output also lands in a context where other servers' content can inject instructions, so audit-log every call with the client and user behind it, and rate-limit.
+
+**UI where it helps.** MCP Apps, the official extension since January 2026 that merged OpenAI's Apps SDK approach with MCP-UI, lets a tool return an interactive component the host renders. Use it for pickers, previews and confirmations, with a plain-text fallback for hosts that don't support it.
+
+**The product consequences.** You lose your own UI, onboarding and analytics in that channel, so instrument tool calls as the funnel. Tool schemas become a public contract that needs versioning. Eval with natural-language tasks run through real hosts, checking the right tool was picked with the right arguments.
+
+**Worth sketching.** Auth happens once per user connection, and every tool call then runs with that user's permissions only.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant H as AI host
+    participant S as MCP server
+    participant A as OAuth server
+    participant P as Product API
+    U->>H: Connect the product
+    H->>S: Initialise session
+    S-->>H: 401 plus protected resource metadata
+    H->>A: OAuth flow with PKCE, user consents
+    A-->>H: Access token scoped to this user
+    U->>H: Find my unpaid invoices
+    H->>S: Call find_invoices with token
+    S->>P: Query as this user only
+    P-->>S: Matching rows
+    S-->>H: Compact result plus optional UI
+```
+
+**Follow-ups:** Usage through ChatGPT grows but conversion to paid drops. What do you change? An injected instruction from another server's output makes the model call your `delete_project` tool. Which layer stops it?
 
 </details>
 

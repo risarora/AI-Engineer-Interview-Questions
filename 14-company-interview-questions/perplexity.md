@@ -1,6 +1,6 @@
 # 🔍 Perplexity - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -12,7 +12,7 @@
 
 ## Company context
 
-Perplexity builds an AI answer engine: conversational search that retrieves from a live web index and generates cited answers, plus the Sonar API for developers, enterprise offerings, and the Comet browser with agentic capabilities. For engineers, it is one of the clearest examples of "RAG as the entire company" - the retrieval pipeline, the ranking stack, the inference layer, and the product are the same system, serving hundreds of millions of queries with hard latency budgets. "AI engineer" there mostly means building and operating that pipeline - search infrastructure, LLM serving, orchestration, evaluation - rather than pretraining models, though they also hire research roles that post-train and optimise models (e.g., the Sonar family).
+Perplexity builds an AI answer engine: conversational search that retrieves from a live web index and generates cited answers, plus the Sonar API for developers, enterprise offerings, the Comet browser with agentic capabilities, and (since February 2026) Perplexity Computer, a general-purpose agent that runs long multi-step tasks and reportedly routes work across many models. For engineers, it is one of the clearest examples of "RAG as the entire company" - the retrieval pipeline, the ranking stack, the inference layer, and the product are the same system, serving hundreds of millions of queries a month with hard latency budgets. The agent products add a second engineering surface: long-running orchestration, tool use, and untrusted web content. "AI engineer" there mostly means building and operating that pipeline - search infrastructure, LLM serving, orchestration, evaluation - rather than pretraining models, though they also hire research roles that post-train and optimise models (e.g., the Sonar family).
 
 ## Roles & titles they hire
 
@@ -33,7 +33,7 @@ Perplexity's own careers site hosts an interview guide describing the loop, and 
 | Stage | Format | What's evaluated |
 |---|---|---|
 | Recruiter screen | ~30-45 min call | Background, motivation, why Perplexity specifically, compensation fit; expect product-usage questions |
-| Technical screen | ~45-60 min live coding, Python strongly preferred (official guide calls it "a standard technical programming interview" for engineers) | Working code on practical problems; reasoning out loud; edge cases |
+| Technical screen | ~45-60 min live coding, Python strongly preferred (official guide calls it "a standard technical programming interview" for engineers); some 2026 reports describe an online assessment or a second screen at this stage instead (reported, varies) | Working code on practical problems; reasoning out loud; edge cases |
 | Onsite | 4-5 interviews, typically virtual (official guide) | Mix of coding, system design, and a hiring-manager deep dive on past work |
 | - Coding rounds | Practical problems: streams, text processing, service components (reported, varies) | Production readiness, correctness under changing requirements |
 | - System design | RAG/search/serving-flavoured design; sometimes infra debugging scenarios (reported, varies) | Retrieval + ranking + LLM pipeline thinking, latency budgets, failure modes |
@@ -373,6 +373,26 @@ Prepare two or three of these from real usage before interviewing - including at
 
 </details>
 
+### 13. Alongside search, the company now ships a long-running general agent. Design one that takes a multi-hour task, picks a model per step, and survives failures, untrusted web content, and cost blow-ups.
+
+<details><summary><b>Answer</b></summary>
+
+Treat it as a durable workflow engine with an LLM planner, not a chat loop that happens to run for a long time.
+
+**Plan and state.** A planner model decomposes the goal into a task graph with explicit success criteria per node. State lives outside the model: the persisted graph, an artefact store (files, extracted tables, drafts), and a compact running summary. Every step is checkpointed, so a crash or provider outage resumes from the last completed node instead of replaying hours of work. Idempotency keys on side-effecting tools (send, book, write) stop a retry from doing the thing twice.
+
+**Per-step model routing.** Route by step type and difficulty: a small fast model for extraction, classification, and summarisation; a frontier reasoning model for planning and synthesis; a code model inside a sandbox for data work. Measure the router itself by logging outcome and cost per route against a golden task suite, because a cheap model that fails and retries three times is not cheap.
+
+**Untrusted content.** Everything fetched from the web is data, never instructions. Keep page content in a separate channel from the system prompt and the user's goal, flag instruction-like text, give the browsing step the fewest credentials possible, and require user confirmation for high-impact actions such as payments, messages, or account changes.
+
+**Budgets and control.** Hard caps on tokens, wall-clock time, and spend per task and per step, with the planner told its remaining budget. Detect loops (same tool, same arguments, no state change) and escalate rather than spin. Compact long histories into the summary plus artefact references instead of carrying everything verbatim.
+
+**Evaluation.** Task-level success on a frozen suite of realistic multi-step tasks, plus step-level traces so every failure is attributable to planning, routing, tool error, or retrieval. Gate changes on replays of recorded traces before rollout.
+
+**Follow-ups:** How do you show progress and let the user steer mid-task without restarting? Which step types would you never hand to a cheap model, and how would you prove that choice with data?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo, given Perplexity's focus:
@@ -387,7 +407,7 @@ Priority order for this repo, given Perplexity's focus:
 Company-specific moves:
 
 - **Read their official interview guide** at perplexity.ai/hub/careers/interview-guide - few companies document their loop; take the free information.
-- **Use the product hard for two weeks.** Regular search, Deep Research, follow-up threads, the Sonar API if you can, Comet if available to you. Log concrete failures and delights; question 12 above is built from exactly this.
+- **Use the product hard for two weeks.** Regular search, Deep Research, follow-up threads, the Sonar API if you can, Comet, and Perplexity Computer if your plan includes it. Log concrete failures and delights; question 12 above is built from exactly this.
 - **Build a toy answer engine** (search API → fetch/parse → rerank → streamed cited answer) and instrument per-stage latency. Nothing prepares you better for their system-design round than having felt the retrieval tail-latency problem yourself.
 - **Do every practice problem in Python** - multiple independent reports say it's the expected language.
 - **Skim their blog posts** on the Sonar models and pplx-api for how they talk about serving and model choices, and be ready to discuss the answer-engine competitive landscape (Google AI Overviews/AI Mode, ChatGPT search) in engineering terms.
@@ -399,5 +419,6 @@ Company-specific moves:
 - [JobsByCulture - Perplexity AI Interview Prep 2026](https://jobsbyculture.com/blog/perplexity-interview-prep-2026) (fetched)
 - [LinkJob - 2026 Perplexity AI interview process and questions (candidate report)](https://www.linkjob.ai/interview-questions/perplexity-ai-interview/) (fetched)
 - [Medium - "How I Actually Passed My 2025 Perplexity AI Interview" (candidate report)](https://medium.com/@anqi.silvia/how-i-actually-passed-my-2025-perplexity-ai-interview-actual-questions-4007209bce5b) (fetched)
-- [Interview Query - Perplexity AI Software Engineer prep guide](https://www.interviewquery.com/prep-guides/perplexity-ai-software-engineer) (seen in search results; not fetched)
+- [Interview Query - Perplexity AI Software Engineer prep guide (updated for 2026)](https://www.interviewquery.com/prep-guides/perplexity-ai-software-engineer) (seen in search results; describes a technical screen or online assessment, one or two rounds)
+- [Semafor - "Perplexity's Computer wasn't always planned" (February 2026)](https://semafor.com/article/02/27/2026/perplexitys-computer-wasnt-always-planned) - launch context for the Computer agent
 - [Glassdoor - Perplexity AI interview questions](https://www.glassdoor.com/Interview/Perplexity-AI-Interview-Questions-E8515634.htm) (seen in search results; not fetched)

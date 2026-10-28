@@ -5,23 +5,26 @@ You're not being hired to align models or beat benchmarks. You're being hired to
 ## How this role's interviews changed (2024 → 2026)
 
 - **LLM appsec is a standard, often dedicated, interview area.** In 2024 "AI security" was a nice-to-have you could hand-wave. Now there's usually a scenario round - "here's an agent that reads email and books travel, threat-model it" - and passing it requires a vocabulary that didn't exist in most security orgs two years ago.
-- **OWASP LLM Top 10 became the shared language of the review.** Interviewers expect you to reel off the categories that matter for *their* product (Prompt Injection, Sensitive Information Disclosure, Improper Output Handling, Excessive Agency, Supply Chain) and, more importantly, to say which ones don't apply and why. Reciting all ten without prioritising reads as flashcard knowledge.
+- **OWASP LLM Top 10 became the shared language of the review.** Interviewers expect you to reel off the categories that matter for *their* product (Prompt Injection, Sensitive Information Disclosure, Improper Output Handling, Excessive Agency, Supply Chain) and, more importantly, to say which ones don't apply and why. Reciting all ten without prioritising reads as flashcard knowledge. For agent products, the OWASP Top 10 for Agentic Applications (published December 2025, ASI01 Agent Goal Hijack through ASI10 Rogue Agents) is now the companion list, and knowing how the two map onto each other is a plus.
 - **The prompt-injection question is the new "explain SQL injection" - with a twist.** The tell isn't whether you can define it; it's whether you know there is **no parameterized-query equivalent**, that training-time mitigations are probabilistic, and that the correct posture is "design assuming injection succeeds." Candidates who claim a system prompt or a delimiter scheme solves it get cut.
 - **Agent security emerged as its own category.** Permission models at the tool boundary, sandboxing code execution, the **lethal trifecta**, and MCP server vetting (tool poisoning, rug pulls) are now first-class questions. This is the fastest-growing area of the loop.
 - **Supply chain moved from "scan your dependencies" to model artifacts.** Expect to be asked about **pickle vs safetensors**, verifying model hashes and pinning revisions, and vetting third-party MCP servers whose tool descriptions enter your context as an injection vector.
 - **Data governance for LLMs got concrete.** PII doesn't just leak through the model - it leaks through prompts sent to vendors, **observability traces that store full payloads**, logs, eval sets, caches, and embeddings. Zero-data-retention agreements, retention windows, and per-tenant isolation are expected talking points.
-- **"Using AI for security work" became a two-sided question.** Can you wire an LLM into detection, triage, or code review - *and* do you understand its failure modes (false confidence, injection of the analyst tool itself, alert fatigue from noisy findings)? Answering only the first half is a miss.
+- **"Using AI for security work" became a two-sided question.** LLM-driven vulnerability discovery and triage moved from research demos (Google's Big Sleep, DARPA's AI Cyber Challenge) into everyday tooling. Can you wire an LLM into detection, triage, or code review - *and* do you understand its failure modes (false confidence, silent false negatives, injection of the analyst tool itself, alert fatigue from noisy findings)? Answering only the first half is a miss.
+- **Coding agents became an attack surface in their own right.** Agents with shell access run on developer laptops and in CI, holding real credentials. The August 2025 Nx npm compromise, which invoked locally installed AI CLIs with permission-skipping flags to hunt for secrets, made "threat-model our engineers' coding agents" a common scenario prompt.
+- **AI-assisted coding rounds arrived, and AI-tool fluency is graded.** Meta began piloting an AI-enabled coding round in October 2025 and expanded it through 2026, and other large companies have run similar pilots or added AI-assisted tasks to online assessments (reported, varies by team and role). For security candidates the twist is predictable: you're expected to use the assistant productively and to catch the insecure code it writes, such as missing authorisation checks, unsafe deserialization, string-built queries and secrets in code. Ask the recruiter which rounds allow tools and practise both modes.
 - **What got de-emphasised:** pure web-appsec/CTF trivia as the entire loop, and memorising CVE arcana. Classic appsec still shows up, but it's increasingly paired with an AI-specific scenario, and the differentiator is whether you can transfer secure-design instincts to a non-deterministic, injectable component.
 
 ## What you're actually expected to know
 
 **Expected - and probed hard:**
 
-- **OWASP LLM Top 10 as a working checklist**, not a recitation - mapped to a concrete product, with the critical chain (injection → unsanitised output → over-privileged tools) called out.
+- **OWASP LLM Top 10 as a working checklist**, not a recitation - mapped to a concrete product, with the critical chain (injection → unsanitised output → over-privileged tools) called out, plus working familiarity with the Agentic Top 10 for agent designs.
 - **Prompt injection, direct and indirect**, why it's unsolved, and defence-in-depth that shrinks blast radius instead of promising prevention: input classifiers, output handling, least privilege, human-in-the-loop, audit logs.
 - **Agent security**: authorisation at the tool boundary with the end user's scoped credentials, argument validation as hostile input, idempotency and approval gates for irreversible actions, sandboxing for code execution.
 - **The lethal trifecta** as a design test, and the architectural fixes (remove a leg; dual-LLM / quarantine patterns).
 - **Supply chain**: safetensors vs pickle, MCP vetting, model provenance and hash pinning.
+- **Coding-agent security**: sandboxing, egress control and credential scoping for agents that run shell commands on laptops and in CI.
 - **Data governance**: where PII flows in an LLM stack, retention/ZDR, redaction pipelines, tenant isolation down to vector-index namespaces and caches.
 - **Red-teaming methodology**: pre-launch manual + automated (garak, PyRIT), continuous re-testing on every model/prompt/tool change, converting findings into regression evals.
 
@@ -49,8 +52,8 @@ If you can threat-model an agent, speak OWASP-LLM fluently, and explain why prom
 | [09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/) | 🟢 deep | Your home section. OWASP LLM Top 10, injection defence-in-depth, dual-LLM/CaMeL, data leakage, guardrails, red-teaming, governance. |
 | [10-multimodal](../10-multimodal/) | ⚪ skim | Awareness only: images/documents are injection carriers (instructions hidden in an image or PDF) - one attack-surface note, not a study area. |
 | [11-ai-system-design](../11-ai-system-design/) | 🟡 solid | The scenario round is a secure-architecture round: threat-model a chatbot/agent/RAG system and place controls at the right boundaries. |
-| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Practical rounds may ask you to implement a guardrail: a PII redactor, an injection-detection heuristic, an output schema validator, or a URL allowlist. |
-| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Have security stories ready: an AI incident, a threat model you drove, a residual risk you consciously accepted and why. |
+| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Practical rounds may ask you to implement a guardrail: a PII redactor, an injection-detection heuristic, an output schema validator, or a URL allowlist. When an AI assistant is allowed, expect to be judged on the vulnerabilities you catch in its output. |
+| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Have security stories ready: an AI incident, a threat model you drove, a residual risk you consciously accepted and why, and how you use AI tools in security work without trusting them blindly. |
 
 ## Role-specific interview questions
 
@@ -163,7 +166,7 @@ In practice the two compose: a sophisticated attack often uses an injected paylo
 
 A model checkpoint is executable-adjacent, not inert data, and treating it like a config file is the mistake. The concrete risks:
 
-- **Pickle deserialization.** Older checkpoints (`.bin`/`.pt` saved via `torch.save`) use Python's `pickle`, which can execute arbitrary code on load. A malicious checkpoint on a public hub is a straightforward remote-code-execution vector the moment someone runs `torch.load`. **Safetensors** fixes this structurally: it's a data-only format with no code execution path, and it's now the default on most hubs; treat any pickle-format checkpoint as untrusted until scanned.
+- **Pickle deserialization.** Older checkpoints (`.bin`/`.pt` saved via `torch.save`) use Python's `pickle`, which can execute arbitrary code on load. A malicious checkpoint on a public hub is a straightforward remote-code-execution vector the moment someone runs `torch.load`. **Safetensors** fixes this structurally: it's a data-only format with no code execution path, and it's now the default save format in the major libraries and hubs; treat any pickle-format checkpoint as untrusted until scanned. PyTorch 2.6 switched `torch.load` to `weights_only=True` by default, which narrows the risk but doesn't remove it: restricted unpicklers have had bypasses, and older pinned versions still load arbitrary pickles.
 - **Provenance and tampering.** Verify the source (official org account, not a look-alike upload), pin an exact revision hash rather than a mutable "latest" tag, and checksum on download so a swapped file at rest or in transit doesn't go unnoticed.
 - **Poisoned weights.** A fine-tuned model can be trained to behave normally except for a trigger phrase that activates malicious behaviour, an ML-specific backdoor that no static file scan detects. Mitigation is provenance-based (trust the training pipeline, not just the artifact) plus behavioural eval on suspicious models before production use.
 - **Dependency risk.** The surrounding stack (tokenizer configs, custom model code loaded via `trust_remote_code`, inference server plugins) carries the same supply-chain risk as any other third-party code; `trust_remote_code=True` is a code-execution decision, treat it like installing an unreviewed package.
@@ -185,6 +188,7 @@ An MCP server is a code-execution and trust-boundary decision disguised as a plu
 - **The rug-pull risk.** A server that's benign at review time can change its behaviour after approval, since most MCP servers are fetched or run remotely rather than vendored. Pin versions, re-review on updates, and prefer servers you can vendor and audit over ones you dynamically trust each session.
 - **Composed trifecta risk.** Evaluate the new tool *combined with* every other tool the agent already has, not in isolation. A read-only browsing tool is fine alone; added to an agent that already has mailbox access and outbound HTTP, it may complete the lethal trifecta.
 - **Least privilege at the transport.** Run the server with the minimum filesystem, network, and credential access it needs, sandboxed, not with the same privileges as your main application process.
+- **Credential handling for remote servers.** Check it uses the protocol's OAuth-based authorisation with tokens issued for that server, and that it never forwards your users' tokens to downstream APIs. Token passthrough creates a confused deputy and is explicitly disallowed by the MCP security guidance.
 
 The senior answer names the specific failure mode (tool description injection, rug pulls) rather than a generic "we'd review it for security issues."
 
@@ -250,7 +254,7 @@ Assume every downstream system the model touches is a leak surface: the provider
 Audits want evidence of a repeatable process, not a one-time cleanup, so the preparation is mostly about what you've been logging and documenting all along.
 
 - **A model or system card.** A short document per deployed model or feature: what it does, what data it sees, its known limitations and failure modes, and what guardrails sit around it. This is table stakes for most enterprise procurement reviews now, not just regulatory ones.
-- **Risk-tier awareness.** Know roughly where your use case sits under frameworks like the EU AI Act's risk tiers (unacceptable, high, limited, minimal), since the obligations attached (a high-risk HR or credit-decisioning use case versus a low-risk internal drafting tool) differ enormously, and being unable to place your own product on that spectrum is a bad sign to an auditor.
+- **Risk-tier awareness.** Know roughly where your use case sits under frameworks like the EU AI Act's risk tiers (unacceptable, high, limited, minimal), since the obligations attached (a high-risk HR or credit-decisioning use case versus a low-risk internal drafting tool) differ enormously, and being unable to place your own product on that spectrum is a bad sign to an auditor. Know the timeline too: prohibited practices have applied since February 2025 and general-purpose model obligations since August 2025, while the high-risk obligations originally due in August 2026 were pushed back by the 2026 Digital Omnibus agreement to December 2027 for standalone systems and August 2028 for product-embedded ones. Check the current status before quoting dates, but don't treat the delay as permission to skip preparation.
 - **A named risk-management process.** Frameworks like the NIST AI RMF don't require you to adopt their exact structure, but auditors want to see that you have *a* documented process for identifying, measuring, and mitigating AI-specific risk, not an ad hoc one.
 - **Audit logging that's actually queryable.** Every consequential action taken by an agent, tied to a request, user, model version, and prompt version, retrievable when an auditor or incident responder asks "what happened on this account in March."
 - **Evidence of testing, not just policy.** Red-team findings, eval results, and guardrail-tuning history are the artifacts that turn "we have a policy against X" into "here's proof we tested for X."
@@ -258,6 +262,70 @@ Audits want evidence of a repeatable process, not a one-time cleanup, so the pre
 The credibility signal auditors look for is whether this documentation already existed before the audit was scheduled, versus being assembled the week of.
 
 **Follow-ups:** How do you keep model and system cards from going stale as the underlying model or prompt changes weekly? What's the gap between "we have a policy" and "we have evidence," and how do you close it?
+
+</details>
+
+### 13. Our engineers run coding agents with shell access on their laptops and in CI. Threat-model that and tell me which controls you'd require.
+
+<details><summary><b>Answer</b></summary>
+
+A coding agent is a lethal trifecta by default. It reads untrusted content (repo files, dependency code and READMEs, issues, PR comments, web pages, MCP tool output). It holds private data (source, `.env` files, cloud credentials, SSH keys, tokens in the developer's shell). And it has exfiltration channels (shell, network, `git push`, package publish). On a laptop it runs as the developer. In CI it may hold deploy credentials.
+
+Threats to name:
+
+- **Indirect injection from repo content.** An issue body or a file in a dependency tells the agent to run a command or edit CI config. The sharpest edge is an agent triggered on fork PRs or public issues while holding write tokens.
+- **Your agent as the payload.** In the August 2025 Nx compromise, malicious package versions invoked locally installed AI CLIs with permission-skipping flags to inventory secrets. Auto-approve modes turn any foothold into arbitrary execution.
+- **Config poisoning.** Repo-level agent instructions or MCP server definitions the agent loads automatically.
+- **Agent-authored code** that is plausible but insecure, merged on trust.
+
+Controls I'd require:
+
+- **Sandbox by default:** container or VM, workspace-scoped filesystem, no host credentials mounted, egress allowlist (package registry, model API). Permission-skipping modes are allowed only inside that sandbox.
+- **Short-lived, task-scoped credentials.** No long-lived cloud keys in the agent's environment. In CI the agent job gets read-only tokens, and a separate job behind human approval does anything privileged.
+- **No agents with write tokens on untrusted triggers** such as fork PRs or public issue text.
+- **Agent and MCP config under CODEOWNERS review**, with a central MCP server allowlist.
+- **Same review and SAST gates for agent code as human code**, plus a log of every command the agent ran.
+
+**Worth sketching.** How the three trifecta legs converge on the agent, and where the sandbox cuts the path.
+
+```mermaid
+flowchart LR
+    U["Untrusted input<br/>issues, PR text, dependencies"] --> A["Coding agent"]
+    S["Secrets in env<br/>tokens, keys, .env files"] --> A
+    A --> X["Shell and network"]
+    X -->|"no sandbox"| E["Exfiltration or<br/>malicious commit"]
+    X -->|"sandboxed"| C["Egress allowlist<br/>scoped short-lived token"]
+    C --> H["Human approval<br/>before privileged step"]
+```
+
+**Follow-ups:** A team says the sandbox makes the agent too slow to be useful - what do you relax first, and what never? How would you detect that a developer's local agent has been hijacked?
+
+</details>
+
+### 14. We want an LLM agent to triage our SAST findings and review PRs for vulnerabilities. How would you design it, and how would you know it works?
+
+<details><summary><b>Answer</b></summary>
+
+Use it to rank and explain, not to dismiss silently, and evaluate it like any detector: on labelled data, with false negatives as the number that matters.
+
+Design:
+
+- **Scope where it adds value.** Triage existing scanner findings (is the sink reachable, is the input attacker-controlled, what is the fix) and review diffs for classes pattern-matchers miss: broken authorisation, IDOR, business-logic flaws.
+- **Evidence or it didn't happen.** Read-only repo access plus tools to follow call graphs, and every verdict must cite a concrete source-to-sink path. A verdict without a path is rejected.
+- **Structured output:** verdict (true positive, false positive, needs human), severity, evidence, suggested fix, in a fixed schema so downstream automation never parses prose.
+- **Bounded authority.** It can annotate and reprioritise, but closing anything above low severity as a false positive needs a human, and proposed fixes go through normal review.
+- **Treat it as a target.** The code and comments it reads are attacker-influenceable. A comment saying "sanitised upstream, safe" is exactly what an attacker would plant. No network, no secrets in context, read-only tools.
+
+Evaluation:
+
+- **Labelled set from your own history:** confirmed vulnerabilities, known false positives, plus seeded bugs injected into real code so you can measure recall on issues you know exist.
+- **Report recall and noise reduction separately.** A triager that closes 80% of noise but also closes 5% of real bugs is a liability.
+- **Consistency:** run each finding k times and route low-agreement verdicts to humans.
+- **Regression gates on model or prompt changes**, the same discipline as any LLM feature.
+
+The interviewer is checking both halves: that you can make the tool useful, and that you design against the analyst tool being injected and against silent false negatives.
+
+**Follow-ups:** How do you stop its PR comments becoming noise developers learn to ignore? Would you let it auto-fix low-severity findings, and with what controls?
 
 </details>
 

@@ -1,6 +1,6 @@
 # 🧠 Google DeepMind (and Google AI roles) - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -10,6 +10,7 @@
 - The **algorithmic coding bar is standard Google**: LeetCode-medium/hard, clean communication, complexity analysis. Clearing coding is often gated before the ML rounds (reported, varies).
 - Process is **slow and committee-driven**: recruiter → hiring manager → phone screens → 5-7 round loop → hiring committee. Public reports put end-to-end at roughly 6-10 weeks, longer for research tracks.
 - **At least one round is now in person.** Google reinstated mandatory in-person interviewing for hires in 2025, a change publicly backed by Sundar Pichai and explicitly motivated by AI-assisted cheating in virtual technical rounds. Plan travel into your timeline.
+- **AI-assisted coding is arriving on the Google side.** From the second half of 2026 Google is piloting a "code comprehension" round for junior and mid-level SWE roles on select US teams: candidates read, debug and optimise an existing codebase with Gemini available, and are scored partly on AI fluency (prompting, output validation, debugging). Public reports do not say the pilot covers DeepMind RE or RS loops, so ask your recruiter which format you will get (reported, varies).
 
 ## Company context
 
@@ -45,12 +46,12 @@ Public info on the DeepMind RE loop is comparatively good (multiple detailed can
 | People & culture | 30-45 min | Values, "Googleyness"-equivalent, mission alignment (safety and responsibility framing is explicit on their careers page) |
 | Hiring committee | Async | Packet review; reported to be slower and more research-weighted than standard Google HC |
 
-For **Google SWE-ML** roles the loop is the standard, well-documented Google loop: 2-3 algorithmic coding rounds, 1 system design (ML design for ML-titled roles), 1 Googleyness/behavioural round, then hiring committee and team matching.
+For **Google SWE-ML** roles the loop is the standard, well-documented Google loop: 2-3 algorithmic coding rounds, 1 system design (ML design for ML-titled roles), 1 Googleyness/behavioural round, then hiring committee and team matching. Junior and mid-level candidates on some US teams may instead meet the AI-assisted code comprehension round piloted from the second half of 2026 (reported, varies).
 
 ## What they emphasise
 
 - **Breadth with real fundamentals.** The quiz-style rounds exist to filter for people who genuinely know the math and CS under the ML, not just framework APIs. Being unable to differentiate a simple expression by hand or state Bayes' rule is disqualifying in a way it isn't at product companies.
-- **Code that runs, unaided.** Multiple public accounts stress from-scratch ML implementation with no autocomplete or AI tools, and reports describe DeepMind's AI-tool policy in interviews as stricter than peer labs.
+- **Code that runs, unaided.** Multiple public accounts stress from-scratch ML implementation with no autocomplete or AI tools, and reports describe DeepMind's AI-tool policy in interviews as stricter than peer labs. Google's 2026 AI-assisted pilot targets junior and mid-level SWE loops; nothing public says it has reached DeepMind's from-scratch ML coding rounds.
 - **Research taste even for engineers.** REs are expected to read papers, reason about experimental design, and push back on methodology - the hiring committee reportedly weighs research rigor for engineering roles too.
 - **Scale engineering.** Distributed training (data/tensor/pipeline parallelism, TPU-mesh thinking), evaluation infrastructure, and performance work are core RE material - DeepMind's stack is publicly JAX-heavy.
 - **Mission and responsibility.** The careers page leads with building AI "safely and responsibly"; culture rounds probe why you want frontier AI work and how you handle its stakes.
@@ -211,7 +212,7 @@ Recovery playbook, publicly standard for large runs: roll back to the last good 
 
 **Policy gradients** (e.g., REINFORCE → actor-critic → PPO): directly optimize E[R] via ∇J = E[∇log π(a|s)·A(s,a)]. Naturally handle continuous/stochastic actions, converge more stably (you're doing gradient ascent on the true objective, if on-policy), and the policy can be exactly the object you deploy. Weaknesses: on-policy data hunger (every update needs fresh rollouts), high gradient variance requiring baselines/advantage estimation (GAE), and sensitivity to step size - hence trust-region methods and PPO's clipping.
 
-Rules of thumb: discrete actions + cheap simulator + need for replay → DQN-family. Continuous control or when you need a stochastic policy → actor-critic/PPO. Modern practice blends them (SAC is off-policy actor-critic with entropy regularization). Worth knowing for this company: RLHF-style LM post-training uses policy-gradient methods (PPO variants) because the "environment" step (generating text, scoring with a reward model) is expensive and the action space is the vocabulary - effectively a huge discrete space handled through the policy itself.
+Rules of thumb: discrete actions + cheap simulator + need for replay → DQN-family. Continuous control or when you need a stochastic policy → actor-critic/PPO. Modern practice blends them (SAC is off-policy actor-critic with entropy regularization). Worth knowing for this company: RLHF-style LM post-training uses policy-gradient methods (PPO and critic-free variants such as GRPO) because the "environment" step (generating text, scoring with a reward model) is expensive and the action space is the vocabulary - effectively a huge discrete space handled through the policy itself.
 
 **Follow-ups:** What is the deadly triad, precisely, and which of the three do you give up in each family? Why does PPO clip the importance ratio instead of using a KL penalty alone?
 
@@ -290,6 +291,24 @@ Anti-patterns: villainising the counterpart, "I was right all along" endings, es
 
 </details>
 
+### 13. Here is an unfamiliar codebase with a failing test and a slow endpoint, and you may use the AI assistant. Walk me through how you work, and how you decide whether to trust what it tells you.
+
+<details><summary><b>Answer</b></summary>
+
+Use the assistant to read faster, never to decide for you. The Google-side pilot reportedly scores AI fluency as prompting, output validation and debugging, so the signal is visible verification, not how quickly you accept a patch.
+
+1. **Orient before prompting.** Read the entry point, the failing test and its fixture yourself, and state a hypothesis out loud. Then ask narrow questions: "where is this cache invalidated", "list every caller of this function". Narrow questions produce checkable answers; "fix this bug" produces a plausible patch you cannot evaluate.
+2. **Reproduce first.** Run the failing test, confirm the failure matches the report, and take a timing baseline for the slow path on a realistic input size. Without a reproduction you cannot tell a fix from a coincidence.
+3. **Treat every claim as a lead.** If the assistant says a function has one caller, search for it. If it proposes a fix, read the diff line by line and explain why it is correct before running it. Known failure modes: invented APIs, fixes that pass by weakening the assertion, boundary off-by-ones, and "optimisations" that change semantics, such as reordering a floating-point reduction or removing a copy that guarded against aliasing.
+4. **Verify by running.** The failing test passes, neighbouring tests still pass, and you add a test that would have caught the bug. For the performance fix, re-measure against the baseline and state the complexity change rather than "it feels faster".
+5. **Say when you overrule it.** One explicit "it suggested X, that is wrong because Y" is worth more than a clean run where the assistant happened to be right.
+
+The anti-patterns are pasting a whole file with "fix it" and going silent while the assistant works. The interviewer is grading your judgement, and they can only grade what you say aloud.
+
+**Follow-ups:** The assistant's fix passes every test but you cannot explain why it works - do you ship it? How would you find the hotspot with the assistant's help if no profiler is available?
+
+</details>
+
 ## How to prepare
 
 **Repo roadmap, weighted for this loop:**
@@ -317,4 +336,5 @@ Anti-patterns: villainising the counterpart, "I was right all along" endings, es
 - [IGotAnOffer - Google DeepMind Research Engineer Interview](https://igotanoffer.com/en/advice/google-deepmind-research-engineer-interview) - coding/ML round gating and difficulty reports
 - [IGotAnOffer - Google Machine Learning Engineer Interview](https://igotanoffer.com/blogs/tech/google-machine-learning-engineer-interview) - Google-side SWE-ML loop structure
 - [Glassdoor - Google DeepMind Interview Questions](https://www.glassdoor.com/Interview/Google-DeepMind-Interview-Questions-E1596815.htm) - aggregated candidate reports
+- [Moneywise via Yahoo Finance - Google will let candidates use AI in interviews (May 2026)](https://finance.yahoo.com/sectors/technology/articles/asking-kid-math-test-without-151500986.html) - the Gemini-assisted code comprehension pilot for junior and mid-level SWE roles, originally reported by Business Insider
 - [Business Standard - Google shifts to in-person interviews amid AI cheating concerns](https://www.business-standard.com/companies/news/google-ai-cheating-job-interviews-in-person-hiring-shift-sundar-pichai-125082600492_1.html) - the 2025 in-person interviewing mandate

@@ -35,22 +35,30 @@ INTERVIEW NOTES
 A strong solution demonstrates:
 - Two distinct buffering layers: bytes -> text (incremental UTF-8 decoder)
   and text -> lines (find "\n" in a buffer). Decoding each chunk with
-  bytes.decode() crashes on a split code point - the #1 mistake.
+  bytes.decode() crashes on a split code point, the most common bug here and
+  one that only shows up on non-ASCII output in production.
 - Push-parser design: feed() returns only COMPLETE events and keeps partial
   state; no assumption that one chunk == one event (or even one line).
 - Knowing the SSE grammar details: value may have one optional leading space
   ("data: x" and "data:x" are both "x"); a lone "data" line means empty data;
   comments keep connections alive through proxies.
-- For tool calls: argument fragments are meaningless until concatenated, so
-  completion == "accumulated string parses as JSON", checked incrementally.
+- For tool calls: argument fragments are meaningless until concatenated.
+  "Accumulated string parses as JSON" is a useful readiness check, but the
+  authoritative end of a call is the provider's own signal (a finish reason,
+  or a content-block or output-item done event). Dispatch on that, then
+  validate the parsed arguments against the tool's schema.
+- Wire formats differ: [DONE] is an OpenAI Chat Completions convention.
+  Other APIs end with a typed event (e.g. message_stop, response.completed)
+  and name every event via `event:`, so the parser must not depend on [DONE].
 Common mistakes: bytes.decode() per chunk (UnicodeDecodeError on split
 emoji); str(chunk) instead of decoding; discarding "data:" lines that follow
 another (multi-line data is legal); treating [DONE] as JSON; json.loads on
-each argument fragment.
+each argument fragment; letting `event:` leak into the next event instead of
+resetting it on dispatch.
 Follow-ups: support the `id:` field and Last-Event-ID reconnection; lone-\r
-line endings from the SSE spec; backpressure via a generator API; parallel
-tool calls interleaved by index (already supported here - discuss why the
-index, not order of arrival, keys the accumulator).
+line endings and a leading UTF-8 BOM, both in the SSE spec; backpressure via a
+generator API; parallel tool calls interleaved by index (already supported
+here - discuss why the index, not order of arrival, keys the accumulator).
 """
 
 import codecs
@@ -190,6 +198,7 @@ if __name__ == "__main__":
     assert json.loads(whole[1].data)["delta"] == "lo \U0001f680"  # survived byte splits
     assert whole[2] == SSEEvent(data="line one\nline two", event="usage")
     assert whole[3].done and whole[3].data == "[DONE]"
+    assert whole[3].event == "message", "event type must reset after dispatch"
     assert not whole[0].done
 
     # 3. Deliberate split INSIDE the emoji's 4-byte sequence.
@@ -207,6 +216,11 @@ if __name__ == "__main__":
     parser = SSEParser()
     assert parser.feed(b"data:x\n\n") == [SSEEvent(data="x")]
     assert parser.feed(b"data\n\n") == [SSEEvent(data="")]
+    # An event with no data is dropped, and its type must not leak forward.
+    assert parser.feed(b"event: ping\n\n") == []
+    assert parser.feed(b"data: y\n\n") == [SSEEvent(data="y", event="message")]
+    # id:, retry: and unknown fields are skipped without corrupting the event.
+    assert parser.feed(b"id: 7\nretry: 1000\nfoo: bar\ndata: z\n\n") == [SSEEvent(data="z")]
 
     # 6. Tool-call assembler reconstructs fragmented JSON arguments.
     asm = ToolCallAssembler()

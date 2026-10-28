@@ -34,13 +34,22 @@ A strong solution demonstrates:
 - Why B starts at zero and A does not. At step 0 the delta is exactly zero, so
   the adapted layer reproduces the pretrained one bit for bit. But dL/dB is
   proportional to (x @ A) transposed, so zeroing A as well would leave B with
-  no gradient forever. One side zero, one side random.
-- Why the update is scaled by alpha / r rather than alpha. The factor keeps the
-  size of the delta roughly independent of the rank, so sweeping r does not
-  force a fresh learning-rate sweep. In practice alpha is pinned and r is tuned.
+  no gradient forever. One side zero, one side random. The exact distribution
+  of A matters far less: the paper says Gaussian, Hugging Face PEFT defaults to
+  Kaiming-uniform, and N(0, 1/r) here is simply a fixed, testable choice.
+- Why the update is scaled by alpha / r rather than alpha. The paper's aim is
+  that, with Adam, changing r should not force a fresh learning-rate sweep, so
+  it fixes alpha and tunes r. Practitioners often set alpha = 2r instead, which
+  pins the scaling at 2. rsLoRA (Kalajdzievski, 2023) shows alpha / r shrinks
+  the update too much at high rank and argues for alpha / sqrt(r); PEFT
+  exposes it as use_rslora.
 - The cost model: r(d + k) trainable entries against d*k frozen ones. At
-  d = k = 4096 and r = 8 that is under 0.4 percent of the layer, and optimizer
-  state shrinks with it, which is where most training memory actually goes.
+  d = k = 4096 and r = 8 that is under 0.4 percent of the layer. Gradients and
+  optimizer state shrink with it. In mixed-precision Adam fine-tuning each
+  parameter costs ~16 bytes: 2 for the bf16 weight, 2 for its gradient and 12
+  for the fp32 master copy and two moments, so LoRA drops ~14 of those 16 on
+  every frozen weight. Activations do not shrink, so long sequences still need
+  checkpointing.
 - Merging is a deployment decision, not a correctness one. The merged matrix is
   one matmul of the original shape, so inference overhead is zero, but it now
   serves exactly one tenant. Left unmerged you pay two thin matmuls per token
@@ -56,8 +65,9 @@ unmerged to agree bit for bit in fp16, or merging to be undone by subtraction.
 Follow-ups: DoRA, which splits the update into magnitude and direction; QLoRA
 with an NF4 base and higher-precision adapters; which projections to adapt and
 how that trades against r; rank scheduling, as in AdaLoRA; stacking several
-adapters and the interference that follows; paged memory and fused kernels for
-the gathered low-rank matmul in a real server.
+adapters and the interference that follows; paged adapter memory (S-LoRA) and
+segmented gather kernels such as Punica's SGMV for the gathered low-rank matmul
+in a real server, the approach behind multi-LoRA serving in vLLM and SGLang.
 """
 
 from typing import Sequence

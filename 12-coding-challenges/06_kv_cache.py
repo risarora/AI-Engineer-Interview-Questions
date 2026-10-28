@@ -13,8 +13,8 @@ and prove they are equivalent:
 2. generate_with_cache(model, prompt_ids, n_new) -> list[int]
    Keep K and V for every processed position. Each step embeds ONE token,
    computes its q/k/v, appends k/v to the cache, and attends the single query
-   over all cached keys. Per-step attention cost: O(T). No causal mask needed
- - the cache only contains the past.
+   over all cached keys. Per-step attention cost: O(T). No causal mask is
+   needed: the cache only contains the past.
 
 Both must produce byte-identical token sequences and (near-)identical logits.
 Instrument the model to count q.k score dot-products as a FLOP proxy and show
@@ -26,8 +26,9 @@ A strong solution: explains WHY caching is exact (causal attention means
 k/v at past positions never change when a token is appended; only the new
 query is needed); attends the new query over ALL cached positions including
 itself; notes the memory bill - per token the cache stores
-2 * n_layers * n_kv_heads * d_head values, which is why long contexts are
-memory-bound and why GQA/MQA shrink n_kv_heads.
+2 * n_layers * n_kv_heads * d_head values (times bytes per value), which is
+why long-context decode is memory-bound and why GQA/MQA shrink n_kv_heads
+and MLA (DeepSeek-V2/V3) caches a compressed latent instead of full K/V.
 
 Common mistakes: applying a causal mask in the cached path and accidentally
 masking valid past positions; recomputing k/v for the whole prefix each step
@@ -36,8 +37,10 @@ RoPE the new token must be rotated by its TRUE absolute position, not 0
 (this toy model omits positions to keep the diff focused on caching).
 
 Follow-up variations: prefill vs decode phases (compute-bound vs memory-
-bandwidth-bound); continuous batching; PagedAttention (vLLM) for cache
-fragmentation; cache quantization (fp8 KV); sliding-window attention and
+bandwidth-bound) and serving them on separate GPU pools (prefill/decode
+disaggregation); continuous batching; PagedAttention (vLLM) for cache
+fragmentation; prefix caching to reuse a shared system prompt's KV across
+requests; cache quantization (fp8 KV); sliding-window attention and
 attention sinks as cache-eviction strategies; speculative decoding.
 """
 from __future__ import annotations

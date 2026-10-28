@@ -32,18 +32,23 @@ INTERVIEW NOTES
 ---------------
 A strong solution demonstrates:
 - The grammar is the decoder. A flat schema is a regular language, so a DFA is
-  enough. Nested objects and arrays are not: matching arbitrarily deep braces
-  needs a stack, so real implementations run a pushdown automaton, or compile
-  the regular parts to a DFA and keep an explicit stack for the rest.
+  enough, and so is any non-recursive schema with bounded nesting (it unrolls
+  into a bigger regex). Recursive schemas and arbitrary JSON are not: matching
+  arbitrarily deep braces needs a stack, so engines such as XGrammar and
+  llguidance run a pushdown automaton or an Earley-style parser, while
+  regex-first designs compile the regular parts to a DFA.
 - Constrained decoding shifts the distribution. Renormalising onto the allowed
   set gives the model's conditional given validity, which is not its belief
   about good content: forcing a key order it did not want, or truncating a
-  field, pushes it into low-probability regions and measurably hurts quality.
-  Describing the schema in the prompt as well as masking keeps the two closer.
+  field, pushes it into low-probability regions and can hurt quality (reported
+  mostly on reasoning tasks, and the evidence is mixed). Describing the schema
+  in the prompt as well as masking keeps the two closer, and putting a free
+  text reasoning field before the answer fields gives the model room to think.
 - Cost awareness. The mask is a vocabulary-sized boolean per step, and at 100k+
   vocabularies rebuilding it per token is a visible slice of the step budget.
-  Production systems cache masks per parser state and precompute the
-  token-to-state transitions offline, so the hot path is a lookup.
+  Production systems cache masks per parser state, precompute the
+  token-to-state transitions offline, and compute the next mask on the CPU
+  while the GPU runs the forward pass, so the hot path is a lookup.
 Common mistakes: masking after the softmax without renormalising, so the
 probabilities no longer sum to 1; using 0.0 instead of -inf, which leaves
 disallowed tokens weight exp(0) = 1; dead states, where a legal prefix has no
@@ -53,7 +58,10 @@ a quote because the value grammar is not keyed off the declared type.
 Follow-ups: nested objects and arrays with a state stack; regex-constrained
 fields; multi-character (BPE) tokens, where one token straddles a grammar
 boundary so the mask must be built over token strings; measuring the KL between
-the constrained and unconstrained distributions to price the quality cost.
+the constrained and unconstrained distributions to price the quality cost; why
+"JSON mode" (any valid JSON) is weaker than schema-constrained structured
+output, and what a hosted API still cannot guarantee (semantic correctness,
+values that pass business rules).
 """
 
 import copy

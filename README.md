@@ -2,7 +2,7 @@
 
 <div align="center">
 
-  <p><strong>The complete prep resource for AI Engineer, LLM Engineer, and Applied AI interviews.</strong><br/>1,067 questions with worked answers, 10 system design case studies, 19 runnable coding challenges, company interview questions for 33 companies, and guides for 10 engineering roles.</p>
+  <p><strong>The complete prep resource for AI Engineer, LLM Engineer, and Applied AI interviews.</strong><br/>1,172 questions with worked answers, 10 system design case studies, 19 runnable coding challenges, company interview questions for 33 companies, and guides for 10 engineering roles.</p>
 
   <a href="https://github.com/ombharatiya/AI-Engineer-Interview-Questions/stargazers">
     <img src="https://img.shields.io/github/stars/ombharatiya/AI-Engineer-Interview-Questions?style=flat" alt="GitHub stars" />
@@ -19,6 +19,11 @@
   <a href="CONTRIBUTING.md">
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat" alt="PRs Welcome" />
   </a>
+
+  <p>
+  <a href="https://enginebogie.com/u/om"><img src="https://img.shields.io/badge/Mock_interview-Book_a_session-orange?style=for-the-badge" alt="Book a mock interview" /></a>
+  <a href="https://topmate.io/ombharatiya"><img src="https://img.shields.io/badge/1:1_mentorship-Topmate-blue?style=for-the-badge" alt="1:1 mentorship on Topmate" /></a>
+  </p>
 
   <p><strong>Company interview questions:</strong><br/>
   <a href="14-company-interview-questions/anthropic.md">Anthropic</a> ·
@@ -79,11 +84,23 @@ If you can clear all 75, you are ready for most AI engineering loops. If you can
 | Days | [The AI Engineer 75](AI-ENGINEER-75.md), then [CHEATSHEET.md](CHEATSHEET.md) the night before | 75 items + one evening review |
 | 1 week | The 75 + the [1-week cram plan](STUDY_PLAN.md) | 75 items + 6 crash courses |
 | 2-4 weeks | The [4-week plan](STUDY_PLAN.md): all 13 crash courses, full question banks on your weak topics, 3 design mocks | 200+ questions + 3 case studies + all 19 challenges |
-| 1-2 months+ | The [8-week plan](STUDY_PLAN.md): all 541 topic questions, all 10 case studies, all 19 challenges, plus a portfolio project | Everything, plus building |
+| 1-2 months+ | The [8-week plan](STUDY_PLAN.md): all 596 topic questions, all 10 case studies, all 19 challenges, plus a portfolio project | Everything, plus building |
 | Targeting a company | Add that company's interview questions from the banner above | +10-12 tailored questions and the loop map |
 | Not an "AI Engineer" title | Start from your [role guide](#role-guides) instead | Role-calibrated study map |
+| Loop booked, want real feedback | Do one [mock interview](https://enginebogie.com/u/om) with an experienced interviewer before the real thing | Honest scoring on where you lose points |
 
 **Essential shortcuts:** [The AI Engineer 75](AI-ENGINEER-75.md) · [Glossary](GLOSSARY.md) · [Mock interview kit](13-interview-process-and-behavioral/mock-interview-kit.md) · [Night-before cheat sheet](CHEATSHEET.md) · [Study plans](STUDY_PLAN.md) · [Curated papers and courses](resources/README.md) · [aidaddy.tech](https://aidaddy.tech), the companion site for AI system design and interview prep
+
+## 🧑‍🏫 Practise with a real interviewer
+
+Self-study gets you most of the way. What it cannot give you is someone across the table pushing back on your answers, watching the clock, and telling you exactly where you lost the room. If you want that before the real loop, book a mock interview, a prep consultation, or ongoing mentorship:
+
+| Option | Book here |
+|---|---|
+| Mock interviews and mentorship for AI engineering roles | [enginebogie.com/u/om](https://enginebogie.com/u/om) |
+| 1:1 consultations and interview prep sessions | [topmate.io/ombharatiya](https://topmate.io/ombharatiya) |
+
+Prefer to practise for free first? The [mock interview kit](13-interview-process-and-behavioral/mock-interview-kit.md) has interviewer scripts and scoring rubrics you can hand to a friend.
 
 ---
 
@@ -150,19 +167,19 @@ Each topic has a crash-course primer (`README.md`) and a full question bank with
 
 | # | Topic | Questions | What it covers |
 |---|-------|-----------|-----------------|
-| 01 | [ML & Deep Learning Foundations](01-ml-and-dl-foundations/) | 50 | Bias-variance, optimization, regularization, metrics, loss functions, the fundamentals a fine-tuning or evals answer is built on |
-| 02 | [LLM & Transformer Fundamentals](02-llm-fundamentals/) | 60 | Attention, positional encodings, tokenization, scaling laws, MoE, decoding, KV cache, reasoning models |
-| 03 | [Prompt Engineering & Context Engineering](03-prompt-engineering-and-context/) | 45 | Few-shot design, chain-of-thought, structured outputs, prompt caching, context rot and compaction |
-| 04 | [RAG & Retrieval](04-rag-and-retrieval/) | 55 | Chunking, embeddings, hybrid search, reranking, agentic RAG, retrieval evaluation |
-| 05 | [Fine-tuning, RLHF & Alignment](05-fine-tuning-and-alignment/) | 51 | SFT, LoRA/QLoRA, DPO/PPO/GRPO, distillation, GPU memory maths for training |
-| 06 | [Agents, Tool Use & MCP](06-agents-and-tool-use/) | 60 | Tool calling, MCP, planning patterns, multi-agent design, agent evaluation and security |
-| 07 | [Evals & Observability](07-evaluation-and-observability/) | 50 | LLM-as-judge, benchmark limits, RAG and agent evals, tracing, regression testing |
-| 08 | [Inference, Serving & Production LLM Systems](08-inference-and-production/) | 51 | Prefill vs. decode, KV cache paging, quantization, speculative decoding, cost engineering |
-| 09 | [Safety, Security & Responsible AI](09-safety-security-and-responsible-ai/) | 47 | Prompt injection, OWASP LLM Top 10, guardrails, agent security, data governance |
-| 10 | [Multimodal Models](10-multimodal/) | 35 | Vision-language architecture, diffusion, ASR/TTS, voice agents, multimodal RAG |
+| 01 | [ML & Deep Learning Foundations](01-ml-and-dl-foundations/) | 55 | Bias-variance, optimization, regularization, metrics, loss functions, the fundamentals a fine-tuning or evals answer is built on |
+| 02 | [LLM & Transformer Fundamentals](02-llm-fundamentals/) | 65 | Attention, positional encodings, tokenization, scaling laws, MoE, decoding, KV cache, reasoning models |
+| 03 | [Prompt Engineering & Context Engineering](03-prompt-engineering-and-context/) | 50 | Few-shot design, chain-of-thought, structured outputs, prompt caching, context rot and compaction |
+| 04 | [RAG & Retrieval](04-rag-and-retrieval/) | 60 | Chunking, embeddings, hybrid search, reranking, agentic RAG, retrieval evaluation |
+| 05 | [Fine-tuning, RLHF & Alignment](05-fine-tuning-and-alignment/) | 56 | SFT, LoRA/QLoRA, DPO/PPO/GRPO, distillation, GPU memory maths for training |
+| 06 | [Agents, Tool Use & MCP](06-agents-and-tool-use/) | 65 | Tool calling, MCP, planning patterns, multi-agent design, agent evaluation and security |
+| 07 | [Evals & Observability](07-evaluation-and-observability/) | 55 | LLM-as-judge, benchmark limits, RAG and agent evals, tracing, regression testing |
+| 08 | [Inference, Serving & Production LLM Systems](08-inference-and-production/) | 56 | Prefill vs. decode, KV cache paging, quantization, speculative decoding, cost engineering |
+| 09 | [Safety, Security & Responsible AI](09-safety-security-and-responsible-ai/) | 52 | Prompt injection, OWASP LLM Top 10, guardrails, agent security, data governance |
+| 10 | [Multimodal Models](10-multimodal/) | 40 | Vision-language architecture, diffusion, ASR/TTS, voice agents, multimodal RAG |
 | 11 | [AI System Design](11-ai-system-design/) | 10 case studies | A reusable answer framework plus eight worked case studies |
 | 12 | [Coding Challenges](12-coding-challenges/) | 19 challenges | Implement attention, BPE, sampling, KV cache, an agent loop, and more, from scratch |
-| 13 | [Interview Process & Behavioral](13-interview-process-and-behavioral/) | 37 | Loop anatomy by company type, take-homes, portfolio projects, AI-specific behavioural questions |
+| 13 | [Interview Process & Behavioral](13-interview-process-and-behavioral/) | 42 | Loop anatomy by company type, take-homes, portfolio projects, AI-specific behavioural questions |
 
 ## System design case studies
 
@@ -225,6 +242,8 @@ New questions, company coverage, and study material land here regularly. Watchin
 <a href="https://github.com/ombharatiya/AI-Engineer-Interview-Questions">
   <img src="https://img.shields.io/badge/⭐ Star-Show Support-yellow?style=for-the-badge" alt="Star Repo" />
 </a>
+
+**Want a mock interview or 1:1 prep?** Book a session on [enginebogie.com/u/om](https://enginebogie.com/u/om) or [topmate.io/ombharatiya](https://topmate.io/ombharatiya).
 
 **Follow [@ombharatiya](https://github.com/ombharatiya)** for interview tips and updates, and see [aidaddy.tech](https://aidaddy.tech) for the companion AI system design and interview prep site:
 

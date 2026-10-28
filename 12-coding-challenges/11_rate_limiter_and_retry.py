@@ -10,6 +10,7 @@ every production caller needs, designed for deterministic testing:
        capped at `capacity`
      - try_acquire(tokens=1) -> bool          (non-blocking)
      - time_until_available(tokens=1) -> float seconds
+     - both raise ValueError if tokens > capacity: no wait can satisfy it
      - `clock` is injectable so tests can use fake time.
 
 2. RateLimitError(retry_after: float | None = None) - exception carrying the
@@ -31,17 +32,27 @@ A strong solution demonstrates:
 - Why FULL jitter: deterministic exponential backoff synchronizes retries of
   many clients into thundering-herd waves; sampling uniformly in [0, cap]
   decorrelates them (the classic AWS Architecture Blog result).
-- Honouring Retry-After: the server knows its window; ignoring the hint gets
-  you banned, so take max(hint, jittered delay).
+- Honouring Retry-After: the server knows its window, and retrying inside it
+  burns attempts on guaranteed 429s, so take max(hint, jittered delay). Real
+  headers may carry seconds or an HTTP-date; parse both.
+- LLM limits are usually two buckets, requests per minute AND tokens per
+  minute. try_acquire(tokens=n) exists so one bucket can be charged the
+  request's estimated prompt plus max output tokens, not just 1 per call.
 - Dependency injection of clock/sleep/rng - the difference between a test
   suite that runs in milliseconds and one that actually sleeps.
 Common mistakes: sleeping before the FIRST attempt; off-by-one so the code
 sleeps after the final failure; int token counts that leak fractional refill;
 jitter as +/- 10% of a fixed delay (barely decorrelates); no max_delay cap,
-so with a 1 s base the 12th retry already waits over an hour (2**12 s).
+so with a 1 s base the 13th retry may wait over an hour (cap 2**12 s);
+a request larger than `capacity`, which no amount of waiting can satisfy and
+which must fail fast rather than loop on 429s;
+retrying non-idempotent side effects (a tool call that already fired) as if
+they were reads.
 Follow-ups: make the bucket thread-safe; add an async variant; distributed
-limiting across processes (Redis + Lua); respect x-ratelimit-remaining
-response headers to throttle proactively instead of reactively.
+limiting across processes (Redis + Lua); a retry budget or circuit breaker so
+a sustained outage does not multiply load by max_attempts; read the
+provider's remaining-requests and remaining-tokens response headers (names
+vary by provider) to throttle proactively instead of reactively.
 """
 
 import functools
@@ -74,7 +85,12 @@ class TokenBucket:
         self._tokens = min(self.capacity, self._tokens + (now - self._last) * self.refill_rate)
         self._last = now
 
+    def _check(self, tokens: float) -> None:
+        if tokens > self.capacity:
+            raise ValueError(f"{tokens} tokens can never fit a bucket of {self.capacity}")
+
     def try_acquire(self, tokens: float = 1.0) -> bool:
+        self._check(tokens)
         self._refill()
         if self._tokens >= tokens:
             self._tokens -= tokens
@@ -82,6 +98,7 @@ class TokenBucket:
         return False
 
     def time_until_available(self, tokens: float = 1.0) -> float:
+        self._check(tokens)
         self._refill()
         return max(0.0, (tokens - self._tokens) / self.refill_rate)
 
@@ -199,13 +216,37 @@ if __name__ == "__main__":
     assert call() == "response"              # 429 -> waits retry_after -> succeeds
     assert abs(clock.t - 2.0) < 1e-9
 
-    # 6. Non-retryable exceptions propagate immediately.
-    boom = retry(max_attempts=5, sleep=sleeps.append)(
-        lambda: (_ for _ in ()).throw(KeyError("nope")))
+    # 6. Non-retryable exceptions propagate immediately: one call, no sleep.
+    sleeps.clear()
+    boom_calls = {"n": 0}
+
+    @retry(max_attempts=5, sleep=sleeps.append)
+    def boom() -> None:
+        boom_calls["n"] += 1
+        raise KeyError("nope")
+
     try:
         boom()
-        assert False
+        assert False, "KeyError must propagate"
     except KeyError:
         pass
+    assert boom_calls["n"] == 1 and sleeps == [], "non-retryable must not retry"
+
+    # 7. Fractional refill is kept, and a weighted acquire (TPM-style) waits for
+    #    exactly the missing tokens.
+    clock = FakeClock()
+    tpm = TokenBucket(capacity=1000, refill_rate=10.0, clock=clock)
+    assert tpm.try_acquire(900) and not tpm.try_acquire(150)
+    assert abs(tpm.time_until_available(150) - 5.0) < 1e-9   # 50 short at 10/s
+    clock.advance(0.25)                                       # 2.5 tokens, not 2
+    assert abs(tpm.time_until_available(150) - 4.75) < 1e-9
+
+    # 8. A request bigger than the bucket fails fast instead of waiting forever.
+    for oversized in (tpm.try_acquire, tpm.time_until_available):
+        try:
+            oversized(1001)
+            assert False, "tokens > capacity must be rejected"
+        except ValueError:
+            pass
 
     print("All tests passed.")

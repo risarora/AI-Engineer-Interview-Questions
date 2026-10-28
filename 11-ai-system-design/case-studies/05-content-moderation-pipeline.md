@@ -14,7 +14,7 @@ Questions a strong candidate asks before drawing boxes:
 2. **What are the policy classes and their severity tiers?** → *Assume:* ~15 policy classes; a small "zero-tolerance" set (CSAM, credible threats) where recall is paramount, and a large "contextual" set (harassment, misinformation) where precision matters more.
 3. **What's the language mix?** → *Assume:* 40% English, long tail of 50+ languages; top 10 languages cover 90% of volume.
 4. **What human review capacity exists?** → *Assume:* budget for reviewing ~0.4% of daily volume (~40-50k items/day), so automation must resolve 99.6%.
-5. **Are there legal/regulatory constraints?** → *Assume:* DSA-style transparency obligations (statement of reasons for each removal, appeal rights), and mandatory reporting for CSAM (hash-match against industry databases, never store the content).
+5. **Are there legal/regulatory constraints?** → *Assume:* DSA-style transparency obligations (statement of reasons for each removal, appeal rights), and mandatory reporting for CSAM (hash-match against industry databases; retain reported material only for the legally mandated preservation period, in a locked-down store, never in training data).
 6. **What does "an item" look like?** → *Assume:* median text item ~40 tokens (a comment); posts up to ~2k tokens; images handled by a parallel visual pipeline (hashing + vision classifier), converging at the same decision layer.
 
 ## Requirements
@@ -67,7 +67,7 @@ Actor reputation deserves emphasis: a 4-year-old account with zero strikes posti
 
 ### Tier 1 - cheap classifier on 100% of traffic
 
-A fine-tuned small multilingual transformer (hundreds of M params, e.g. an XLM-R/DeBERTa-class encoder or a distilled sub-1B decoder) producing per-class scores. Self-hosted: 400/s peak with a ~1B model needs on the order of 10-20 L4/A10-class GPUs with batching - roughly $5-15k/month, i.e., effectively free per item.
+A fine-tuned small multilingual transformer (hundreds of M params, e.g. an XLM-R/DeBERTa-class encoder or a distilled sub-1B decoder) producing per-class scores. Self-hosted: 400/s peak with a ~1B model needs only a handful of L4/A10-class GPUs for raw throughput with batching, and on the order of 10-20 once you add multi-region redundancy and viral-spike headroom - roughly $5-15k/month, i.e., effectively free per item.
 
 **Two thresholds per class, not one.** Below `t_allow` → auto-allow; above `t_block` → auto-action; between them → escalate. The gap between thresholds is your grey zone, and its width is a *dial you tune against human+LLM capacity*: widen it and quality improves but tier-2 volume and review load grow; narrow it and you eat more silent errors. This framing - thresholds as a capacity-allocation knob, not a fixed 0.5 - is what interviewers listen for.
 
@@ -102,7 +102,7 @@ Note that thresholds live in config, not code - they're retuned weekly against r
 Walk the interviewer through one concrete worked example, because this is where the case is won:
 
 - Suppose harassment tier-1 scores, at `t_block = 0.95`, give precision 0.92 / recall 0.60. Lowering to 0.90 raises recall to 0.68 but drops precision to 0.85.
-- At 12M items/day with ~1% harassment prevalence (~120k true violations/day), that recall gain catches **~9,600 more violating items/day** - but false positives (FP = TP × (1−P)/P) grow from ~6,300 to **~14,400 wrongly actioned items/day**, each a potential appeal (at ~$0.50/appeal review, ~$7k/day of appeal load) and a trust hit.
+- At 12M items/day with ~1% harassment prevalence (~120k true violations/day), that recall gain catches **~9,600 more violating items/day** - but false positives (FP = TP × (1−P)/P) grow from ~6,300 to **~14,400 wrongly actioned items/day**, each a potential appeal (at ~$0.50/appeal review, up to ~$7k/day of appeal load if every one is contested) and a trust hit.
 - Whether that trade is good depends on the class: for `credible_threat` you take it without blinking (recall failures are catastrophic; FPs go to humans anyway because zero-tolerance classes always get human confirmation). For `spam`, you don't - over-enforcement on spam erodes trust for near-zero safety benefit.
 - So: **per-class operating points, chosen jointly with T&S/policy owners, revisited when prevalence shifts** (elections, wars, and platform virality events all shift prevalence, which silently moves your effective precision even at a fixed threshold - precision depends on base rates, a point many candidates miss).
 
@@ -140,6 +140,8 @@ Design details that matter in the interview:
 
 The right answer is **both**: classifier for the 90% of volume that's clear-cut, LLM for the grey zone, and the LLM's labelled outputs continuously distilled back into the classifier so the grey zone shrinks over time. Also say: never let the LLM freeform-invent policy - constrain it to cite a specific policy clause ID, and treat "no clause applies" as allow.
 
+Tier 2 does not have to be a hosted API. Open-weight safety models now include policy-conditioned ones that read your policy text at inference time, so policy-as-prompt can run self-hosted when items cannot leave your infrastructure or when per-call API pricing stops making sense at 1M items/day. Gate any such swap on the same golden set and consistency probes as a prompt change.
+
 ### Tier 3 - frontier model / human review
 
 The hardest ~5% of the grey zone (low tier-2 confidence, or any zero-tolerance class hit) goes to a frontier model and/or the human queue. Zero-tolerance classes *always* touch a human before permanent account action. Queue priority is `severity × projected_reach × model_uncertainty` - a borderline harassment comment on a post going viral outranks a confident-spam DM.
@@ -175,7 +177,7 @@ def normalize(text: str) -> str:
 ```
 
   Beyond normalization: embedding-similarity clustering of newly actioned content catches paraphrase variants the moment one family member is actioned; a "trends" pipeline lets human reviewers push new code words into tier-0 lists same-day; and periodic offline sweeps re-score old allowed content with current models, because yesterday's evasion is today's training data.
-- **Data handling:** actioned CSAM is hashed and reported, never retained; training data for other classes is retained under strict access controls with reviewer-wellness policies (exposure limits, no raw feeds).
+- **Data handling:** actioned CSAM is hashed and reported, preserved only as long as the reporting law requires under tightly restricted access, and never enters training data or general storage; training data for other classes is retained under strict access controls with reviewer-wellness policies (exposure limits, no raw feeds).
 
 ## Evaluation plan
 
@@ -211,9 +213,9 @@ Assumed ~prices for illustration: small LLM ~$0.10/M input, ~$0.40/M output; fro
   - Out: 150M × $0.40/M = $60/day
   - ≈ **$110/day ≈ $3.3k/month** (~$0.0001/item)
 - **Tier 3 (frontier, ~50k items/day):** ≈ 2,300 in (mostly cached) + 300 out → roughly **$250-350/day ≈ $9k/month** (~$0.006/item).
-- **Human review (~45k items/day):** at ~250 decisions/reviewer/day → ~180 reviewers; fully loaded (mixed geo, incl. tooling/wellness) call it **~$900k - 1.2M/month**.
+- **Human review (~45k items/day):** at ~250 decisions/reviewer/day → ~180 reviewer-shifts/day (~250 FTE for 7-day cover); at a blended ~$0.35/decision fully loaded (mixed geo, incl. tooling/wellness), call it **~$16k/day ≈ ~$475k/month**.
 
-**The punchline interviewers want:** total LLM spend (~$25k/mo) is ~2% of human review spend. Every 1,000 items/day the models correctly take off the human queue saves ~$10k/month of review cost - so the ROI case is for better models and calibration, not cheaper tokens. But cutting humans too far breaks appeals quality and training-data supply; humans are the system's ground-truth generator, not just overflow capacity.
+**The punchline interviewers want:** total model spend across tiers 1-3 (~$22k/mo) is ~5% of human review spend. Every 1,000 items/day the models correctly take off the human queue saves ~$10k/month of review cost - so the ROI case is for better models and calibration, not cheaper tokens. But cutting humans too far breaks appeals quality and training-data supply; humans are the system's ground-truth generator, not just overflow capacity.
 
 ## Failure modes & mitigations
 
@@ -247,4 +249,5 @@ Assumed ~prices for illustration: small LLM ~$0.10/M input, ~$0.40/M output; fro
 3. **"A regulator asks you to explain one specific removal from 8 months ago."** - Replay from the audit record: item snapshot, model + prompt + policy versions, scores, reviewer decisions, appeal history. If you didn't design for this, you can't retrofit it.
 4. **"Why not fine-tune one big multitask model instead of the tier stack?"** - You still need the stack: cost forces a cheap first pass at 12M/day, and policy velocity forces a prompt-updatable layer. Fine-tuning improves each tier; it doesn't replace the architecture.
 5. **"How would you handle a brand-new policy class launching next week?"** - Ship it as policy-as-prompt in tier 2 immediately (zero training data needed), route everything it flags to humans for two weeks, then distill the accumulated labels into tier 1.
-6. **"What if the platform adds end-to-end encrypted DMs?"** - Server-side scanning is off the table; shift to metadata/behavioral signals, user reporting flows with message-franking, and client-side known-hash matching only if policy/legal mandates it - acknowledge the genuine privacy/safety tension rather than hand-waving it.
+6. **"What if the platform adds end-to-end encrypted DMs?"** - Server-side scanning is off the table; shift to metadata/behavioural signals, user reporting flows with message-franking, and client-side known-hash matching only if policy/legal mandates it - acknowledge the genuine privacy/safety tension rather than hand-waving it.
+7. **"A growing share of your spam and harassment is now LLM-written: fluent, unique per post, and pushed by agent-driven account networks. What changes?"** - Item-level signals weaken: hash and signature matching miss text that is never repeated, and fluent prose scores lower on classifiers trained on crude abuse. Shift weight to actor and network signals (account-creation patterns, posting cadence, coordinated clusters found by embedding similarity across accounts) and enforce at the cluster or network level rather than item by item. Treat provenance signals such as C2PA content credentials or model watermarks as routing features, never proof: credentials are easily stripped, so their absence tells you nothing. And keep policy about harm, not origin - AI-generated content is not a violation in itself unless your labelling policy, or a disclosure rule in a jurisdiction you operate in, requires it to be marked.

@@ -1,6 +1,6 @@
 # 🌀 OpenAI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -9,11 +9,11 @@
 - **Three broad tracks.** Software/applied engineering (practical coding + system design), research engineering (adds ML fundamentals, sometimes paper discussion), and Forward Deployed Engineering (adds customer-facing judgement and LLM-deployment design). Titles often roll up under "Member of Technical Staff."
 - **They grade code quality explicitly.** The official guide names its bar: well-designed solutions, high-quality code, performance, and good test coverage - plus communication and collaboration. Take-homes are graded on reliability and testing, not feature count.
 - **Mission and AI fluency matter.** Behavioural rounds probe why OpenAI specifically, your view on where the technology is going, and how you work with researchers and product teams. Generic "big tech prep" undershoots this.
-- **A beta "agentic coding" round is rolling out** (reported, not yet universal): you get an existing codebase and tasks deliberately too large to finish by hand, so you must drive an AI coding agent while screen-sharing and narrating. Graded on direction, verification, and judgement; pasting the whole problem into the model is reportedly penalised. AI remains strictly prohibited in every other round.
+- **A beta "agentic coding" round is rolling out** (reported, not yet universal): you get an existing codebase and tasks deliberately too large to finish by hand, so you must drive an AI coding agent while screen-sharing and narrating. Graded on direction, verification, and judgement; pasting the whole problem into the model is reportedly penalised. Outside that round, assume no AI assistance unless your recruiter says otherwise: 2026 third-party trackers report the policy varies by track, with research and infrastructure coding rounds generally AI-prohibited and some applied teams more permissive (reported, varies).
 
 ## Company context
 
-OpenAI builds frontier models (the GPT and o-series lines, Sora, voice) and ships them as products - ChatGPT at consumer scale, the API/platform business, Codex, and a fast-growing enterprise deployment arm. Engineers want in because it is one of the few places where product engineering sits directly on top of a frontier lab: the model you serve is the model your colleagues trained. "AI engineer" there means anything from serving-infrastructure work at extreme scale, to applied engineers shipping ChatGPT features, to Forward Deployed Engineers building production systems inside customer environments - it is much more often *engineering around models* than training them, unless you're explicitly on a research track.
+OpenAI builds frontier models (the GPT-5 family, which absorbed the separate o-series reasoning line in 2025, plus Sora and voice) and ships them as products - ChatGPT at consumer scale, the API/platform business, Codex, and a fast-growing enterprise deployment arm. Engineers want in because it is one of the few places where product engineering sits directly on top of a frontier lab: the model you serve is the model your colleagues trained. "AI engineer" there means anything from serving-infrastructure work at extreme scale, to applied engineers shipping ChatGPT features, to Forward Deployed Engineers building production systems inside customer environments - it is much more often *engineering around models* than training them, unless you're explicitly on a research track.
 
 ## Roles & titles they hire
 
@@ -301,6 +301,26 @@ Finish with what you deliberately did not do and why: scope control is part of t
 
 </details>
 
+### 14. You have 60 minutes, an unfamiliar codebase, three tasks too big to finish by hand, and an AI coding agent. Share your screen and talk me through how you work.
+
+<details><summary><b>Answer</b></summary>
+
+This is the shape of the reported agentic coding round, and the grade is on direction and verification, not on how much code appears.
+
+**Orient before delegating.** Spend the first five to ten minutes reading: entry points, the test command, how modules depend on each other, and what "done" means for each task. Run the existing tests so you know the baseline. Then triage the three tasks by value and risk, and say up front which one you may not finish. Pasting the whole brief into the agent is the reported anti-pattern, because it shows you have no model of the system to check its output against.
+
+**Delegate in verifiable slices.** Give the agent bounded instructions with the context it lacks: the file to change, the interface to keep, the test to make pass, and what it must not touch. Prefer slices where success is mechanically checkable. When behaviour is ambiguous, write or request a failing test first, so the agent has a target and you have proof.
+
+**Review every diff like a code review.** Read it, do not just run it. Look for the usual agent failure modes: tests edited until they pass, swallowed exceptions, new helpers duplicating ones that already exist, silent changes to public signatures, and plausible calls to APIs this codebase does not have. Run the full suite, not only the new test. When it is wrong, reject and re-prompt with the specific reason.
+
+**Keep judgement in your hands.** Make the design calls yourself (where a new abstraction lives, what to name it, what to defer) and narrate why. If the agent loops on the same failure twice, take over and write that piece by hand.
+
+Close by stating what is done, what is verified and how, and what you would do next. Honest partial completion with strong verification beats three unreviewed green checkmarks.
+
+**Follow-ups:** The agent's change passes every test but you suspect it is wrong - how do you prove it in two minutes? Which of the three tasks would you never delegate, and why?
+
+</details>
+
 ## How to prepare
 
 Repo topics, in priority order for OpenAI specifically:
@@ -316,7 +336,7 @@ Company-specific moves:
 
 1. **Read OpenAI's own interview guide** (openai.com/interview-guide) - few companies publish one; theirs states the loop shape and the explicit grading criteria (design, code quality, performance, *test coverage*).
 2. **Practise practical coding, not LeetCode patterns.** Build a rate limiter, an in-memory KV store with TTL, a job scheduler, a webhook dispatcher - each in ~45 timed minutes with tests, then practise extending it live as "requirements change." The progressive-gate format rewards getting a working v1 fast.
-3. **Use their platform seriously.** Build something real against the API - structured outputs, function calling, the agents tooling, batch API. Interviewers can tell the difference between "read the docs" and "hit the rate limits."
+3. **Use their platform seriously.** Build something real against the API - the Responses API with function calling and structured outputs, the Agents SDK, the Batch API. Interviewers can tell the difference between "read the docs" and "hit the rate limits."
 4. **Prepare a project deep-dive (and slides).** A presentation round is publicly reported for some loops; even without one, every loop includes defending a past system under rapid follow-ups. Pick your most technically complex ownership story and rehearse being probed three levels deep.
 5. **Have a specific view on AI trajectory and safety.** Behavioural rounds reportedly probe your take on where the technology is going and where it could go wrong. Read their model release notes/system cards and recent blog posts; generic enthusiasm reads as unprepared.
 
@@ -329,5 +349,6 @@ Compensation: no numbers here - see [levels.fyi](https://www.levels.fyi/companie
 - [Exponent - OpenAI Forward Deployed Engineer Interview Guide](https://www.tryexponent.com/guides/openai-forward-deployed-engineer-interview) - FDE loop stages and evaluation focus
 - [IGotAnOffer - OpenAI Interview Process & Timeline](https://igotanoffer.com/en/advice/openai-interview-process) - progressive-gate screens, work-trial take-home reports, timelines
 - [Exponent - What it's actually like to interview at OpenAI in 2026](https://medium.com/exponent/what-its-actually-like-to-interview-at-openai-in-2026-03a646c9436c) - difficulty-gate coding format, refactoring exercise, product-tied design rounds, behavioural themes
+- [techinterview.org - OpenAI Interview Process 2026: Team-by-Team Variation](https://www.techinterview.org/post/3233474915/openai-interview-process-2026-team-by-team/) - AI-tool policy by track (research, applied, infrastructure, safety), updated July 2026
 - [Glassdoor - OpenAI Interview Questions](https://www.glassdoor.com/Interview/OpenAI-Interview-Questions-E2210885.htm) - aggregated candidate reports (varies widely by team)
 - [levels.fyi - OpenAI](https://www.levels.fyi/companies/openai) - compensation data

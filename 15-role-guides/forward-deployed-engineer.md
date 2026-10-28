@@ -9,7 +9,8 @@ The breakout AI role of 2025-2026. Palantir invented the title, OpenAI and Anthr
 - **Live build / rapid-demo rounds appeared.** A 60-120 minute session (or tightly timeboxed take-home): here's an API key and some messy sample data, build something a customer could see. Interviewers watch what you cut, how you narrate tradeoffs, and whether the thing runs - not code aesthetics.
 - **Customer role-plays got adversarial.** Expect injected objections mid-scenario: "our CISO says no data leaves our network," "the demo hallucinated in front of my VP," "why can't we just fine-tune it?" The 2024 version was a friendly Q&A; the 2026 version tests whether you can push back without losing the room.
 - **Coding rounds moved from LeetCode toward practical integration.** Building a small service that calls an LLM API, handles failures, and processes real-ish data replaced graph algorithms at most (not all) companies. Palantir-lineage loops still include a general coding round.
-- **Agent deployments became the dominant technical topic.** In 2024 the technical scenario was almost always RAG over documents. By 2026 it's usually "deploy an agent that takes actions in the customer's systems" - which drags in tool design, guardrails, human-in-the-loop, and audit requirements.
+- **AI-tool fluency is now assessed, not just tolerated.** FDEs ship most integration code with coding agents, and live-build rounds increasingly allow or expect them. Interviewers watch how you decompose the task, how narrowly you direct the tool, and whether you review its diffs or accept them blind. Beyond FDE loops, large companies made this formal: Meta piloted an AI-enabled coding round in October 2025 and expanded it through 2026, Google began piloting a Gemini-assisted round for some SWE roles in 2026, and Amazon added an AI-assisted task to some online assessments (all reported, varies by team). Expect the follow-up too: "how do you work when the customer bans external AI tools?" Ask the recruiter which rounds allow assistants.
+- **Agent deployments became the dominant technical topic.** In 2024 the technical scenario was almost always RAG over documents. By 2026 it's usually "deploy an agent that takes actions in the customer's systems" - which drags in tool design, guardrails, human-in-the-loop, and audit requirements. Connecting agents to customer systems through MCP servers, vendor-hosted or your own, is now standard vocabulary, and the auth question behind it ("whose permissions does the agent use?") is where candidates get separated.
 - **De-emphasised: ML theory.** Training internals, optimizer math, architecture derivations - largely gone from FDE loops. Nobody asks you to derive attention; they ask what you do when the model is wrong in front of the customer.
 
 ## What FDE actually is - day-to-day, vs. sales engineering, vs. consulting
@@ -30,9 +31,9 @@ Day-to-day: a typical week mixes on-site and remote. Morning debugging the custo
 
 **Expected, and probed hard:**
 
-- **The AI application layer, hands-on.** Prompting strategies, context management, RAG pipelines end-to-end (chunking → hybrid retrieval → reranking → grounding), agent loops and tool design, structured outputs. You should be able to build any of these from API primitives in an afternoon.
+- **The AI application layer, hands-on.** Prompting strategies, context management, RAG pipelines end-to-end (chunking → hybrid retrieval → reranking → grounding), agent loops and tool design (including MCP), structured outputs. You should be able to build any of these from API primitives in an afternoon, and do it faster with a coding agent without losing control of the code.
 - **Full-stack pragmatism.** Enough backend (APIs, queues, auth) and enough frontend to make a demo a stakeholder can click. Being able to enter a foreign codebase or dataset and be useful in hours matters more than depth in any single framework.
-- **Enterprise deployment realities.** Data residency, VPC deployment options (Bedrock, Azure OpenAI, self-hosted vLLM), SSO, audit logging, what "does the model train on our data" actually means for API providers, and how to answer a CISO without hand-waving.
+- **Enterprise deployment realities.** Data residency, cloud and VPC deployment options (Bedrock, Vertex AI, Microsoft Foundry, self-hosted vLLM), SSO, audit logging, what "does the model train on our data" actually means for API providers, and how to answer a CISO without hand-waving.
 - **Eval literacy.** You'll be asked to define "working" for a customer who has no labelled data. Golden sets, LLM-as-judge with spot-checked calibration, error taxonomies, accuracy-by-slice reporting.
 - **Communication under ambiguity.** Scoping vague asks, saying no with a reason, translating model limitations into business terms.
 
@@ -140,8 +141,8 @@ I leave behind a small eval set built from those failures so regressions get cau
 First, clarify what the constraint actually is - "no data leaves our network" spans a wide range in practice. Options, ordered by how much of the constraint they satisfy:
 
 1. **Provider API with contractual controls.** Zero-data-retention agreements, no training on customer data (standard for enterprise API tiers), SOC 2 reports, region pinning. Data does transit to the provider; some CISOs accept this with a DPA, many won't.
-2. **Hyperscaler-hosted models in the customer's cloud tenancy** - Azure OpenAI, AWS Bedrock, GCP Vertex. Traffic stays inside their cloud boundary via private endpoints, inherits their existing compliance envelope (the CISO already trusts Azure), and you keep frontier-model quality. This is the workhorse answer for most enterprises in 2026.
-3. **Self-hosted open-weight models in their VPC or on-prem** - vLLM or similar serving Llama/Mistral-class models. Full data control, but now you own GPU capacity planning, model quality gaps versus frontier models, and an ops burden the customer probably can't staff. I reserve this for genuinely air-gapped environments (defence, some healthcare).
+2. **Hyperscaler-hosted models in the customer's cloud account** - AWS Bedrock, Google Vertex AI, Microsoft Foundry (which now includes Azure OpenAI). Requests go over private endpoints to the cloud they already contract with, inherit their existing compliance envelope (the CISO already trusts Azure), and the model vendor does not receive them. You keep frontier-model quality: Claude is offered on all three, OpenAI's frontier models mainly on Azure. This is the workhorse answer for most enterprises in 2026.
+3. **Self-hosted open-weight models in their VPC or on-prem** - vLLM or similar serving Qwen, Llama, Mistral or gpt-oss-class models. Full data control, but now you own GPU capacity planning, a quality gap versus frontier models (narrower than in 2024, still real on hard reasoning and long agentic tasks), and an ops burden the customer probably can't staff. Check model provenance policy early, since some regulated buyers restrict weights by country of origin. I reserve this for genuinely air-gapped environments (defence, some healthcare).
 
 Architecture consequences beyond model choice: embeddings and vector stores must also live inside the boundary (teams forget the embedding API is data egress too); observability/tracing tools must be self-hosted or in-tenancy; and your own development access changes - you may be working over their VDI with no copy-paste, which halves your velocity and should be priced into the timeline.
 
@@ -171,7 +172,7 @@ Tool design details that matter: idempotency keys on every write so retries don'
 
 Answer the two concerns separately, because they have different mechanics.
 
-**Training:** enterprise API agreements from the major providers contractually exclude customer data from training by default - this is a contract question, and I point to the specific DPA language rather than asserting it verbally. If they need stronger guarantees: zero-data-retention options (prompts not persisted post-inference), region pinning, or in-tenancy deployment (Azure OpenAI/Bedrock) where the provider never sees traffic on shared infrastructure.
+**Training:** enterprise API agreements from the major providers contractually exclude customer data from training by default - this is a contract question, and I point to the specific DPA language rather than asserting it verbally. If they need stronger guarantees: zero-data-retention options (prompts not persisted post-inference), region pinning, or hyperscaler deployment (Bedrock, Vertex AI, Microsoft Foundry) where requests are processed by the cloud they already contract with and the model vendor never receives them.
 
 **Leakage** is the subtler concern and worth decomposing for them, because CISOs respect precision: (1) *Cross-tenant leakage through the model* - a model doesn't memorise your API inputs at inference time; there's no mechanism for another customer's session to surface your prompts, given training exclusion. (2) *Leakage within their own org* - the real risk. If the RAG index ignores document ACLs, an intern can ask the chatbot about executive compensation and get an answer. Retrieval must enforce per-user permissions at query time; I'd walk through exactly how ours does. (3) *Leakage through the application* - prompt injection exfiltrating context, logging/tracing tools storing sensitive prompts, browser plugins. These are addressed by output filtering, redaction in observability pipelines, and standard appsec.
 
@@ -241,7 +242,7 @@ Almost everything except the prompt. The pilot proved value; production is a dif
 
 This is the normal case, not the exception - enterprise data is always worse than the discovery call claimed. First move: triage the corpus before touching the pipeline. Sample 50-100 documents across sources and bucket them: native-text PDFs (fine), scanned images (need OCR or vision models), spreadsheets (need structure-aware handling), and genuinely degenerate content (fax-quality scans, handwriting). Get the volume distribution - if 80% of query-relevant content lives in the 20% of docs that are clean, ship on those first and say so.
 
-Technical toolkit per bucket: scanned docs go through OCR or, increasingly, vision-capable LLMs doing document understanding directly - better on tables and layout than classic OCR, at higher per-page cost, so route by document value. Spreadsheets should not be chunked as prose; extract them as structured tables, serialize row-wise with headers repeated per chunk, or better, load them into something queryable and give the system a query tool instead of embedding cell soup. SharePoint's real problems are permissions sprawl and duplication - the same policy in eleven near-identical copies poisons retrieval with redundant chunks, so dedupe and prefer latest-version metadata.
+Technical toolkit per bucket: scanned docs go through OCR or, increasingly, vision-capable LLMs doing document understanding directly - better on tables and layout than classic OCR, at higher per-page cost, so route by document value. Spreadsheets should not be chunked as prose; extract them as structured tables, serialise row-wise with headers repeated per chunk, or better, load them into something queryable and give the system a query tool instead of embedding cell soup. SharePoint's real problems are permissions sprawl and duplication - the same policy in eleven near-identical copies poisons retrieval with redundant chunks, so dedupe and prefer latest-version metadata.
 
 Just as important is the commercial handling: this is a scope change, and burying it is a mistake. I quantify it - "60% of the corpus needs an ingestion track we didn't scope; here's the cost and the sequencing options" - and let the customer choose. Customers respect data-reality conversations; they don't respect a silently slipping timeline.
 
@@ -282,12 +283,66 @@ I finish with the 30-second roadmap: real retrieval over their help centre, a go
 
 </details>
 
+### 14. You'll write most of the integration code with a coding agent while embedded at a customer. Their security lead asks what that agent can see and do in their environment. How do you answer, and how do you work?
+
+<details><summary><b>Answer</b></summary>
+
+Lead with the boundary, then the workflow. A coding agent sends code and whatever context it reads to a model provider, and it executes commands, so the question has two halves: data egress and actions.
+
+**Data.** Use only tools the customer has approved, under their enterprise agreement or yours, with zero data retention where offered. Many enterprises already have one cleared, often GitHub Copilot or an assistant routed through their own Bedrock, Vertex AI or Foundry account, and using it beats a week of procurement for your preferred tool. Never point a personal account at customer code. Keep production data out of the agent's context: work against masked or synthetic fixtures, and exclude secrets and `.env` files through the tool's ignore settings.
+
+**Actions.** Give the agent the permissions you'd give a new contractor, or fewer: dev environment only, no production credentials, and your approval on any command that touches shared systems. If the customer only permits work inside a VDI with no external egress, you work without the agent and price that into the timeline.
+
+**Workflow,** which is what live-build interviewers actually watch: decompose before prompting, give the agent the repo's conventions and a narrow task, and review every diff as if a capable junior wrote it. Generated integration code fails in predictable places: swallowed errors, retries without idempotency keys, tokens printed in debug logs, and invented fields for the customer's internal APIs. Tests against recorded real responses catch the last one fast.
+
+The handover is the real test. The customer's engineers will maintain this code, so it has to be boring, documented and tested, whoever typed it. Code nobody on their side can read is a liability you leave behind.
+
+**Follow-ups:** The customer bans all AI tools mid-engagement after an incident elsewhere - what changes in your plan? An interviewer watches you accept a 200-line diff in ten seconds - what do they conclude?
+
+</details>
+
+### 15. The customer wants one agent wired into Salesforce, SharePoint, ServiceNow and an internal Postgres. Vendor-hosted MCP servers, your own, or direct tool integrations? Walk me through auth.
+
+<details><summary><b>Answer</b></summary>
+
+A mix, decided per system, and auth drives the decision more than convenience does.
+
+- **Vendor-hosted MCP servers** for the big SaaS systems where they exist. The vendor maintains the API mapping and, more importantly, calls run under the user's own OAuth grant, so sharing rules, site ACLs and ITSM roles are enforced by the system that owns them. Many expose broad tool sets, so allowlist the subset you need.
+- **Your own MCP server** for the internal Postgres. Never hand the agent raw SQL. Expose a few named, parameterised operations over views with row-level security keyed to the calling user, which is a surface you can defend in a security review.
+- **Direct tool integrations** when one agent uses a system and nothing else will. MCP adds a hop and a deployable someone has to operate.
+
+On auth, the agent acts as the user, never as a service account with broad access, or you've rebuilt the intern-reads-salaries problem across four systems. The pattern is a gateway in the customer's environment that authenticates the user through their IdP, exchanges that for a short-lived token scoped to this user and this system (OAuth token exchange or the vendor's on-behalf-of flow), and logs every call with user, tool and arguments. Service accounts are reserved for read-only reference data, documented as such.
+
+Raise two risks before the customer does. Tool descriptions and tool results are prompt-injection surface, since a ticket body can carry instructions, so write-capable tools need approval gates. And forty tools from four servers bloat context and degrade tool selection, so load tools per task.
+
+**Worth sketching.** The token path that keeps every call scoped to one user.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as Agent
+    participant G as MCP gateway
+    participant I as Customer IdP
+    participant S as Vendor MCP server
+    U->>A: Close duplicate incidents for my team
+    A->>G: Tool call with user session
+    G->>I: Token exchange for this user
+    I-->>G: Short-lived token scoped to ServiceNow
+    G->>S: Call with user-scoped token
+    S-->>G: Result filtered by vendor ACLs
+    G-->>A: Result, call written to audit log
+```
+
+**Follow-ups:** The vendor's MCP server exposes sixty tools and you need four - how do you constrain it? Security asks how to revoke the agent's access for one user within five minutes - what's your answer?
+
+</details>
+
 ## Portfolio moves
 
 - **A "messy data to demo" repo with a timeline.** Take a genuinely ugly public corpus - SEC filings, city council PDFs with scans, or a public SharePoint-style dump - and build ingestion → RAG → clickable UI, with a README documenting what broke and the hour-by-hour timeline. *Demonstrates:* the core FDE motion - enterprise-grade mess to stakeholder-ready demo, fast, with honest engineering notes.
 - **An agent with gated write actions and an audit log.** An agent that drafts actions against a real API (calendar, ticketing, a mock ERP) with a human-approval queue, idempotent tools, and a browsable audit trail of every decision. *Demonstrates:* you understand that the hard part of agents in enterprises is safety architecture, not the loop.
 - **An eval dashboard a non-engineer can read.** For any LLM project you've built: golden set, LLM-judge with documented human-calibration numbers, and accuracy-by-slice reporting in a simple dashboard. *Demonstrates:* eval literacy plus the customer-communication instinct - the dashboard *is* the renewal conversation.
-- **A deployment-boundary writeup or template.** A short technical writeup (or Terraform template) comparing the same app deployed via provider API vs. Azure OpenAI/Bedrock in-tenancy vs. self-hosted vLLM, with measured quality/latency/cost deltas. *Demonstrates:* you can hold the CISO conversation with artifacts instead of vibes.
+- **A deployment-boundary writeup or template.** A short technical writeup (or Terraform template) comparing the same app deployed via provider API vs. Bedrock or Microsoft Foundry in the customer's cloud account vs. self-hosted vLLM, with measured quality/latency/cost deltas. *Demonstrates:* you can hold the CISO conversation with artifacts instead of vibes.
 - **A demo-to-production story, written up.** One page on a real LLM feature you took from prototype to real users: what the demo hid, what production forced (permissions, ingestion sync, cost tiering), and one number that improved. Internal tools count. *Demonstrates:* the exact narrative every FDE behavioural round asks for.
 
 ## Red flags interviewers see from this role

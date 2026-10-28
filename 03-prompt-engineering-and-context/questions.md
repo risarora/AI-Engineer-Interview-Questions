@@ -1,6 +1,6 @@
 # Prompt Engineering & Context Engineering - Interview Questions
 
-45 questions: 12 basic, 20 intermediate, 13 advanced.
+50 questions: 13 basic, 22 intermediate, 15 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -57,7 +57,7 @@ The roles are contract layers, not decoration - models are post-trained to treat
 
 **User**: the task and the data for this turn - the question, retrieved documents, form contents. Anything that varies per request belongs here, clearly delimited so instructions and data can't be confused.
 
-**Assistant**: the model's outputs - but also a steering surface. On APIs that allow it (e.g., Anthropic's), you can **prefill** the assistant turn: start it with `{` to force JSON, or with a fixed preamble to skip throat-clearing. Historical assistant turns in few-shot dialogues also teach by demonstration.
+**Assistant**: the model's outputs - but also a steering surface. Historical assistant turns in few-shot dialogues teach by demonstration. Some APIs have also let you **prefill** the assistant turn (start it with `{` to force JSON, or with a fixed preamble to skip throat-clearing), but support is shrinking: Anthropic's newest models reject prefill, and it was never available everywhere. Treat it as a legacy trick and use native structured outputs for format control.
 
 Common mistakes interviewers listen for:
 
@@ -81,7 +81,7 @@ When it helps: any task where a human would need scratch paper - multi-hop quest
 
 When it's unnecessary: single-step tasks - extraction, lookup, straightforward classification, formatting. "What's the capital of France?" gains nothing from three paragraphs of deliberation; you pay latency and cost for filler. CoT tokens also add a new surface for hallucination: a confident-sounding chain can rationalise a wrong answer, and users/downstream systems may over-trust visible reasoning that isn't faithful to the model's actual computation (faithfulness of CoT is a known open problem).
 
-When it's actively the wrong tool: **reasoning models** (OpenAI o-series, Claude with extended thinking, Gemini thinking models, DeepSeek-R1) already perform internal chain-of-thought trained via RL; prompting them to "think step by step" is redundant, and stuffing the prompt with few-shot CoT exemplars can interfere with the reasoning style they were trained for. With these models you control deliberation through API parameters (reasoning effort / thinking budget), not prompt incantations.
+When it's actively the wrong tool: **reasoning models** (OpenAI's GPT-5-class and earlier o-series models, Claude with extended thinking, Gemini thinking models, DeepSeek-R1) already perform internal chain-of-thought trained via RL; prompting them to "think step by step" is redundant, and stuffing the prompt with few-shot CoT exemplars can interfere with the reasoning style they were trained for. With these models you control deliberation through API parameters (reasoning effort / thinking budget), not prompt incantations.
 
 Practical engineering detail: if you need structured output *and* CoT, order matters - have the model reason first, then emit the answer (e.g., a `reasoning` field before the `answer` field in the schema). Answer-then-justify forfeits the benefit because the answer tokens are already sampled.
 
@@ -156,7 +156,7 @@ Honourable mentions: vague quality adjectives ("be helpful and accurate") that c
 
 <details><summary><b>Answer</b></summary>
 
-Context engineering is the discipline of curating *everything* that occupies the model's context window across the lifetime of a task - system prompt, tool definitions, retrieved documents, memory, conversation history, and prior tool outputs - treating attention as a finite budget to be allocated. Prompt engineering, as classically practised, optimises a single string for a single call. The term took over around 2025 (Anthropic's "Effective context engineering for AI agents" is the canonical writeup) because agents made the single-string framing obsolete: in a 50-step agent loop, the hand-written prompt might be 5% of the tokens the model actually sees. The other 95% - tool schemas, file contents, search results, error messages, accumulated history - is what actually determines behaviour, and nobody was "engineering" it.
+Context engineering is the discipline of curating *everything* that occupies the model's context window across the lifetime of a task - system prompt, tool definitions, retrieved documents, memory, conversation history, and prior tool outputs - treating attention as a finite budget to be allocated. Prompt engineering, as classically practised, optimises a single string for a single call. The term took over during 2025 (Anthropic's "Effective context engineering for AI agents" is a widely cited writeup) because agents made the single-string framing obsolete: in a 50-step agent loop, the hand-written prompt might be 5% of the tokens the model actually sees. The other 95% - tool schemas, file contents, search results, error messages, accumulated history - is what actually determines behaviour, and nobody was "engineering" it.
 
 Concretely, context engineering decisions include:
 
@@ -350,9 +350,31 @@ flowchart TD
 
 </details>
 
+### 13. Your model's answers are consistently too long. How do you control output length reliably?
+
+<details><summary><b>Answer</b></summary>
+
+Treat length as a spec you design for, not a number you ask for. Word-count instructions are approximate because models generate tokens and count words poorly. `max_tokens` is a hard cutoff, not a length instruction: hit it and you get a sentence chopped in half, which is worse than a long answer.
+
+What works, roughly from most to least reliable:
+
+- **Structural constraints over counts.** "At most three bullets, one line each" or "one sentence, then a table" is far more reliable than "under 150 words", because structure is easy for the model to track while it generates.
+- **Remove the cause.** Look for phrases in your own prompt that push length up: "be thorough", "explain your reasoning", or a long, heavily formatted system prompt, since models mirror the style of the prompt they are given. Verbose few-shot examples are the worst offender, because examples beat instructions.
+- **Show the target length.** One or two examples at the length you want anchor it better than any adjective.
+- **Use the API setting if the provider has one.** Some providers expose a verbosity or effort parameter that shifts default length without prompt changes. On reasoning models the output cap usually covers reasoning tokens too, so a tight cap can starve the visible answer entirely.
+- **Give concision a reason.** "Users read this on a phone inside a support widget" works better than "be concise", because the model can generalise from the reason to cases you did not list.
+
+For hard limits, such as an SMS or a fixed UI field, validate after generation. If the output is over, regenerate with feedback or have a cheap model shorten it. Never rely on the prompt alone for a limit a downstream system enforces.
+
+Measure length as a distribution on your eval set, the median and the p95, not by eyeballing three outputs. Length often shifts silently with a model upgrade, so put a length check in CI next to the quality score.
+
+**Follow-ups:** Why does asking for exactly 100 words rarely produce 100 words? How would you shorten answers without losing a caveat that legal requires? What happens to visible output when a reasoning model hits its token cap?
+
+</details>
+
 ## Intermediate
 
-### 13. How do you select and order few-shot examples? What are the known pitfalls?
+### 14. How do you select and order few-shot examples? What are the known pitfalls?
 
 <details><summary><b>Answer</b></summary>
 
@@ -373,7 +395,7 @@ Also know Min et al. (2022): randomising the *labels* in demonstrations often ba
 
 </details>
 
-### 14. Why does in-context learning work at all? The model's weights don't change.
+### 15. Why does in-context learning work at all? The model's weights don't change.
 
 <details><summary><b>Answer</b></summary>
 
@@ -393,7 +415,7 @@ For an engineering interview, the takeaway matters more than the theory: ICL is 
 
 </details>
 
-### 15. Explain self-consistency. When is it worth the cost?
+### 16. Explain self-consistency. When is it worth the cost?
 
 <details><summary><b>Answer</b></summary>
 
@@ -428,7 +450,7 @@ flowchart LR
 
 </details>
 
-### 16. When would you decompose a task into multiple prompts instead of one? Explain least-to-most prompting.
+### 17. When would you decompose a task into multiple prompts instead of one? Explain least-to-most prompting.
 
 <details><summary><b>Answer</b></summary>
 
@@ -451,7 +473,7 @@ The 2026 evolution: with reasoning models and agentic tool loops, decomposition 
 
 </details>
 
-### 17. Describe the ReAct pattern. How does it relate to modern native tool calling?
+### 18. Describe the ReAct pattern. How does it relate to modern native tool calling?
 
 <details><summary><b>Answer</b></summary>
 
@@ -480,7 +502,7 @@ flowchart LR
 
 </details>
 
-### 18. How do you design good tool/function definitions for an LLM? What makes tool calling fail?
+### 19. How do you design good tool/function definitions for an LLM? What makes tool calling fail?
 
 <details><summary><b>Answer</b></summary>
 
@@ -493,15 +515,15 @@ Design rules:
 - **Unambiguous names** (`search_orders`, not `query2`), consistent naming conventions across the toolset, and no two tools whose descriptions a reasonable reader could confuse.
 - **Design return values for the model, not for a program**: concise, token-efficient, self-describing. Errors should be *instructive* - "customer_id not found; call `lookup_customer` with an email first" turns a dead end into a recovery path. Truncate or paginate large results; a 50k-token JSON dump is context pollution.
 
-Why tool calling fails, roughly in order of frequency: overlapping tools confuse selection; vague parameter specs produce malformed or guessed arguments (models will fabricate a plausible `customer_id` rather than ask); too many tools in context (dozens of schemas burn tokens and degrade selection - filter to the relevant subset per request, or use dynamic tool discovery à la MCP); raw error strings the model can't act on; and descriptions that drift out of sync with actual API behaviour.
+Why tool calling fails, roughly in order of frequency: overlapping tools confuse selection; vague parameter specs produce malformed or guessed arguments (models will fabricate a plausible `customer_id` rather than ask); too many tools in context (dozens of schemas burn tokens and degrade selection - filter to the relevant subset per request, or let the model search a tool catalogue and load definitions on demand, which some providers and MCP clients now support); raw error strings the model can't act on; and descriptions that drift out of sync with actual API behaviour.
 
-Also state the eval discipline: tool descriptions deserve their own tests - a set of user utterances with expected tool + argument assertions, run on every description change. Anthropic and OpenAI both document that iterating on descriptions is the highest-leverage fix for tool-use quality.
+Also state the eval discipline: tool descriptions deserve their own tests - a set of user utterances with expected tool + argument assertions, run on every description change. Provider tool-use guidance (Anthropic's most explicitly) treats description quality as the biggest single lever on tool-use performance.
 
 **Follow-ups:** An agent keeps picking the wrong one of two similar tools - what are your first three fixes? How do you handle a tool that returns 100k tokens of JSON? When should the model ask a clarifying question instead of calling a tool with guessed arguments?
 
 </details>
 
-### 19. How do you structure a prompt to be resistant to prompt injection from retrieved or user-supplied content?
+### 20. How do you structure a prompt to be resistant to prompt injection from retrieved or user-supplied content?
 
 <details><summary><b>Answer</b></summary>
 
@@ -540,7 +562,7 @@ flowchart TD
 
 </details>
 
-### 20. You have a 200k-token context with instructions and 50 documents. Where do you put what, and why?
+### 21. You have a 200k-token context with instructions and 50 documents. Where do you put what, and why?
 
 <details><summary><b>Answer</b></summary>
 
@@ -578,11 +600,11 @@ flowchart TD
 
 </details>
 
-### 21. How does prompt caching work, and how should it change the way you structure prompts?
+### 22. How does prompt caching work, and how should it change the way you structure prompts?
 
 <details><summary><b>Answer</b></summary>
 
-Prompt caching lets the provider reuse the computed KV-cache (attention keys/values) for a prompt prefix it has seen before, skipping prefill compute for those tokens. The critical mechanic: caching is **exact-prefix-based**. The request's token sequence is matched from position 0; the first differing token invalidates everything after it. Anthropic uses explicit `cache_control` breakpoints (minimum ~1024-token prefix on most models), with cache reads priced at ~0.1× base input and writes at ~1.25× (5-minute TTL, refreshed on hit; a longer TTL tier costs more to write). OpenAI caches automatically for prompts over 1024 tokens, discounting cached tokens ~50-90% depending on model generation. Gemini offers both implicit and explicit context caching. (Numbers are approximate and shift; the *structure* implications don't.)
+Prompt caching lets the provider reuse the computed KV-cache (attention keys/values) for a prompt prefix it has seen before, skipping prefill compute for those tokens. The critical mechanic: caching is **exact-prefix-based**. The request's token sequence is matched from position 0; the first differing token invalidates everything after it. Anthropic uses explicit `cache_control` breakpoints (the minimum cacheable prefix varies by model, roughly 1k to 4k tokens, and is higher on its newer flagship models), with cache reads priced at ~0.1× base input and writes at ~1.25× (5-minute TTL, refreshed on hit; a longer TTL tier costs more to write). OpenAI caches automatically for prompts over 1024 tokens, discounting cached tokens ~50-90% depending on model generation. Gemini offers both implicit and explicit context caching. (Numbers are approximate and shift; the *structure* implications don't.)
 
 Structural consequences - this is the part interviews probe:
 
@@ -610,7 +632,7 @@ flowchart LR
 
 </details>
 
-### 22. Walk me through your process for systematically improving a prompt that's underperforming.
+### 23. Walk me through your process for systematically improving a prompt that's underperforming.
 
 <details><summary><b>Answer</b></summary>
 
@@ -649,11 +671,11 @@ flowchart TD
 
 </details>
 
-### 23. What changes when your product must handle prompts and content in multiple languages?
+### 24. What changes when your product must handle prompts and content in multiple languages?
 
 <details><summary><b>Answer</b></summary>
 
-The key facts: frontier models are strongest in English because training data skews English; capability degrades non-uniformly across languages (usually fine in French/German/Spanish/Chinese, weaker in low-resource languages); and tokenization is unequal - the same sentence can cost 2-4× more tokens in Hindi, Thai, or Burmese than in English, which inflates cost and eats effective context for the same content.
+The key facts: frontier models are strongest in English because training data skews English; capability degrades non-uniformly across languages (usually fine in French/German/Spanish/Chinese, weaker in low-resource languages); and tokenization is unequal - the same sentence can cost several times more tokens in Hindi, Thai, or Burmese than in English (newer, larger-vocabulary tokenizers narrow the gap but do not close it), which inflates cost and eats effective context for the same content.
 
 Practical decisions and defaults:
 
@@ -667,7 +689,7 @@ Practical decisions and defaults:
 
 </details>
 
-### 24. How do you version and govern prompts in production? Someone asks which prompt produced a bad output three weeks ago - can you answer?
+### 25. How do you version and govern prompts in production? Someone asks which prompt produced a bad output three weeks ago - can you answer?
 
 <details><summary><b>Answer</b></summary>
 
@@ -687,7 +709,7 @@ The anti-patterns to name: prompts as environment variables (no history, no diff
 
 </details>
 
-### 25. You want to switch model providers and your prompts break. Why, and how would you have made them portable?
+### 26. You want to switch model providers and your prompts break. Why, and how would you have made them portable?
 
 <details><summary><b>Answer</b></summary>
 
@@ -699,7 +721,7 @@ What actually breaks, in rough order of frequency:
 - **Verbosity and tone defaults.** Length instructions calibrated against one model land differently on another.
 - **Refusal thresholds.** Models draw safety boundaries in different places, so a benign domain that worked can start refusing.
 - **Tool calling conventions.** Different schema dialects, different parallel-call behaviour, different reliability at deciding not to call anything.
-- **Provider-specific features.** Assistant prefill exists on some APIs and not others. If your JSON reliability depends on prefilling `{`, that is not portable.
+- **Provider-specific features.** Assistant prefill exists on some APIs and not others, and newer models have been dropping it even within one provider. If your JSON reliability depends on prefilling `{`, that is not portable, sometimes not even to the next model version.
 - **Reasoning models** ignore or actively suffer from the canned chain-of-thought scaffolding you built for a non-reasoning model.
 
 How to have been portable: **the eval set is the portable asset, not the prompt.** Freeze the task intent, the output schema, and a labelled eval set including tool-call assertions, citation behaviour, and the "I do not know" cases. Then accept a thin per-model adapter layer rather than pretending one string works everywhere. Use provider-native structured output and native tool calling instead of parsing prose, because those are the parts that transfer.
@@ -712,7 +734,7 @@ And the cost point: portability is not free. If you are never switching, do not 
 
 </details>
 
-### 26. Design an example store for dynamic few-shot selection. What do you get, and what does it cost you?
+### 27. Design an example store for dynamic few-shot selection. What do you get, and what does it cost you?
 
 <details><summary><b>Answer</b></summary>
 
@@ -752,7 +774,7 @@ flowchart LR
 
 </details>
 
-### 27. How should tool results be formatted before they go back into the model's context?
+### 28. How should tool results be formatted before they go back into the model's context?
 
 <details><summary><b>Answer</b></summary>
 
@@ -787,7 +809,7 @@ flowchart LR
 
 </details>
 
-### 28. When is prompt compression worth it, and how would you do it?
+### 29. When is prompt compression worth it, and how would you do it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -824,7 +846,7 @@ flowchart TD
 
 </details>
 
-### 29. You have retrieved chunks and a question. How do you actually build the prompt? Assume some documents are irrelevant and two of them contradict each other.
+### 30. You have retrieved chunks and a question. How do you actually build the prompt? Assume some documents are irrelevant and two of them contradict each other.
 
 <details><summary><b>Answer</b></summary>
 
@@ -855,7 +877,7 @@ And mark the whole block as data, never instructions, since retrieved content is
 
 </details>
 
-### 30. Your model refuses requests that are perfectly legitimate. How do you diagnose and fix over-refusal?
+### 31. Your model refuses requests that are perfectly legitimate. How do you diagnose and fix over-refusal?
 
 <details><summary><b>Answer</b></summary>
 
@@ -879,7 +901,7 @@ What I would not do is jailbreak my own model to get past its training. If the b
 
 </details>
 
-### 31. A user reports a bad answer. Walk me through how you debug it.
+### 32. A user reports a bad answer. Walk me through how you debug it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -921,7 +943,7 @@ flowchart TD
 
 </details>
 
-### 32. How is a system prompt for a long-running agent different from one for a single-shot feature?
+### 33. How is a system prompt for a long-running agent different from one for a single-shot feature?
 
 <details><summary><b>Answer</b></summary>
 
@@ -948,15 +970,78 @@ And the thing to say unprompted: destructive-action prevention does not belong i
 
 </details>
 
+### 34. The model does not know what day it is. How do you handle dates, recency and the knowledge cutoff in your prompts?
+
+<details><summary><b>Answer</b></summary>
+
+Give the model the current date explicitly, tell it that its own knowledge stops at a cutoff, and do anything date-critical in code rather than in the model.
+
+The failure modes are concrete. Without a date, the model behaves as if it is living at its training cutoff: it computes ages and deadlines wrongly, calls an old library version "the latest", and sometimes argues with users about events it has never seen, insisting a real launch is hypothetical. With a date but no cutoff statement, it confidently answers questions about last month from stale memory.
+
+What goes in the prompt:
+
+- **Today's date and timezone**, at day granularity. Granularity matters for caching: a per-request timestamp near the top of the prompt invalidates the cached prefix on every call, while a date that changes once a day costs one cache rebuild per day. Put it at the end of the static block or in the first user turn.
+- **A recency rule**: "Your training data has a cutoff. For anything that may have changed since, such as prices, versions, or who holds a role, use the search tool, and prefer tool results over memory when they disagree."
+- **A date on every retrieved document**, so staleness is visible and a rule like "prefer the most recent source" is enforceable.
+
+What stays out of the model: date arithmetic. "Next Friday", "30 days after signup" and timezone conversion should be resolved by a tool or a pre-processing step and passed in as absolute ISO dates. Models are unreliable at calendar arithmetic, and the errors look plausible.
+
+Test it with time-travel evals: freeze the injected date at different values, including month and year boundaries, and check that relative-date answers move correctly. Add questions about events after the cutoff to confirm the model searches rather than guesses.
+
+**Worth sketching.** It shows which date work stays with the model and which moves into code.
+
+```mermaid
+flowchart TD
+    A["User question"] --> B{"Depends on today<br/>or on recent facts?"}
+    B -->|"no"| C["Answer from<br/>prompt and memory"]
+    B -->|"relative date"| D["Resolve in code<br/>to an ISO date"]
+    B -->|"recent facts"| E["Search tool,<br/>results carry dates"]
+    D --> F["Prompt: date and timezone,<br/>end of the static block"]
+    E --> F
+    F --> G["Model answers,<br/>tool results beat memory"]
+```
+
+**Follow-ups:** Where exactly would you put the date so it does not hurt your cache hit rate? How would you build an eval that catches a model confidently answering about events after its cutoff? A user insists on a fact the model believes is false and newer than its training data. What should happen?
+
+</details>
+
+### 35. What belongs in a repository instruction file such as AGENTS.md or CLAUDE.md for a coding agent, and what should stay out?
+
+<details><summary><b>Answer</b></summary>
+
+The file is loaded into every one of the coding agent's sessions. So it should hold only what the agent cannot cheaply discover from the code and would otherwise get wrong: how to build, test and lint, the conventions no tool enforces, and the traps. Everything else is a cost paid on every request.
+
+What earns a place:
+
+- **Exact commands.** How to run the full suite, a single test, the linter and the type checker. Agents waste whole turns guessing between `npm test` and `pnpm vitest run`.
+- **Non-obvious conventions.** "New endpoints go through the service layer, never call the ORM from a handler." Things a reviewer would reject that no linter catches.
+- **Landmines.** Generated files not to edit, the slow integration suite to skip locally, the migration that must never be rerun.
+- **Pointers, not payloads.** "Architecture notes live in docs/architecture.md" lets the agent read on demand instead of paying for the content in every session.
+
+What stays out: rules a linter or formatter already enforces (the tool will tell the agent, and a duplicated rule drifts), long architecture essays, generic advice like "write clean code", and secrets. Keep it short, because it sits in the cached prefix of every session.
+
+In a monorepo, a nested file in each package lets the closest one add local rules, so frontend conventions are not loaded while the agent works on the billing service.
+
+People miss two risks:
+
+- **Staleness.** A file naming a command that was removed last quarter is worse than no file, because the agent follows it confidently. Review it in pull requests and update it when the build changes.
+- **Injection.** An agent working in a cloned third-party repo reads that repo's instruction file with the same trust as yours, so its permissions must not depend on the file being harmless.
+
+Measure changes to the file the way you would any prompt change: run a fixed set of representative agent tasks before and after, and compare success rate and turns used.
+
+**Follow-ups:** How would you decide whether a rule belongs in the instruction file, a linter config, or a skill loaded on demand? How would you detect that the file has gone stale? What permissions would you give an agent working in an untrusted repository?
+
+</details>
+
 ## Advanced
 
-### 33. Compare JSON mode with schema-constrained decoding. How does constrained decoding actually enforce the schema?
+### 36. Compare JSON mode with schema-constrained decoding. How does constrained decoding actually enforce the schema?
 
 <details><summary><b>Answer</b></summary>
 
 **JSON mode** is a soft mechanism: the model is post-trained/instructed to emit valid JSON, and the provider may check bracket balance, but nothing guarantees *your schema* - you get valid JSON with a missing field, a string where you wanted an int, or an invented enum value. You must validate (e.g., Pydantic) and retry, which means p99 latency includes retry loops.
 
-**Schema-constrained decoding** (OpenAI Structured Outputs with `strict: true`; open-source: Outlines, XGrammar, llama.cpp GBNF, vLLM's guided decoding) enforces the schema at the sampling step. Mechanics: the JSON Schema is compiled to a formal grammar - regex-to-FSM for simple constraints, a context-free grammar with pushdown state for arbitrary nesting. During generation, the engine tracks the current grammar state; at each step it computes the set of tokens that can begin a valid continuation and **masks all other tokens' logits to −∞ before softmax/sampling**. An invalid token has probability zero, so output is valid *by construction* - no retries. The engineering subtlety is that grammars are defined over characters but models emit BPE tokens, so token boundaries don't align with grammar symbols; efficient implementations precompute token-level transition masks per grammar state (Outlines' FSM indexing, XGrammar's optimizations) to keep per-step overhead near zero, plus a one-time schema compile cost that providers cache.
+**Schema-constrained decoding** (OpenAI Structured Outputs with `strict: true` and comparable schema-enforced modes from the other major providers; open-source: Outlines, XGrammar, llama.cpp GBNF, vLLM's guided decoding) enforces the schema at the sampling step. Mechanics: the JSON Schema is compiled to a formal grammar - regex-to-FSM for simple constraints, a context-free grammar with pushdown state for arbitrary nesting. During generation, the engine tracks the current grammar state; at each step it computes the set of tokens that can begin a valid continuation and **masks all other tokens' logits to −∞ before softmax/sampling**. An invalid token has probability zero, so output is valid *by construction* - no retries. The engineering subtlety is that grammars are defined over characters but models emit BPE tokens, so token boundaries don't align with grammar symbols; efficient implementations precompute token-level transition masks per grammar state (Outlines' FSM indexing, XGrammar's optimizations) to keep per-step overhead near zero, plus a one-time schema compile cost that providers cache.
 
 Tradeoffs a senior answer must include:
 
@@ -984,7 +1069,7 @@ flowchart LR
 
 </details>
 
-### 34. What is context rot, and what compaction strategies do you use in long-running agents?
+### 37. What is context rot, and what compaction strategies do you use in long-running agents?
 
 <details><summary><b>Answer</b></summary>
 
@@ -996,7 +1081,7 @@ Compaction and hygiene strategies, roughly in order of adoption:
 - **History compaction**: when the window nears a threshold, summarise older turns into a structured digest - decisions made, current state, open items, key facts, *errors already encountered* (so they're not repeated) - keep recent turns verbatim, and continue. This is what Claude Code-style auto-compaction does. Risk: summaries lose detail irrecoverably; mitigate by preserving pinned artifacts (the task spec, key file paths) verbatim and never summarising the system prompt.
 - **Offloading / externalised memory**: write intermediate state to files or a scratchpad, keep only references in context, re-read on demand. Converts context (expensive, decaying) into storage (cheap, durable) with retrieval as the access path.
 - **Sub-agents as context firewalls**: delegate a context-heavy subtask (read 30 files, research a question) to a fresh-window sub-agent that returns only a distilled answer. The parent's window stays clean.
-- **Pruning**: drop superseded tool results (old file reads after edits), collapse retry loops to a single "attempts 1-3 failed because X" note, remove tools no longer relevant to the phase.
+- **Pruning**: drop superseded tool results (old file reads after edits), collapse retry loops to a single "attempts 1-3 failed because X" note, remove tools no longer relevant to the phase. Some provider APIs now offer this server-side, clearing stale tool results automatically as the window fills, but you still decide what is safe to drop.
 
 Name the cache tension: compaction rewrites the prefix and invalidates the prompt cache, so compact at deliberate breakpoints and accept the one-time re-prefill cost - not continuously.
 
@@ -1017,7 +1102,7 @@ flowchart LR
 
 </details>
 
-### 35. Explain DSPy-style programmatic prompt optimization. When would you use it over manual iteration?
+### 38. Explain DSPy-style programmatic prompt optimization. When would you use it over manual iteration?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1026,7 +1111,7 @@ DSPy's core move (Khattab et al., 2023) is separating *what* an LM pipeline does
 What optimizers actually search:
 
 - **Few-shot demonstrations**: bootstrapping - run the pipeline on training inputs, keep traces where the metric passes, and use those traces as demos (BootstrapFewShot). Selecting *which* examples, from a pool the system generated and validated itself, is the workhorse.
-- **Instructions**: propose candidate instruction texts with an LLM (grounded in the data and failing cases), then search over instruction × demo combinations - MIPROv2 does this with Bayesian-optimization-style search over the joint space.
+- **Instructions**: propose candidate instruction texts with an LLM (grounded in the data and failing cases), then search over instruction × demo combinations - MIPROv2 does this with Bayesian-optimization-style search over the joint space. GEPA (2025, also available as a DSPy optimizer) takes a reflective route: an LLM reads execution traces and textual feedback on failures and proposes evolved instructions, which tends to need fewer rollouts than blind search.
 - Optionally **weights** (fine-tuning smaller student models from bootstrapped traces).
 
 Why this beats manual iteration in the right conditions: multi-stage pipelines have interacting prompts humans can't jointly optimise (the extraction prompt's phrasing affects the synthesis stage's inputs); it re-optimises automatically when you swap models (prompt tuning is model-specific - hand-tuned prompts silently degrade on a new model, and "re-compile against the new model" is a much better story than re-tuning ten prompts by hand); and it's reproducible and CI-able.
@@ -1039,7 +1124,7 @@ When manual wins: one-off prompts, tasks needing nuanced judgment you can't metr
 
 </details>
 
-### 36. What is meta-prompting? How would you use a model to improve your prompts - and what are the pitfalls?
+### 39. What is meta-prompting? How would you use a model to improve your prompts - and what are the pitfalls?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1065,7 +1150,7 @@ Bottom line: meta-prompting is a candidate generator; the eval loop remains the 
 
 </details>
 
-### 37. How do you decide when to stop prompt engineering and fine-tune instead?
+### 40. How do you decide when to stop prompt engineering and fine-tune instead?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1078,9 +1163,9 @@ Decision framework, in the order the checks should run:
 - **Form, style, consistency** - house tone, a niche output format, terse-and-exact behaviour, domain-specific conventions applied uniformly at high volume: fine-tuning's sweet spot. It moves default behaviour into the weights.
 - **Missing knowledge** - facts about your product or fresh data: fine-tuning is the *wrong* tool; it teaches behaviour, not reliable knowledge retention, and stale weights hallucinate confidently. Use RAG/tools.
 - **Missing capability** - the model fundamentally can't do the reasoning even in the best few-shot setting: SFT on your few hundred examples won't create it; you need a stronger base model (or serious RL post-training, which is a different investment class).
-- **Cost/latency** - a big model with a 3k-token prompt does the job, and you want a small model to match it: distillation via fine-tuning on the large model's outputs is one of the most common legitimate cases, often cutting cost ~10× at equal task quality.
+- **Cost/latency** - a big model with a 3k-token prompt does the job, and you want a small model to match it: distillation via fine-tuning on the large model's outputs is one of the most common legitimate cases, often cutting serving cost by a large multiple at comparable task quality.
 
-**Then check prerequisites and price in the real costs.** You need roughly 500-5,000+ quality examples (LoRA-style tuning makes compute cheap; *data* is the bottleneck), an eval you trust, and an MLOps commitment: you now own a model artifact - retraining when the base model deprecates, regression testing, versioned deployment, and drift monitoring. Fine-tuning can also narrow general capability and instruction-following outside the tuned distribution, and it resets every time you want the newest base model - whereas a good prompt ports across models in an afternoon.
+**Then check prerequisites and price in the real costs.** You need roughly 500-5,000+ quality examples (LoRA-style tuning makes compute cheap; *data* is the bottleneck), an eval you trust, and an MLOps commitment: you now own a model artifact - retraining when the base model deprecates, regression testing, versioned deployment, and drift monitoring. Fine-tuning can also narrow general capability and instruction-following outside the tuned distribution, and it resets every time you want the newest base model - whereas a prompt backed by a good eval set can be re-validated and re-tuned on a new model in days, not a retraining cycle.
 
 Rule of thumb: prompt for capability and knowledge, fine-tune for consistency, format, style, and distillation economics - and only after the eval says prompting has plateaued.
 
@@ -1103,7 +1188,7 @@ flowchart TD
 
 </details>
 
-### 38. How would you A/B test a prompt change safely in production?
+### 41. How would you A/B test a prompt change safely in production?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1118,7 +1203,7 @@ Staged rollout, with the A/B test as the final gate rather than the first test:
 LLM-specific design points that interviewers probe:
 
 - **Randomise by user, not by request.** Multi-turn conversations must stay within one variant - mid-conversation prompt switches produce incoherent behaviour and contaminate both arms. User-level assignment also captures cross-session effects.
-- **Metrics are the hard part.** Online ground truth is scarce; explicit feedback is sparse (~1% and biased). Use a hierarchy: guardrails (cheap, automatic - validity, latency, cost per request, safety), proxies (retry/rephrase rate, task completion, escalation-to-human rate, conversation abandonment), and sampled LLM-judge scoring on live traffic for quality. Pre-register which metric decides and which merely guard.
+- **Metrics are the hard part.** Online ground truth is scarce; explicit feedback is sparse (usually a small fraction of interactions) and biased toward the very happy and the very annoyed. Use a hierarchy: guardrails (cheap, automatic - validity, latency, cost per request, safety), proxies (retry/rephrase rate, task completion, escalation-to-human rate, conversation abandonment), and sampled LLM-judge scoring on live traffic for quality. Pre-register which metric decides and which merely guard.
 - **Variance and power**: LLM quality metrics are noisy and prompt effects are often small; compute required sample size up front - low-traffic products may need weeks per test, arguing for bigger, less-frequent prompt changes and heavier reliance on offline evals. Paired offline comparisons (same inputs through both prompts) are far more statistically efficient than between-user online splits, which is another reason stage 0 matters.
 - **Hold everything else constant**: pin model version and sampling parameters across arms - a provider model update mid-test silently confounds everything. Log prompt version, model snapshot, and params with every request or you can't debrief incidents.
 - **Segment results** (language, task type, tenant) - a neutral aggregate can hide a win in one segment and a serious regression in another.
@@ -1129,7 +1214,7 @@ Treat prompts as deployable artifacts: versioned, config-flagged (no code deploy
 
 </details>
 
-### 39. How do reasoning models change prompting practice? What transfers and what becomes obsolete?
+### 42. How do reasoning models change prompting practice? What transfers and what becomes obsolete?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1154,7 +1239,7 @@ New knobs and considerations:
 
 </details>
 
-### 40. Design a token budget for an agent with a 200k context window. How do you allocate it, and how do you enforce it?
+### 43. Design a token budget for an agent with a 200k context window. How do you allocate it, and how do you enforce it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1207,7 +1292,7 @@ flowchart TD
 
 </details>
 
-### 41. Design memory that persists across sessions for an assistant. How is it different from managing context within a session?
+### 44. Design memory that persists across sessions for an assistant. How is it different from managing context within a session?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1233,7 +1318,7 @@ Within a session you are compressing a transcript you already have. Across sessi
 
 </details>
 
-### 42. Your agent reads web pages and can send email. How do you defend against indirect prompt injection?
+### 45. Your agent reads web pages and can send email. How do you defend against indirect prompt injection?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1268,7 +1353,7 @@ flowchart TD
 
 </details>
 
-### 43. The system prompt says one thing, the user asks for another, and a retrieved document says a third. How do you design conflict resolution?
+### 46. The system prompt says one thing, the user asks for another, and a retrieved document says a third. How do you design conflict resolution?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1307,7 +1392,7 @@ flowchart TD
 
 </details>
 
-### 44. Your prompt change gained 3 points on the eval. How confident are you that it is real?
+### 47. Your prompt change gained 3 points on the eval. How confident are you that it is real?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1327,7 +1412,7 @@ And the connection worth drawing: sensitivity is a portability metric. If the pr
 
 </details>
 
-### 45. When should you split an agent into sub-agents, and what do you pass between them?
+### 48. When should you split an agent into sub-agents, and what do you pass between them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1343,7 +1428,7 @@ They work badly when the task requires shared, evolving state: writing a coheren
 
 **What to pass up:** a typed, structured summary, not the transcript. Treat the handoff as an RPC boundary with a schema. Returning the raw transcript just relocates the bloat and defeats the entire point.
 
-**The cost.** Multi-agent burns dramatically more tokens than single-agent for the same task, plausibly close to an order of magnitude versus a plain chat interaction, since every sub-agent re-reads a system prompt and tool schemas. It buys latency through parallelism and quality through isolation. If your task is not parallel and not context-starved, you are paying that multiple for nothing.
+**The cost.** Multi-agent burns dramatically more tokens than single-agent for the same task. Anthropic reported its research system using roughly 15 times the tokens of a plain chat interaction, since every sub-agent re-reads a system prompt and tool schemas and does its own exploration. It buys latency through parallelism and quality through isolation. If your task is not parallel and not context-starved, you are paying that multiple for nothing.
 
 And tracing: unless you can see each agent's full context, multi-agent bugs are undebuggable.
 
@@ -1362,5 +1447,81 @@ flowchart TD
 ```
 
 **Follow-ups:** How would you detect that two sub-agents made conflicting implicit decisions? What would make you collapse a multi-agent system back into a single loop?
+
+</details>
+
+### 49. You moved a prompt from a hosted API to a self-hosted copy of the same open-weight model, and quality dropped below the hosted version. What do you check?
+
+<details><summary><b>Answer</b></summary>
+
+Check the chat template before touching the prompt text. When the same weights do worse self-hosted, the usual cause is that the token sequence the model sees differs from the one it was post-trained on, and the wording is innocent.
+
+The model learned roles, tool calls and turn boundaries as specific special-token sequences. Your serving stack renders messages into that sequence through the chat template shipped with the tokenizer. Small deviations push the model off-distribution:
+
+- **Wrong or missing template.** A generic template or hand-built strings instead of the model's own. Symptoms: rambling, role confusion, the model writing the user's next turn.
+- **No generation prompt.** Without the assistant header at the end (`add_generation_prompt=True` in Hugging Face's `apply_chat_template`), the model may continue the user's message instead of answering it.
+- **Doubled special tokens.** The template already inserts BOS, then tokenizing the rendered string adds another. The quality loss is subtle and easy to miss.
+- **Unsupported roles.** Some model families have no system role, and their templates fold the system prompt into the first user turn or drop it.
+- **Wrong stop tokens.** An end-of-turn token not registered as a stop sequence gives run-on output.
+- **Tool-call format.** The server's tool-call parser must match the model's trained format, or valid calls come back as plain text.
+- **Reasoning toggles and sampling defaults.** Some templates switch thinking on or off with a flag. Model cards often recommend sampling settings that hosted providers apply and your stack may not.
+
+The method: log the exact token ids for one request, decode them, and diff against the reference rendering from the model's own tokenizer. Then run the same eval through both endpoints at identical sampling settings. Only once the token sequences match is it worth blaming quantization or the prompt.
+
+**Worth sketching.** Laying out the rendering path shows every place where the token sequence can drift from what the model was trained on.
+
+```mermaid
+flowchart LR
+    A["Messages and tools"] --> B["Model's own<br/>chat template"]
+    B --> C["Rendered string with<br/>role and turn tokens"]
+    C --> D["Tokenize without<br/>a second BOS"]
+    D --> E["Generate with recommended<br/>sampling and stop tokens"]
+    E --> F["Tool-call parser matching<br/>the trained format"]
+    G["Diff token ids against<br/>the reference rendering"] --> D
+```
+
+**Follow-ups:** How would you build a regression test that fails when someone changes the chat template? Why can a template that drops the system prompt still pass a casual smoke test? Once the token sequences match and quality is still lower, what do you suspect next?
+
+</details>
+
+### 50. You are running a reasoning model in a multi-turn tool-use loop. What do you do with its reasoning between calls, and what breaks if you drop it?
+
+<details><summary><b>Answer</b></summary>
+
+Pass the reasoning state back exactly as the API returned it, at least within the current tool-use turn, and let the provider decide what it keeps after that. Dropping or editing it is a common reason agents get worse after their first tool call.
+
+Why it matters: in a tool loop the model reasons, emits a tool call and stops. When you send the tool result, the model continues the same turn. If its earlier reasoning is missing, it has to work out from the call alone why it made the call, so plans get lost and steps get repeated. That looks like a weak model when it is really a plumbing bug.
+
+Providers expose this differently, so it belongs in your adapter layer:
+
+- **Anthropic** returns thinking blocks that carry a signature. When you send a tool result, the preceding assistant turn must include those blocks complete and unmodified, and the signature lets the API detect tampering. Redacted thinking blocks are opaque and go back as-is.
+- **OpenAI's Responses API** returns reasoning items. Either chain requests through server-side state or, when you cannot let the provider store state, request the encrypted reasoning content and send it back with the next call. Endpoints that throw reasoning away between calls give you no way to preserve it.
+
+The engineering consequences:
+
+- **Never rewrite the transcript inside a tool-use turn.** Compaction, redaction and trimming happen only at turn boundaries.
+- **Treat reasoning as opaque.** Do not parse it, edit it or use it as your audit log. Summaries returned for display are for humans, not for feeding back.
+- **Budget for it.** Carried reasoning counts against the window, and providers differ on whether earlier turns' reasoning is stripped automatically. Measure actual context growth per step rather than assuming.
+- **Caching.** Changing what you send back for earlier turns changes the prefix and costs a cache rebuild.
+
+A test worth keeping through every migration: run the same multi-step tasks with reasoning passed back and with it stripped. The gap shows how much your loop depends on it.
+
+**Worth sketching.** The fifth arrow is the whole answer: the reasoning goes back unchanged inside the turn.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Model
+    participant Tool
+    App->>Model: Messages and tool schemas
+    Model-->>App: Reasoning block plus tool call
+    App->>Tool: Execute the call
+    Tool-->>App: Result
+    App->>Model: Same reasoning block, unmodified, plus the result
+    Model-->>App: More reasoning, then the final answer
+    Note over App,Model: Compact or trim only at turn boundaries
+```
+
+**Follow-ups:** Your compaction job runs on a timer and sometimes fires mid tool-use turn. What breaks, and how do you fix it? How do zero-data-retention requirements change how you carry reasoning between calls? Why should you not use the model's reasoning as your audit trail?
 
 </details>

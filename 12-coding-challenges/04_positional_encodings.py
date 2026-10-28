@@ -12,7 +12,9 @@ Numpy only:
 
 2. apply_rope(x, positions=None, base=10000.0) -> np.ndarray
    Rotary Position Embedding, half-split ("rotate half") convention as used
-   by Llama / GPT-NeoX. x has shape (..., T, d) with d even; dimension pair
+   by GPT-NeoX and the Hugging Face Llama port (Meta's reference Llama code
+   rotates interleaved pairs instead, so converted checkpoints permute the
+   Q/K weights). x has shape (..., T, d) with d even; dimension pair
    (j, j + d/2) is rotated by angle pos * theta_j, theta_j = base^(-2j/d).
    `positions` is an optional (T,) int array (defaults to 0..T-1) - needed
    for KV-cache decode, where the new token's position is not 0.
@@ -34,8 +36,11 @@ adding RoPE to V (it belongs on Q and K only).
 
 Follow-up variations: why low dims rotate fast and high dims slow
 (multi-scale positional resolution); context extension - position
-interpolation and NTK-aware / YaRN scaling of theta; ALiBi as a bias-based
-alternative; why learned absolute embeddings fail to extrapolate.
+interpolation, NTK-aware / YaRN scaling of theta, and raising the base
+(many long-context models ship base 500000 or higher); ALiBi as a
+bias-based alternative; decoupled RoPE in multi-head latent attention
+(DeepSeek-V2/V3) and interleaving no-position (NoPE) layers with RoPE
+layers; why learned absolute embeddings fail to extrapolate.
 """
 from __future__ import annotations
 
@@ -91,6 +96,17 @@ if __name__ == "__main__":
     d = 16
     q = rng.normal(size=(1, d))
     assert np.allclose(apply_rope(q, positions=np.array([0])), q)
+
+    # --- RoPE: hand-computed, pins the half-split pairing (j, j + d/2) ---
+    # d=4: theta = [1, 1/100]. e0 at position 1 rotates within pair (0, 2) by
+    # 1 rad. The interleaved convention would pair (0, 1) and give
+    # [cos 1, sin 1, 0, 0] instead.
+    e0 = np.array([[1.0, 0.0, 0.0, 0.0]])
+    assert np.allclose(apply_rope(e0, positions=np.array([1])),
+                       [[np.cos(1), 0.0, np.sin(1), 0.0]])
+    e1 = np.array([[0.0, 1.0, 0.0, 0.0]])  # slow pair (1, 3): angle 2 * 0.01
+    assert np.allclose(apply_rope(e1, positions=np.array([2])),
+                       [[0.0, np.cos(0.02), 0.0, np.sin(0.02)]])
 
     # --- RoPE preserves norms (pure rotation) ---
     x = rng.normal(size=(7, d))

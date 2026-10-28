@@ -1,10 +1,10 @@
 # 🍁 Cohere - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- Official skeleton (from their careers page): application review → recruiter conversation → **take-home assignment (conditional on role)** → hiring manager interview → final round with team members. Candidate reports put the whole loop at roughly 4-6 weeks.
+- Official skeleton (from their careers page): application review → recruiter conversation → **take-home assignment (conditional on role)** → hiring manager interview → final round with team members. Candidate reports and 2026 third-party guides put the whole loop at roughly 4-7 weeks (reported, varies).
 - The take-home is the load-bearing stage where it appears: publicly described as a multi-hour **applied problem close to real work** (build/analyse something, write it up), not a puzzle. Treat it like a short sprint - tests, a README, and honest tradeoff notes matter.
 - Interviews skew **applied and production-flavoured**: retrieval/RAG depth (they sell Embed and Rerank as standalone products), agentic workflows (their North platform), evaluation methodology, and serving models inside customer VPCs/on-prem. Pure LeetCode grinding is the wrong prep.
 - **Forward Deployed Engineer** loops (per a public first-hand write-up) feature a distinctive **system-design debugging round**: you get an architecture diagram plus a vague failure and must drive the investigation - ask for logs, metrics, traces, and reason about failure domains out loud.
@@ -12,7 +12,7 @@
 
 ## Company context
 
-Cohere builds LLMs for enterprises that can't or won't ship their data to a consumer AI lab: the Command generation-model family (including the openly-released Command A line and, as of 2026, sparse-MoE successors), Embed and Rerank models for retrieval, and **North**, an agentic AI workspace platform deployed with customers like banks and telcos - frequently in private VPCs or fully on-prem. Headquartered in Toronto with offices in New York, London, San Francisco, Montreal, Paris, and Seoul, and an explicitly remote-supportive culture, it's one of the few frontier-adjacent labs anchored in Canada. "AI engineer" at Cohere usually means applied work close to customers and production - RAG pipelines, agents, evals, and secure deployment - rather than pretraining research (that lives with Members of Technical Staff and Cohere Labs, their research arm).
+Cohere builds LLMs for enterprises that can't or won't ship their data to a consumer AI lab: the Command generation-model family (including the openly-released Command A line and Command A+, a sparse-MoE flagship released in May 2026), North Mini Code (June 2026, an Apache 2.0 open-weight MoE coding model and its first aimed at individual developers), Embed and Rerank models for retrieval, Model Vault for managed private inference, and **North**, an agentic AI workspace platform deployed with customers like banks and telcos - frequently in private VPCs or fully on-prem. Headquartered in Toronto with offices in New York, London, San Francisco, Montreal, Paris, and Seoul, and an explicitly remote-supportive culture, it's one of the few frontier-adjacent labs anchored in Canada. "AI engineer" at Cohere usually means applied work close to customers and production - RAG pipelines, agents, evals, and secure deployment - rather than pretraining research (that lives with Members of Technical Staff and Cohere Labs, their research arm).
 
 ## Roles & titles they hire
 
@@ -38,7 +38,7 @@ Public information is moderate: Cohere's own careers page publishes the stage sk
 | Recruiter conversation | ~30 min call | Motivation, "why Cohere / why enterprise AI", logistics, work-style preferences (official stage) |
 | Take-home assignment | Conditional on role; reported as a multi-hour applied problem with a few days' turnaround, often with a write-up or short presentation | Real-work signal: code quality, evaluation rigour, communication of tradeoffs. One Glassdoor report claims a low pass rate - treat it as the main filter (reported, varies) |
 | Hiring manager interview | ~45-60 min | Depth on your past systems, role alignment, ownership; FDE version probes on-prem/distributed-systems/customer-facing experience (official stage; detail reported) |
-| Technical round(s) | Live coding - reported as production-flavoured Python (Go appears in infra postings), plus ML/system design discussion | Writing and running working code with tests and edge cases; RAG/embeddings/eval/serving judgment rather than algorithm recall (reported, varies) |
+| Technical round(s) | Live coding - reported as production-flavoured Python (Go appears in infra postings), plus ML/system design discussion. A 2026 third-party guide describes a ~60 min screen with one medium-hard problem ahead of a 4-5 round onsite or virtual loop (reported, varies) | Writing and running working code with tests and edge cases; RAG/embeddings/eval/serving judgment rather than algorithm recall (reported, varies) |
 | Final round / team interviews | Several conversations with team members | Collaboration, values (momentum, openness, autonomy), team match (official stage) |
 
 **FDE-specific rounds** (from a public first-hand report; likely varies):
@@ -226,7 +226,7 @@ The mindset shift interviewers look for: you're shipping a *product that operate
 
 <details><summary><b>Answer</b></summary>
 
-Sparse MoE decouples the two costs that matter. **Per-token compute scales with active parameters** - only the router-selected experts run per token - so decode latency and throughput resemble a dense model the size of the active count. **Memory scales with total parameters** - every expert must sit in VRAM. For enterprise self-hosting the pitch is quality-per-FLOP: the customer's GPU count is fixed, tokens/sec/GPU is the budget line, and MoE delivers stronger quality at a given serving cost than a dense model with the same latency profile. (Cohere publicly markets its MoE flagship as deployable on as few as two GPUs - the entire point is meeting customers at their hardware.)
+Sparse MoE decouples the two costs that matter. **Per-token compute scales with active parameters** - only the router-selected experts run per token - so decode latency and throughput resemble a dense model the size of the active count. **Memory scales with total parameters** - every expert must sit in VRAM. For enterprise self-hosting the pitch is quality-per-FLOP: the customer's GPU count is fixed, tokens/sec/GPU is the budget line, and MoE delivers stronger quality at a given serving cost than a dense model with the same latency profile. (Cohere has consistently marketed its flagships on small GPU footprints - Command A was pitched as running on two GPUs - and the point is meeting customers at their hardware.)
 
 Where it hurts:
 
@@ -305,6 +305,24 @@ End with measured outcome and residue: what metric moved, what you'd do differen
 
 </details>
 
+### 13. We now ship an open-weight coding model small enough to run on a single GPU. A regulated customer wants a coding agent built on it, entirely inside their network. How do you decide whether it's good enough, and what does the deployment look like?
+
+<details><summary><b>Answer</b></summary>
+
+Decide on the customer's own tasks, not public leaderboards, and treat the model as the smallest part of the deployment: the sandboxed harness and the eval are where the work is.
+
+**Fit test.** Public SWE-bench-style scores are a prior. Build an internal suite from the customer's repos: mine recently merged PRs that came with tests, give the agent the issue text and the pre-merge snapshot, and use the PR's tests as the hidden check. Stratify by language, repo and task type (bug fix, refactor, test writing). Report resolve rate, cost per resolved task and wall-clock time. Be honest about the comparison: many regulated customers cannot use a frontier API at all, so the real question is "this model versus no agent" or versus a larger self-hosted model, not versus the best model on the internet.
+
+**Serving.** A sparse MoE with ~3B active of ~30B total parameters (North Mini Code's published shape, sized for one H100 at FP8) is cheap per token, but agent sessions run to tens or hundreds of thousands of tokens of repo context and tool output. KV cache, not weights, sets concurrency, so capacity-plan on sessions, cache the stable repo and system prefix, and cap context growth in the harness.
+
+**Harness.** The agent runs in a container with no egress, internal package mirrors, the build and test toolchain, a command allow-list and its own worktree. Output is a pull request for human review, never a direct push. Scan diffs for secrets and licence-tagged code, and log every action for audit.
+
+**Tradeoffs.** Small-active-parameter models do well on well-specified, local changes and degrade on long-horizon, cross-repo work: route those to humans or a larger model. Open weights also allow fine-tuning on internal code, which raises governance questions about secrets ending up in weights.
+
+**Follow-ups:** The model resolves 35% of internal tasks against 60% for a frontier API the customer cannot use. Is it worth deploying? How do you stop eval tasks leaking into any later fine-tuning data?
+
+</details>
+
 ## How to prepare
 
 Repo directories to prioritise for Cohere specifically:
@@ -319,7 +337,7 @@ Repo directories to prioritise for Cohere specifically:
 Company-specific moves:
 
 1. **Build a two-stage RAG pipeline with their actual stack** - Embed + Rerank + Command via their API (they have a free trial tier; docs.cohere.com is good). Being able to say "here's where the reranker helped and here's where it didn't, with numbers" is exactly the applied signal they screen for.
-2. **Read the Command A / Command A+ model pages and Cohere's blog** - architecture choices (open weights, long context, sparse MoE, small-GPU-footprint serving) are deliberate enterprise positioning; interviews reward knowing *why*.
+2. **Read the Command A / Command A+ and North Mini Code model pages and Cohere's blog** - architecture choices (open weights, long context, sparse MoE, single-GPU or small-GPU-footprint serving) are deliberate sovereign-deployment positioning; interviews reward knowing *why*.
 3. **Study North's public materials** and think through one concrete enterprise agent workflow end-to-end (auth, HITL, audit, eval) - most open engineering roles orbit this product.
 4. **Prepare an architecture presentation** of a real system you built, with reliability/security tradeoffs - a reported FDE round, and a strong asset for any hiring-manager conversation.
 5. **Practise take-home hygiene:** timebox a realistic 4-8 hour applied problem, ship it with tests, a README, an eval, and a half-page of tradeoffs. Reports consistently describe the take-home as the big filter.
@@ -334,6 +352,8 @@ Company-specific moves:
 - [Glassdoor - Cohere interview questions & experiences](https://www.glassdoor.com/Interview/Cohere-Interview-Questions-E6413613.htm)
 - [Cohere docs - model overview (Command, Embed, Rerank)](https://docs.cohere.com/docs/models)
 - [Cohere blog - Introducing Command A+](https://cohere.com/blog/command-a-plus)
+- [Cohere blog - North Mini Code, open-weight agentic coding model (June 2026)](https://cohere.com/blog/north-mini-code)
+- [techinterview.org - Cohere interview process 2026](https://www.techinterview.org/post/3233474931/cohere-interview-process-2026/) - third-party; loop shape and timeline reports
 
 ---
 

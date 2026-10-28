@@ -12,13 +12,13 @@ The **eval-driven development loop**:
 
 ```mermaid
 flowchart LR
-    A[Ship] --> B[Observe production<br/>traces + feedback]
-    B --> C[Error analysis:<br/>read transcripts, cluster failures]
-    C --> D[Add failures<br/>to eval set]
-    D --> E[Change prompt /<br/>model / retrieval]
-    E --> F[Run evals<br/>in CI]
-    F -->|pass| A
-    F -->|regress| E
+    A["Ship"] --> B["Observe production<br/>traces + feedback"]
+    B --> C["Error analysis:<br/>read transcripts, cluster failures"]
+    C --> D["Add failures<br/>to eval set"]
+    D --> E["Change prompt /<br/>model / retrieval"]
+    E --> F["Run evals<br/>in CI"]
+    F -->|"pass"| A
+    F -->|"regress"| E
 ```
 
 Every arrow matters. The most common broken link in real teams: production failures never make it back into the eval set.
@@ -27,7 +27,7 @@ Every arrow matters. The most common broken link in real teams: production failu
 
 | Method | Grader | Cost | Best for |
 |---|---|---|---|
-| **Code-graded** | Exact match, regex, `in`, JSON schema check, code execution | ~free, deterministic | Anything with a verifiable answer: classification, extraction, format, math, code |
+| **Code-graded** | Exact match, regex, `in`, JSON schema check, code execution | ~free, deterministic | Anything with a verifiable answer: classification, extraction, format, maths, code |
 | **Model-graded (LLM-as-judge)** | Another LLM + rubric | Cheap-ish, noisy | Open-ended quality: helpfulness, tone, faithfulness, instruction-following |
 | **Human** | Domain experts / labellers | Expensive, slow | Ground truth for calibrating judges; high-stakes domains; final arbiter |
 | **Online (A/B, interleaving)** | Real users, implicit signals | Needs traffic + time | What actually moves product metrics |
@@ -52,20 +52,20 @@ Rule of thumb: **prefer the cheapest grader that captures the criterion.** If yo
   - **Position bias** - favours the first (or last) response in pairwise comparison. Mitigate: run both orders, keep only consistent verdicts or average.
   - **Verbosity bias** - longer answers score higher, independent of quality. Mitigate: rubric explicitly penalises padding; control/report length.
   - **Self-preference / self-enhancement** - models prefer their own outputs. Mitigate: judge from a *different model family* than the generator.
-- **Calibrate before trusting**: label 50-100 examples with humans, measure judge - human agreement (percent agreement or Cohen's kappa). GPT-4-class judges hit ~80% agreement with humans on chat quality - about the same as human - human agreement - but *your* task may differ. No agreement measurement → no judge in CI.
+- **Calibrate before trusting**: label 50-100 examples with humans, measure judge-human agreement (percent agreement, or Cohen's kappa to correct for chance). In the MT-Bench study, a GPT-4 judge agreed with human experts over 80% of the time, roughly the rate at which humans agree with each other, but that was general chat quality: *your* task may differ. No agreement measurement → no judge in CI. Re-run the calibration whenever the judge model version changes, or scores stop being comparable across time.
 
 ### Public benchmarks and their limits
 
 | Benchmark | Measures | Status |
 |---|---|---|
 | **MMLU** | 57-subject multiple-choice knowledge | Saturated at the frontier; contaminated |
-| **GSM8K** | Grade-school math word problems | Saturated; contamination well documented |
+| **GSM8K** | Grade-school maths word problems | Saturated; contamination well documented |
 | **HumanEval** | 164 Python problems, pass@k | Saturated; tiny |
-| **SWE-bench (Verified)** | Resolving real GitHub issues | Still discriminative; agent-harness-sensitive |
-| **MT-Bench** | Multi-turn chat, LLM-judged | Judge biases apply |
+| **SWE-bench Verified** | Resolving real GitHub issues (500 human-validated tasks) | Headline coding-agent number through 2025; in 2026 OpenAI stopped reporting it (flawed tests, memorised fixes) in favour of the harder SWE-bench Pro. Harness-sensitive either way |
+| **MT-Bench** | 80 multi-turn chat prompts, LLM-judged | Dated and small; judge biases apply |
 | **Chatbot Arena (LMArena)** | Pairwise human preference → Elo/Bradley-Terry | Hard to contaminate, but measures *preference*, skewed prompt/voter population, style-sensitive |
 
-Three failure modes to name in interviews: **contamination** (test data in pretraining - scores measure memorisation), **saturation** (top models cluster at the ceiling - no signal), and **Goodhart** ("when a measure becomes a target, it ceases to be a good measure" - labs optimise toward headline benchmarks). Use public benchmarks for coarse model shortlisting only; product decisions need *your* evals on *your* distribution.
+Three failure modes to name in interviews: **contamination** (test data in pretraining - scores measure memorisation), **saturation** (top models cluster at the ceiling - no signal), and **Goodhart** ("when a measure becomes a target, it ceases to be a good measure" - labs optimise toward headline benchmarks). Benchmark status is perishable: SWE-bench Verified went from "still discriminative" to retired in under two years, and every new hard benchmark follows the same arc. Use public benchmarks for coarse model shortlisting only; product decisions need *your* evals on *your* distribution.
 
 ### pass@k
 
@@ -84,6 +84,16 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 ```
 
 Related: for agents, reliability often matters more than best-case - **pass^k** (all k trials succeed, popularised by τ-bench) punishes inconsistency that pass@k hides.
+
+### Reading eval numbers: noise and significance
+
+An eval score is a sample estimate, so it comes with error bars whether you compute them or not.
+
+- **Standard error of a pass rate** is `sqrt(p(1-p)/n)`. At 80% on 100 examples that is ~4 points, so the 95% interval is roughly ±8 points. A 4-point "win" on that suite is noise.
+- **Minimum detectable effect drives n.** Comparing two independent runs at ~80% power, you need roughly `2.5 / delta^2` examples per arm near an 80% base rate: ~2,800 to detect 3 points, ~500 for 7 points.
+- **Pair your comparisons.** Both variants run on the same examples, so analyse per-example differences (McNemar's test on the discordant pairs, or a paired bootstrap). Only examples that flip carry signal, and removing example difficulty as a source of variance typically cuts the required n several-fold.
+- **Cluster when examples are not independent** (several questions per document, several turns per conversation): clustered standard errors are wider than the naive formula suggests.
+- **Average out sampling noise**: at temperature above zero, run several samples per example and score the mean, or a re-run can flip your conclusion.
 
 ### Application-specific evals
 
@@ -106,6 +116,8 @@ Conflating them is a classic failure: you don't "trade a little PII leakage for 
 
 Offline evals predict; **online evals confirm**. A/B test with user-level randomisation on a metric that proxies real value (task completion, retention, resolution without escalation). **Implicit signals** are your friend because explicit feedback is sparse (thumbs ratings come from a tiny, biased slice of sessions): regeneration rate, copy-to-clipboard, response-abandonment, follow-up reformulations, edit distance on accepted output (acceptance rate for code assistants), escalation-to-human rate. For retrieval/ranking changes, **interleaving** (mix results from both systems, see which gets clicked) reaches significance with far less traffic than A/B.
 
+Model and prompt swaps roll out in stages: **shadow** (the new variant runs on mirrored traffic, users never see it, outputs are compared offline or by a judge), then **canary** (a small slice of real traffic, watching guardrails, errors, latency and cost), then **A/B** for the actual quality decision. Shadow and canary catch breakage cheaply; only the A/B tells you whether users are better off.
+
 ### Monitoring and drift
 
 - **Model drift**: providers deprecate and re-point model aliases; pin exact versions and re-run evals on any version change.
@@ -115,7 +127,9 @@ Offline evals predict; **online evals confirm**. A/B test with user-level random
 
 ### Observability: tracing LLM apps
 
-An LLM request is a **trace**: a tree of **spans** - one per model call, tool invocation, retrieval, guardrail check. Log per span: model + exact version, sampling params, prompt & completion (or a redacted/pointer form), input/output token counts, time-to-first-token and total latency, cost, prompt-template version, and user/session IDs for joining with feedback. **OpenTelemetry has GenAI semantic conventions** (attribute names like `gen_ai.request.model`, `gen_ai.usage.input_tokens`) so traces are portable across backends.
+An LLM request is a **trace**: a tree of **spans** - one per model call, tool invocation, retrieval, guardrail check. Log per span: model + exact version, sampling params, prompt & completion (or a redacted/pointer form), input/output token counts, time-to-first-token and total latency, cost, prompt-template version, and user/session IDs for joining with feedback. **OpenTelemetry has GenAI semantic conventions** (attribute names like `gen_ai.request.model`, `gen_ai.usage.input_tokens`) so traces are portable across backends. The conventions are still marked as in development, so attribute names can change between releases: pin the semconv version your instrumentation emits.
+
+For **reasoning models**, record reasoning-token counts separately from visible output (the conventions define `gen_ai.usage.reasoning.output_tokens` for this): they bill as output tokens and dominate latency, yet the raw chain of thought is often hidden or summarised by the provider, so the trace may show cost without content. Track the reasoning-effort setting per span, since it is now a quality and cost knob in its own right.
 
 **PII in logs is the sharp edge**: prompts and completions routinely contain user data. Decide retention, redact or hash PII at ingestion, restrict access, and honour deletion requests - "log everything forever" is a compliance incident in waiting.
 
@@ -131,7 +145,7 @@ Teams evolve: **vibes** ("looks good to me") → **spot checks** (a doc of 10 fa
 
 ## Interview questions
 
-See [questions.md](questions.md) - 31 questions across basic, intermediate, and advanced levels.
+See [questions.md](questions.md) - 55 questions across basic, intermediate, and advanced levels.
 
 ## Red flags interviewers watch for
 
@@ -153,4 +167,4 @@ See [questions.md](questions.md) - 31 questions across basic, intermediate, and 
 - [Adding Error Bars to Evals](https://arxiv.org/abs/2411.00640) - Evan Miller (Anthropic); statistics for eval comparisons: clustered standard errors, paired analysis, power.
 - [Your AI Product Needs Evals](https://hamel.dev/blog/posts/evals/) - Hamel Husain; the practitioner's guide to eval-driven development and error analysis.
 - [Patterns for Building LLM-based Systems & Products](https://eugeneyan.com/writing/llm-patterns/) - Eugene Yan; evals as the first pattern, with a survey of methods.
-- [OpenTelemetry Generative AI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) - the emerging standard for tracing LLM calls.
+- [OpenTelemetry Generative AI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) - the emerging standard for tracing LLM calls. The conventions now live in their own [semantic-conventions-genai repository](https://github.com/open-telemetry/semantic-conventions-genai), which also covers MCP spans and provider-specific attributes.

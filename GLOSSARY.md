@@ -12,56 +12,64 @@ The acronym table below is for scanning when someone drops an initialism you hal
 
 | Acronym | Expands to | Acronym | Expands to |
 |---|---|---|---|
-| A2A | Agent to agent | ACL | Access control list |
-| ANN | Approximate nearest neighbour | ASR | Automatic speech recognition |
+| A2A | Agent2Agent (protocol) | AAIF | Agentic AI Foundation |
+| ACL | Access control list | ANN | Approximate nearest neighbour |
+| AP2 | Agent Payments Protocol | ASR | Automatic speech recognition |
 | BPE | Byte-pair encoding | CFG | Classifier-free guidance |
 | CoT | Chain of thought | DPO | Direct preference optimization |
 | ECE | Expected calibration error | EMA | Exponential moving average |
-| FLOP | Floating-point operation | FSDP | Fully sharded data parallel |
-| GQA | Grouped-query attention | GRPO | Group relative policy optimization |
-| HBM | High-bandwidth memory | HITL | Human in the loop |
-| HNSW | Hierarchical navigable small world | ICL | In-context learning |
-| ITL | Inter-token latency | IVF | Inverted file index |
-| KV | Key and value | LLM | Large language model |
-| LoRA | Low-rank adaptation | MCP | Model Context Protocol |
-| MHA | Multi-head attention | MLE | Maximum likelihood estimation |
-| MoE | Mixture of experts | MQA | Multi-query attention |
-| MRR | Mean reciprocal rank | MSE | Mean squared error |
-| MTEB | Massive Text Embedding Benchmark | nDCG | Normalized discounted cumulative gain |
+| EP | Expert parallelism | FLOP | Floating-point operation |
+| FSDP | Fully sharded data parallel | GQA | Grouped-query attention |
+| GRPO | Group relative policy optimization | HBM | High-bandwidth memory |
+| HITL | Human in the loop | HNSW | Hierarchical navigable small world |
+| ICL | In-context learning | ITL | Inter-token latency |
+| IVF | Inverted file index | KV | Key and value |
+| LLM | Large language model | LoRA | Low-rank adaptation |
+| MCP | Model Context Protocol | MHA | Multi-head attention |
+| MLA | Multi-head latent attention | MLE | Maximum likelihood estimation |
+| MMR | Maximal marginal relevance | MoE | Mixture of experts |
+| MQA | Multi-query attention | MRR | Mean reciprocal rank |
+| MSE | Mean squared error | MTEB | Massive Text Embedding Benchmark |
+| MTP | Multi-token prediction | nDCG | Normalized discounted cumulative gain |
 | OCR | Optical character recognition | PEFT | Parameter-efficient fine-tuning |
 | PII | Personally identifiable information | PP | Pipeline parallelism |
 | PPO | Proximal policy optimization | PQ | Product quantization |
-| PSI | Population stability index | QLoRA | Quantized LoRA |
-| QPS | Queries per second | RAG | Retrieval-augmented generation |
-| RLAIF | RL from AI feedback | RLHF | RL from human feedback |
-| RLVR | RL from verifiable rewards | RMF | Risk Management Framework (NIST AI) |
-| ROC | Receiver operating characteristic | RoPE | Rotary position embedding |
-| RRF | Reciprocal rank fusion | SFT | Supervised fine-tuning |
+| PRM | Process reward model | PSI | Population stability index |
+| QLoRA | Quantized LoRA | QPS | Queries per second |
+| RAG | Retrieval-augmented generation | RLAIF | RL from AI feedback |
+| RLHF | RL from human feedback | RLVR | RL from verifiable rewards |
+| RMF | Risk Management Framework (NIST AI) | ROC | Receiver operating characteristic |
+| RoPE | Rotary position embedding | RRF | Reciprocal rank fusion |
+| SAE | Sparse autoencoder | SFT | Supervised fine-tuning |
 | SGD | Stochastic gradient descent | SLO | Service level objective |
-| SSE | Server-sent events | STT | Speech to text |
-| TP | Tensor parallelism | TPOT | Time per output token |
-| TTFT | Time to first token | TTS | Text to speech |
-| VAD | Voice activity detection | VAE | Variational autoencoder |
-| ViT | Vision transformer | VLM | Vision-language model |
+| SSE | Server-sent events | SSM | State space model |
+| STT | Speech to text | TP | Tensor parallelism |
+| TPOT | Time per output token | TTFT | Time to first token |
+| TTS | Text to speech | VAD | Voice activity detection |
+| VAE | Variational autoencoder | ViT | Vision transformer |
+| VLA | Vision-language-action model | VLM | Vision-language model |
 | WER | Word error rate | ZDR | Zero data retention |
 
 ---
 
 ## A
 
-- **A2A** - the agent-to-agent protocol for calling a peer agent across a team or company boundary, built on Agent Cards and long-running tasks. [06 Agents](06-agents-and-tool-use/README.md)
+- **A2A** - Agent2Agent, the Linux Foundation-hosted protocol for calling a peer agent across a team or company boundary, built on Agent Cards and long-running tasks. MCP connects an agent to tools, A2A connects it to other agents. [06 Agents](06-agents-and-tool-use/README.md)
 - **A/B test** - an online experiment splitting users between variants to see which one moves the real product metric. [07 Evals](07-evaluation-and-observability/README.md)
-- **Accuracy** - the share of predictions that are correct, and a liar on imbalanced data where predicting the majority class scores 99%. [01 ML foundations](01-ml-and-dl-foundations/README.md)
+- **Accuracy** - the share of predictions that are correct, and a liar on imbalanced data, where always predicting the majority class can score 99%. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **ACL filtering** - enforcing per-user permissions inside the retrieval query itself, never by asking the model to withhold results. [04 RAG](04-rag-and-retrieval/README.md)
 - **Adam** - an optimizer with a per-parameter adaptive step size derived from moving averages of the gradient and its square. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **AdamW** - Adam with weight decay decoupled from the adaptive update, which is why it is the transformer default. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Agent** - a model plus tools plus context, running in a loop with stop conditions, deciding for itself what to do next. [06 Agents](06-agents-and-tool-use/questions.md)
-- **Agent Card** - JSON metadata published at a well-known URI declaring an A2A agent's identity, skills, endpoint and auth requirements. [06 Agents](06-agents-and-tool-use/README.md)
-- **Agent Skills (SKILL.md)** - a folder of procedural instructions and optional scripts loaded by three-stage progressive disclosure. [06 Agents](06-agents-and-tool-use/README.md)
+- **Agent Card** - JSON metadata served at `/.well-known/agent-card.json` declaring an A2A agent's identity, skills, endpoint and auth requirements, so peers can discover it without a bespoke integration. [06 Agents](06-agents-and-tool-use/README.md)
+- **Agent Skills** - an open format for packaging procedural knowledge: a folder holding a `SKILL.md` plus optional scripts, references and assets, loaded by progressive disclosure (name and description at startup, the body when the task matches, bundled files only when needed). [06 Agents](06-agents-and-tool-use/README.md)
+- **Agentic AI Foundation (AAIF)** - the Linux Foundation body set up in December 2025 to host open agent standards, MCP and AGENTS.md among them. [06 Agents](06-agents-and-tool-use/questions.md)
 - **Agentic RAG** - retrieval exposed as a tool the model calls in a loop, refining the query between calls instead of retrieving once. [04 RAG](04-rag-and-retrieval/README.md)
+- **AGENTS.md** - a repository-level instruction file that coding agents load on every session: build and test commands, conventions and no-go areas, scoped to one repo, unlike a skill that loads on demand. [03 Prompting](03-prompt-engineering-and-context/questions.md)
 - **ALiBi** - positional handling that adds a linear distance penalty to attention scores instead of using position embeddings. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **Alignment** - post-training that shapes behaviour, both helpfulness and refusals, into the weights themselves. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **ANN** - approximate nearest neighbour search, trading exact recall for sublinear query time once brute force stops scaling. [04 RAG](04-rag-and-retrieval/README.md)
+- **AP2** - the Agent Payments Protocol, which binds an agent-initiated purchase to signed user mandates so a merchant can verify what the user actually authorised. [09 Safety](09-safety-security-and-responsible-ai/questions.md)
 - **Arithmetic intensity** - FLOPs performed per byte moved, the ratio that decides whether an operation is compute-bound or memory-bound. [08 Inference](08-inference-and-production/README.md)
 - **Attention** - each token emits a query, key and value, and mixes other positions' values weighted by scaled dot-product scores. [02 LLM fundamentals](02-llm-fundamentals/questions.md)
 - **AWQ** - activation-aware 4-bit post-training quantization that scales the channels that matter most before rounding. [08 Inference](08-inference-and-production/README.md)
@@ -72,6 +80,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Batch API** - an asynchronous bulk endpoint priced at roughly half the synchronous rate, for work that tolerates delay. [08 Inference](08-inference-and-production/README.md)
 - **BatchNorm** - normalization across the batch dimension, unusable in transformers because of variable-length sequences and batch-size-1 decoding. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Beam search** - decoding that keeps several partial sequences to maximise total likelihood, good for translation and ASR, bland and repetitive for open-ended text. [02 LLM fundamentals](02-llm-fundamentals/README.md)
+- **Best-of-N** - sampling N candidates and keeping the one a reward model, verifier or test suite scores highest, the simplest way to buy accuracy with test-time compute. [03 Prompting](03-prompt-engineering-and-context/questions.md)
 - **Bias-variance decomposition** - expected test error as bias squared plus variance plus irreducible noise, diagnosed from the train and validation gap. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Bi-encoder** - embeds query and document independently, which is what makes precomputation and ANN search possible and what caps quality. [04 RAG](04-rag-and-retrieval/questions.md)
 - **BM25** - the classic lexical ranking function, which nails IDs, SKUs, error codes and fresh jargon that dense retrieval misses. [04 RAG](04-rag-and-retrieval/README.md)
@@ -97,6 +106,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **ColBERT / late interaction** - per-token embeddings scored by summed max similarity, sitting between bi-encoder speed and cross-encoder accuracy. [04 RAG](04-rag-and-retrieval/README.md)
 - **ColPali** - screenshot-based document retrieval that embeds page images directly, so nothing is lost in parsing. [10 Multimodal](10-multimodal/README.md)
 - **Compaction** - summarising old turns while keeping recent ones verbatim, so an agent's context stays usable over a long trajectory. [06 Agents](06-agents-and-tool-use/README.md)
+- **Confused deputy** - a privileged component tricked by a less-privileged party into using its authority on that party's behalf, which is exactly what an injected agent with broad credentials does. [09 Safety](09-safety-security-and-responsible-ai/questions.md)
 - **Constitutional AI** - alignment in which the model critiques and revises its own output against a written set of principles. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **Constrained decoding** - compiling a schema into a grammar and masking invalid tokens in the logits, which guarantees syntax but not semantics. [03 Prompting](03-prompt-engineering-and-context/README.md)
 - **Contamination** - eval data present in the pretraining corpus, so the score measures memorisation rather than capability. [07 Evals](07-evaluation-and-observability/README.md)
@@ -118,6 +128,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Decoder-only** - the causal next-token architecture behind every mainstream LLM, where every position yields a training signal. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **Defence in depth** - stacking input, output and action controls because no single guardrail holds against an adaptive attacker. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **Diffusion** - generation by learning to reverse a gradual noising process, predicting the noise added at each step. [10 Multimodal](10-multimodal/README.md)
+- **Disaggregated serving** - running prefill and decode on separate GPU pools and shipping the KV cache between them, so the compute-bound and bandwidth-bound phases are sized and batched independently. [08 Inference](08-inference-and-production/questions.md)
 - **Distillation** - training a small model on a large model's outputs or logits, the standard way to compress reasoning behaviour into a cheap model. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **DiT** - the diffusion transformer backbone that replaced the U-Net in recent image models. [10 Multimodal](10-multimodal/README.md)
 - **Double descent** - the observation that heavily overparameterized networks generalise better past the interpolation threshold, breaking the classical U-curve. [01 ML foundations](01-ml-and-dl-foundations/README.md)
@@ -130,6 +141,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 
 - **Early stopping** - halting training when validation loss stops improving, cheap and close to L2 in effect. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **ECE** - expected calibration error, the summary number from a reliability diagram, fixed post hoc with temperature scaling. [01 ML foundations](01-ml-and-dl-foundations/README.md)
+- **Elicitation** - the MCP feature that lets a server ask the host to collect structured input from the user mid-operation, instead of guessing or failing. [06 Agents](06-agents-and-tool-use/questions.md)
 - **Elo / Arena** - pairwise human preference ranking, hard to contaminate but measuring preference and style rather than task correctness. [07 Evals](07-evaluation-and-observability/README.md)
 - **Embedding** - a vector whose geometry encodes meaning, compared with whatever similarity the model was trained with. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Emergent abilities** - apparent sharp capability jumps with scale, partly a measurement artifact of discontinuous metrics. [02 LLM fundamentals](02-llm-fundamentals/README.md)
@@ -138,6 +150,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Error analysis** - reading 50 to 100 failing traces, clustering the failure descriptions, and fixing the biggest cluster first. [07 Evals](07-evaluation-and-observability/README.md)
 - **Eval set** - the versioned dataset that encodes what good means for your product, and the asset that survives every model swap. [07 Evals](07-evaluation-and-observability/questions.md)
 - **Exfiltration channel** - any path by which data can leave the system, the third leg of the lethal trifecta. [09 Safety](09-safety-security-and-responsible-ai/README.md)
+- **Expert parallelism** - sharding an MoE model's experts across GPUs and routing tokens to them with all-to-all communication, which makes interconnect bandwidth and load balance the bottlenecks. [08 Inference](08-inference-and-production/questions.md)
 - **Exponential backoff with jitter** - retry spacing that randomises the delay so clients do not synchronise into a retry storm. [08 Inference](08-inference-and-production/README.md)
 
 ## F
@@ -147,6 +160,8 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **FID** - a distribution-level realism score for generated images, meaningless for judging any single image. [10 Multimodal](10-multimodal/README.md)
 - **Fine-tuning** - further training that changes form, style and narrow skill, and the wrong tool for injecting facts. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **FlashAttention** - an IO-aware exact attention implementation that tiles into on-chip SRAM and never materialises the full score matrix. [02 LLM fundamentals](02-llm-fundamentals/README.md)
+- **Flow matching** - training a generator to predict the velocity that carries noise to data along a near-straight path, now the usual objective for image and video models because it needs fewer sampling steps. [10 Multimodal](10-multimodal/README.md)
+- **FP4 (NVFP4 / MXFP4)** - four-bit floating-point formats with fine-grained block scales, natively accelerated on Blackwell-class GPUs, the next step down from FP8 for weights. [08 Inference](08-inference-and-production/README.md)
 - **FP8 / INT8** - eight-bit formats that shrink weights and, when activations are quantized too, accelerate the matmuls on tensor cores. [08 Inference](08-inference-and-production/README.md)
 - **FSDP / ZeRO** - sharding optimizer states, gradients and parameters across GPUs so a model too large for one device can still train. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 
@@ -163,7 +178,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Gradient clipping** - capping the global gradient norm, conventionally at 1.0, so a loss spike does not destroy the run. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **GraphRAG** - building an entity and relationship graph at index time, worth the cost for relational or corpus-wide questions, not for factoid lookup. [04 RAG](04-rag-and-retrieval/README.md)
 - **Grounding** - constraining the model to answer from supplied sources and cite them, the first line of defence against confident fabrication. [09 Safety](09-safety-security-and-responsible-ai/README.md)
-- **GRPO** - group relative policy optimization, scoring each response against its group mean instead of training a value network. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
+- **GRPO** - group relative policy optimization, sampling a group of responses per prompt and using each one's reward relative to the group mean (scaled by the group's standard deviation) as the advantage, so no value network is trained. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **Guardrail metric** - a must-never-regress number such as PII leakage or jailbreak rate, gated as a binary, never traded for quality. [07 Evals](07-evaluation-and-observability/README.md)
 - **Guardrails** - the input, output and action checks around a model call: classifiers, moderation, schema validation and approval gates. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 
@@ -216,15 +231,18 @@ The acronym table below is for scanning when someone drops an initialism you hal
 
 ## M
 
+- **Mamba / SSM** - a selective state space layer that carries a fixed-size recurrent state instead of a growing KV cache, linear in sequence length and usually mixed with attention layers in hybrid models. [08 Inference](08-inference-and-production/questions.md)
 - **Many-shot jailbreak** - hundreds of faux dialogue turns exploiting in-context learning in a long window to override safety training. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **Matryoshka embeddings** - vectors trained so their prefixes are valid embeddings, letting you truncate for a cheap first pass and refine later. [04 RAG](04-rag-and-retrieval/README.md)
-- **MCP** - the Model Context Protocol, an open standard turning N times M bespoke integrations into N plus M, with tools, resources and prompts as server primitives. [06 Agents](06-agents-and-tool-use/questions.md)
+- **MCP** - the Model Context Protocol, an open standard (now governed under the Agentic AI Foundation) turning N times M bespoke integrations into N plus M, with tools, resources and prompts as server primitives. [06 Agents](06-agents-and-tool-use/questions.md)
+- **MCP Apps** - an official MCP extension that lets a server ship interactive UI the host renders in a sandbox, which widens the server's attack surface from text to active content. [06 Agents](06-agents-and-tool-use/questions.md)
 - **Memorisation** - models reproducing training data verbatim, which is why training and fine-tuning corpora need dedup and PII scrubbing. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **Metadata filtering** - restricting an ANN search by tenant, date or ACL, which has to happen inside the index traversal rather than after top-k. [04 RAG](04-rag-and-retrieval/README.md)
 - **MHA** - multi-head attention, splitting the model dimension into parallel heads so different relations can be attended to at once. [02 LLM fundamentals](02-llm-fundamentals/questions.md)
 - **Mixed precision** - training with bf16 weights and gradients alongside fp32 master weights and optimizer states, roughly 16 bytes per parameter with Adam. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
-- **MLA** - DeepSeek's attention variant that low-rank-compresses the KV cache, going further than GQA on memory. [02 LLM fundamentals](02-llm-fundamentals/README.md)
+- **MLA** - multi-head latent attention, DeepSeek's variant that caches one low-rank latent vector per token and reconstructs keys and values from it, going further than GQA on KV memory. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **MMLU** - a 57-subject multiple-choice knowledge benchmark, saturated at the frontier and widely contaminated. [07 Evals](07-evaluation-and-observability/README.md)
+- **MMR** - maximal marginal relevance, picking results one at a time by trading relevance to the query against similarity to what is already selected, the standard fix for near-duplicate chunks. Not to be confused with MRR. [04 RAG](04-rag-and-retrieval/questions.md)
 - **Modality gap** - the observation that image and text embeddings occupy separated cones inside CLIP's shared space. [10 Multimodal](10-multimodal/README.md)
 - **Mode collapse** - synthetic training data amplifying the teacher model's stylistic tics until output diversity dies. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **Model card / system card** - documentation of intended use, evals and limitations, for the model and for your deployed system respectively. [09 Safety](09-safety-security-and-responsible-ai/README.md)
@@ -236,6 +254,8 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **MTEB** - the standard embedding benchmark, useful for shortlisting and useless as final proof on your own domain. [04 RAG](04-rag-and-retrieval/README.md)
 - **Multi-agent** - an orchestrator delegating to workers, which wins on parallel read-heavy work and hurts on write-heavy shared state. [06 Agents](06-agents-and-tool-use/README.md)
 - **Multimodal RAG** - retrieval over visually rich documents, usually by captioning figures at ingestion or embedding page images directly. [10 Multimodal](10-multimodal/README.md)
+- **Multi-token prediction (MTP)** - training extra heads to predict several future tokens, which densifies the training signal and leaves a built-in drafter for speculative decoding. [02 LLM fundamentals](02-llm-fundamentals/questions.md)
+- **Muon** - an optimizer that orthogonalises the momentum update for 2D weight matrices, adopted by some frontier pretraining runs as an alternative to AdamW for hidden layers. [01 ML foundations](01-ml-and-dl-foundations/questions.md)
 
 ## N
 
@@ -269,7 +289,9 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **PR-AUC** - the honest ranking metric when positives are rare, with the prevalence rather than 0.5 as its baseline. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Precision and recall** - the share of predicted positives that are correct, and the share of actual positives that were found. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Prefill** - processing the whole prompt in one parallel pass, compute-bound, and the phase that sets time to first token. [08 Inference](08-inference-and-production/questions.md)
+- **Prefix caching** - the serving-engine mechanism behind prompt caching: KV blocks for an already-seen prefix are hashed and reused across requests instead of recomputed. [08 Inference](08-inference-and-production/questions.md)
 - **Pre-norm** - placing the norm inside the residual branch before each sublayer, which keeps the residual stream a clean identity path. [02 LLM fundamentals](02-llm-fundamentals/README.md)
+- **Process reward model (PRM)** - a reward model that scores each intermediate reasoning step rather than only the final answer, giving a dense signal at a much higher labelling cost. [05 Fine-tuning](05-fine-tuning-and-alignment/questions.md)
 - **Prompt caching** - reusing the KV cache of a shared prefix across requests, which is why prompts should run stable content first and volatile content last. [03 Prompting](03-prompt-engineering-and-context/README.md)
 - **Prompt injection** - attacking the application through content the model reads, unsolved because the context window has no privilege separation. [09 Safety](09-safety-security-and-responsible-ai/questions.md)
 - **PSI** - population stability index, a drift measure comparing a current input window against a reference one. [01 ML foundations](01-ml-and-dl-foundations/README.md)
@@ -282,6 +304,7 @@ The acronym table below is for scanning when someone drops an initialism you hal
 
 ## R
 
+- **RadixAttention** - SGLang's prefix cache, held as a radix tree of token sequences so requests sharing any prefix reuse its KV, with a scheduler that routes for cache hits. [08 Inference](08-inference-and-production/questions.md)
 - **RAG** - retrieval-augmented generation, supplying fresh or private knowledge at query time instead of baking it into weights. [04 RAG](04-rag-and-retrieval/questions.md)
 - **RAGAS** - a framework packaging the standard RAG metrics, faithfulness and answer relevance among them. [07 Evals](07-evaluation-and-observability/README.md)
 - **ReAct** - interleaving thought, action and observation, now largely absorbed into native tool-calling loops. [06 Agents](06-agents-and-tool-use/README.md)
@@ -307,21 +330,29 @@ The acronym table below is for scanning when someone drops an initialism you hal
 
 ## S
 
+- **SAE** - sparse autoencoder, trained on one layer's activations with a sparsity penalty to recover features that are far more interpretable than individual neurons. [02 LLM fundamentals](02-llm-fundamentals/questions.md)
 - **Safetensors** - the data-only weight format that cannot execute code on load, unlike pickle-based checkpoints. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **Sandboxing** - running model-generated code in an isolated container with no network egress, resource limits and a throwaway filesystem. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 - **Scaling laws** - power-law relationships between compute, data, parameters and loss, and the reason deployment-optimal differs from compute-optimal. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **Self-consistency** - sampling k reasoning paths above temperature zero and majority-voting the final answer, at k times the cost. [03 Prompting](03-prompt-engineering-and-context/README.md)
 - **Self-preference bias** - judges preferring output from their own model family, mitigated by judging with a different family. [07 Evals](07-evaluation-and-observability/README.md)
-- **Semantic caching** - serving a stored answer for a semantically similar query, which needs care around ACLs and freshness. [08 Inference](08-inference-and-production/README.md)
+- **Semantic caching** - serving a stored answer for a semantically similar query, which needs a tight similarity threshold to avoid wrong-answer hits, plus care around ACLs and freshness. [08 Inference](08-inference-and-production/README.md)
 - **SentencePiece** - a language-agnostic tokenizer library that treats raw text as a stream and needs no pre-tokenization. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **SFT** - supervised fine-tuning on prompt and response pairs rendered through the chat template, with loss masked to response tokens. [05 Fine-tuning](05-fine-tuning-and-alignment/questions.md)
+- **SGLang** - an open-source LLM serving engine built around RadixAttention prefix reuse and fast structured output, the main alternative to vLLM. [08 Inference](08-inference-and-production/questions.md)
 - **SigLIP** - the sigmoid-loss successor to CLIP, now a common vision backbone for VLMs. [10 Multimodal](10-multimodal/README.md)
+- **SKILL.md** - the required file at the root of an Agent Skill: YAML frontmatter with at least a name and description, which is all the agent sees until the skill activates, followed by the instructions. [06 Agents](06-agents-and-tool-use/README.md)
 - **SLO** - the latency or quality objective you size capacity against, for example P99 TTFT under 800 ms. [08 Inference](08-inference-and-production/README.md)
 - **Speculative decoding** - a cheap drafter proposes tokens the target model verifies in parallel, speeding up decode without changing the output distribution. [08 Inference](08-inference-and-production/questions.md)
+- **SPLADE** - learned sparse retrieval, where a transformer emits weighted term expansions so an inverted index captures some semantics while keeping exact-match strength. [04 RAG](04-rag-and-retrieval/questions.md)
+- **Spotlighting** - marking untrusted content with delimiters, encoding or per-line prefixes so the model can tell data from instructions, which lowers injection success but enforces nothing. [03 Prompting](03-prompt-engineering-and-context/questions.md)
 - **SSE** - server-sent events, the transport that streams token deltas so perceived latency is TTFT rather than full completion time. [08 Inference](08-inference-and-production/README.md)
+- **Streamable HTTP** - MCP's remote transport, a single HTTP endpoint with optional SSE streaming, which replaced the older two-endpoint HTTP plus SSE transport. [06 Agents](06-agents-and-tool-use/questions.md)
 - **Structured output** - a response constrained to a schema and validated deterministically, the highest-leverage guardrail available. [03 Prompting](03-prompt-engineering-and-context/questions.md)
 - **Subagent** - a worker with its own clean context window that returns a distilled summary to the orchestrator. [06 Agents](06-agents-and-tool-use/README.md)
-- **SWE-bench** - resolving real GitHub issues, still discriminative but sensitive to the agent harness around the model. [07 Evals](07-evaluation-and-observability/README.md)
+- **SWE-bench** - resolving real GitHub issues. The Verified subset has aged into saturation and contamination, so harder variants such as SWE-bench Pro now carry the signal, and every score depends heavily on the agent harness. [07 Evals](07-evaluation-and-observability/questions.md)
+- **Sycophancy** - telling users what they want to hear, agreeing with stated positions or flattering instead of correcting, a predictable side effect of optimising for human preference. [07 Evals](07-evaluation-and-observability/questions.md)
+- **SynthID** - Google's watermarking family, which biases token sampling for text or embeds a signal in pixels for images, so a detector holding the key can test for it statistically. [09 Safety](09-safety-security-and-responsible-ai/questions.md)
 - **System prompt leakage** - assume it happens, so never put secrets or unenforced authorisation logic in it. [09 Safety](09-safety-security-and-responsible-ai/README.md)
 
 ## T
@@ -329,16 +360,18 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Temperature** - the softmax rescaling knob, where zero is greedy argmax and above one flattens the distribution. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **Temperature scaling** - post-hoc calibration that divides logits by a single fitted scalar without changing the ranking. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Tensor parallelism** - sharding every layer's matrices across GPUs with an all-reduce per layer, which cuts latency but needs fast interconnect. [08 Inference](08-inference-and-production/README.md)
+- **Test-time compute** - spending more inference tokens (longer reasoning, sampling and voting, search against a verifier) to raise accuracy instead of training a bigger model. [03 Prompting](03-prompt-engineering-and-context/questions.md)
 - **Token** - the unit the model actually sees, a subword ID rather than a character or a word, which is why letter counting and arithmetic fail. [02 LLM fundamentals](02-llm-fundamentals/questions.md)
 - **Tool call** - a structured message naming a tool and its JSON arguments, which your runtime executes, never the model. [06 Agents](06-agents-and-tool-use/questions.md)
 - **Tool description** - the prose the model reads to decide when to call a tool, effectively a prompt and worth writing like one. [06 Agents](06-agents-and-tool-use/README.md)
 - **Tool poisoning** - malicious instructions hidden in a tool description that lands in your model's context. [09 Safety](09-safety-security-and-responsible-ai/README.md)
+- **Tool search** - retrieving the few relevant tool definitions on demand instead of loading hundreds into every request, turning tool selection into a retrieval problem. [06 Agents](06-agents-and-tool-use/README.md)
 - **Top-k sampling** - keeping only the k highest-probability tokens before renormalizing and sampling. [02 LLM fundamentals](02-llm-fundamentals/README.md)
 - **TPOT / ITL** - time per output token after the first, driven by memory bandwidth and batch contention. [08 Inference](08-inference-and-production/README.md)
 - **Trace and span** - one request as a tree, with a span per model call, tool invocation, retrieval and guardrail check. [07 Evals](07-evaluation-and-observability/README.md)
 - **Trajectory eval** - grading the path an agent took (tool choice, argument correctness, step efficiency), which diagnoses why outcomes failed. [07 Evals](07-evaluation-and-observability/README.md)
 - **TTFT** - time to first token, dominated by queueing and prefill, and the number streaming UX is built around. [08 Inference](08-inference-and-production/README.md)
-- **TTS** - text to speech, classically an acoustic model plus vocoder, now usually a neural codec language model. [10 Multimodal](10-multimodal/README.md)
+- **TTS** - text to speech, classically an acoustic model plus vocoder, now often a language model over neural codec tokens or a flow-matching decoder. [10 Multimodal](10-multimodal/README.md)
 
 ## V
 
@@ -346,12 +379,13 @@ The acronym table below is for scanning when someone drops an initialism you hal
 - **Verbosity bias** - longer answers scoring higher regardless of quality, mitigated by a rubric that penalises padding and by reporting length. [07 Evals](07-evaluation-and-observability/README.md)
 - **Verifiable reward** - a programmatic correctness check such as a unit test or an answer checker, which is why RL for reasoning works on maths and code. [05 Fine-tuning](05-fine-tuning-and-alignment/README.md)
 - **ViT** - vision transformer, an image cut into fixed-size patches and run through a standard transformer. [10 Multimodal](10-multimodal/README.md)
-- **vLLM** - the default open-source serving stack, home of PagedAttention and continuous batching. [08 Inference](08-inference-and-production/README.md)
+- **VLA** - vision-language-action model, a VLM fine-tuned to emit robot actions (as discrete action tokens or through an action head) from camera images and an instruction. [10 Multimodal](10-multimodal/questions.md)
+- **vLLM** - the most widely deployed open-source serving engine, home of PagedAttention and continuous batching. [08 Inference](08-inference-and-production/README.md)
 - **VLM** - vision-language model, a vision encoder plus a projector plus an LLM that treats patch embeddings as ordinary tokens. [10 Multimodal](10-multimodal/README.md)
 
 ## W
 
-- **Warmup** - the short linear learning-rate ramp that stops deep transformers diverging while Adam's second-moment estimate is still garbage. [01 ML foundations](01-ml-and-dl-foundations/README.md)
+- **Warmup** - the short linear learning-rate ramp that stops deep transformers diverging while Adam's second-moment estimate is still unreliable. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **Weight decay** - shrinking weights toward zero, applied directly to the weights in AdamW rather than through the gradient. [01 ML foundations](01-ml-and-dl-foundations/README.md)
 - **WER** - word error rate, the standard accuracy metric for speech recognition. [10 Multimodal](10-multimodal/README.md)
 - **Workflow** - LLMs and tools orchestrated through predefined code paths, which is what you should build whenever you can draw the flowchart. [06 Agents](06-agents-and-tool-use/questions.md)

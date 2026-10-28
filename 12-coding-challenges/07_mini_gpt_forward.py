@@ -39,9 +39,11 @@ A strong solution demonstrates:
 Common mistakes: forgetting the mask entirely (tests below catch it), masking
 with 0 instead of -inf/-1e9, applying LayerNorm over the sequence axis instead
 of the feature axis, and unstable softmax overflowing in float32.
-Follow-up variations: add a KV cache and show decode is O(T) per step; swap
-learned positions for RoPE; make attention weights optional to save memory;
-implement grouped-query attention (fewer K/V heads than Q heads).
+Follow-up variations: add a KV cache and show decode is O(T) per step;
+convert the block to the layout most current open models use (RMSNorm,
+RoPE instead of learned positions, SwiGLU MLP, no biases, often untied
+unembedding); make attention weights optional to save memory; implement
+grouped-query attention (fewer K/V heads than Q heads).
 """
 
 from dataclasses import dataclass
@@ -177,7 +179,22 @@ if __name__ == "__main__":
     # ...and the changed position itself SHOULD produce different logits.
     assert not np.allclose(logits[:, t], logits2[:, t])
 
-    # 4. Next-token distribution is a valid probability distribution.
+    # 3b. Batch rows are independent: running row 0 alone gives the same logits
+    # (catches norms or reshapes that mix the batch axis).
+    assert np.allclose(gpt_forward(params, cfg, ids[:1]), logits[:1])
+
+    # 3c. Layer-0, head-0 weights match a hand-built reference scaled by
+    # 1/sqrt(head_dim) (scaling by 1/sqrt(d_model) would fail this).
+    hd = cfg.d_model // cfg.n_heads
+    blk0 = params["blocks"][0]
+    h0 = layer_norm(params["wte"][ids[0]] + params["wpe"][:T], **blk0["ln1"])
+    qkv0 = h0 @ blk0["attn"]["w_qkv"] + blk0["attn"]["b_qkv"]
+    q0, k0 = qkv0[:, :hd], qkv0[:, cfg.d_model:cfg.d_model + hd]
+    ref = np.where(np.tril(np.ones((T, T), dtype=bool)), q0 @ k0.T / np.sqrt(hd), -np.inf)
+    assert np.allclose(attn_maps[0][0, 0], softmax(ref, axis=-1))
+
+    # 4. Logits are finite and the next-token distribution is valid.
+    assert np.isfinite(logits).all()
     probs = softmax(logits, axis=-1)
     assert np.allclose(probs.sum(axis=-1), 1.0)
     assert (probs >= 0).all()

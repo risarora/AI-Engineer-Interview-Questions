@@ -1,6 +1,6 @@
 # 🧭 Cognition (Devin and Windsurf) - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -12,11 +12,11 @@
 
 ## Company context
 
-Cognition is an AI agent lab building Devin, an autonomous software engineering agent that works asynchronously in its own cloud machine, and Windsurf, the agentic IDE it acquired in 2025 whose Cascade harness now doubles as their RL training environment. They train their own agent models (the SWE-1.x family, SWE-grep for fast context retrieval, Kevin-32B for CUDA kernels) and explicitly co-design model, inference, and harness as one system rather than treating the harness as a thin wrapper. The careers page leans hard on talent density: ten IOI gold medals, leaders out of Cursor, Scale AI, Google DeepMind, Waymo and Nuro, roughly 300 people. "AI engineer" here almost never means prompt work; it means agent infrastructure (hypervisors, snapshots, orchestration), post-training and RL on real coding environments, evaluation harnesses, or product engineering on a surface where the user is partly a machine.
+Cognition is an AI agent lab building Devin, an autonomous software engineering agent that works asynchronously in its own cloud machine, and Windsurf, the agentic IDE it acquired in 2025 whose Cascade harness doubled as their RL training environment. In June 2026 Windsurf relaunched as Devin Desktop & CLI, described as the next generation of Windsurf: one surface for managing local and cloud agents, backwards-compatible with Windsurf, and open to other agents via the Agent Client Protocol. They train their own agent models (the SWE-1.x family through SWE-1.7 in July 2026, then SWE-2 in September 2026, RL post-trained from a large external base model; SWE-grep for fast context retrieval; Kevin-32B for CUDA kernels) and explicitly co-design model, inference, and harness as one system rather than treating the harness as a thin wrapper. The careers page leans hard on talent density: ten IOI gold medals, leaders out of Cursor, Scale AI, Google DeepMind, Waymo and Nuro. The company has scaled fast in 2026 (a Series E at a reported $48B valuation in September and a stated $1B annualised revenue run rate), and the open roles now skew heavily towards sales and customer engineering. "AI engineer" here almost never means prompt work; it means agent infrastructure (hypervisors, snapshots, orchestration), post-training and RL on real coding environments, evaluation harnesses, or product engineering on a surface where the user is partly a machine.
 
 ## Roles & titles they hire
 
-From the public careers page and Ashby board (August 2026), grouped as they group them:
+From the public careers page and Ashby board (titles as of August 2026, grouped as they group them; by October 2026 the board had grown, with Sales and Customer Engineering the largest groups and Research & Development a small minority of openings):
 
 **Research & Development**
 
@@ -61,7 +61,7 @@ No reliable public timeline exists. Assume the build day dominates your calendar
 - **Context engineering over orchestration cleverness.** Their most-cited post argues against parallel multi-agent swarms: share full agent traces rather than single messages, because actions carry implicit decisions and conflicting decisions produce bad results. Their follow-up refines this to "one writer, augmented by other agents contributing intelligence."
 - **Long-horizon reliability.** Agents that run for hours hit context overflow, compounding errors, and asynchronous waits (CI, review). They solved the infrastructure half with hypervisor-level full-machine snapshots and their own disk snapshot format, blockdiff, so a session can sleep and resume exactly where it was.
 - **Benchmarks are a floor, not a target.** They state that coding benchmark performance is often unrepresentative of real-world experience, and they built an internal benchmark (cognition-golden) with real Linux machines, million-line codebases, simulated users, and evaluator agents whose precision and recall are themselves measured against human review.
-- **Speed as a product feature.** SWE-grep-mini serves at around 2,800 tokens per second and SWE-1.5 at up to 950 tokens per second via Cerebras. Retrieval latency inside the first turn is treated as a UX problem worth a dedicated model.
+- **Speed and cost as product features.** SWE-grep-mini serves at around 2,800 tokens per second and SWE-1.5 at up to 950 tokens per second via Cerebras. Retrieval latency inside the first turn is treated as a UX problem worth a dedicated model. By September 2026 the framing had widened to cost: SWE-2 is pitched on a capability-versus-cost Pareto frontier and trained with a reward that penalises rollout cost per effort level.
 - **Founder energy and in-person intensity.** Wu's public framing of hiring is about decision-making, product intuition and self-ownership rather than syntax recall, and the team profile skews heavily to ex-founders.
 
 ## Representative questions
@@ -282,7 +282,7 @@ Both are agent harnesses, but almost every engineering constraint inverts.
 
 **Failure surface.** An in-editor mistake is visible and one undo away. An async mistake lands as a pull request, so the harness needs self-review, test gates and a rollback story before the human ever sees it.
 
-**Shared substrate.** The reason to own both is that the harness, the tool schemas and the trained model are shared, and the IDE surface produces exactly the interaction data that improves the async surface. Cognition trains its agent models inside the Cascade harness, so the two products are one system with two latency profiles.
+**Shared substrate.** The reason to own both is that the harness, the tool schemas and the trained model are shared, and the IDE surface produces exactly the interaction data that improves the async surface. Cognition trains its agent models inside the Cascade harness, so the two products are one system with two latency profiles. The June 2026 relaunch of Windsurf as Devin Desktop makes that explicit: local and cloud agents are managed from one surface, so the handoff between the two profiles becomes a product feature rather than a context switch.
 
 **Follow-ups:** Which of the two would you ship a new tool to first, and why? How would you decide whether a task should be handed off from the IDE to an async session?
 
@@ -394,6 +394,24 @@ flowchart LR
 
 </details>
 
+### 13. You want one agent model that runs at several effort levels, trading capability for cost. How do you design the RL reward, and how do you set the cost penalty?
+
+<details><summary><b>Answer</b></summary>
+
+Use success minus a linear cost penalty, `R = S - λ_e × C`, with one λ per effort level, and set each λ from the slope of the current cost-capability frontier at that effort level rather than tuning it by feel. That is the shape Cognition published for SWE-2 in September 2026.
+
+**Why linear.** RL optimises an expectation over rollouts. A linear penalty gives the same objective whether you penalise each rollout's cost or the average cost, so the objective depends only on average success and average cost, the two numbers you actually plot and sell. A squared penalty or a hard budget cliff makes the policy care about cost variance in ways that do not map onto that plot.
+
+**Why tie λ to the frontier slope.** Plot success against cost for the base model. Lines of equal reward are straight lines of slope λ in that plane. If λ matches the frontier's tangent at a given effort level, sliding along the frontier (cheaper and worse, or dearer and better at the current exchange rate) leaves reward unchanged to first order, so the only way to gain reward is to push the frontier outward. Set λ too high and the policy learns to give up early; too low and the effort levels collapse into one expensive behaviour.
+
+**What C should measure.** Cognition describes a mix of inference cost in dollars and rollout time. Include wall-clock, because users feel latency even when tokens are cheap, and normalise per task family so a long migration is not punished for being long.
+
+**Failure modes.** The cheapest way to cut cost is to stop early and claim success, so the verifier becomes even more load-bearing; Cognition describes an iterative loop of finding and patching verifier false positives and false negatives. Re-fit λ as the frontier moves during training, and check that the effort levels stay behaviourally distinct.
+
+**Follow-ups:** How would you expose effort levels to customers so they do not all pick the maximum? What changes in the reward if success is graded, such as partial test passes, rather than binary?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -411,14 +429,14 @@ flowchart LR
 **Company-specific moves:**
 
 1. **Rehearse the build day properly.** Do not read about it, do it. Book a full uninterrupted eight hours, pick a real open-source repository you have never touched, and build an agent that closes issues in it. Then do it a second time a week later. The second run is where you learn the real lesson: the win comes from cutting scope early, having a sandbox and a harness skeleton you can reproduce from memory in the first hour, and choosing a verifier before you choose an architecture. Practise the demo too, because you will be asked what you cut and why.
-2. **Read their blog end to end.** It is the best-documented public agent harness there is. Prioritise: Don't Build Multi-Agents, Multi-Agents: What's Actually Working, What We Learned Building Cloud Agents, blockdiff, SWE-grep, SWE-1.5, and their post on evaluating coding agents. Their interview material tracks this material closely.
-3. **Use both products for real work.** Run Devin on an actual task and Windsurf's Cascade in your editor for a week. Come with specific observations about where each one failed and what you would change in the harness. That is a much stronger signal than praise.
+2. **Read their blog end to end.** It is the best-documented public agent harness there is. Prioritise: Don't Build Multi-Agents, Multi-Agents: What's Actually Working, What We Learned Building Cloud Agents, blockdiff, SWE-grep, SWE-1.5, SWE-2 (for the cost-penalised reward), Introducing Devin Desktop & CLI, and their post on evaluating coding agents. Their interview material tracks this material closely.
+3. **Use both surfaces for real work.** Run Devin as a cloud agent on an actual task and use Devin Desktop (formerly Windsurf) in your editor for a week, including handing work between local and cloud agents. Come with specific observations about where each one failed and what you would change in the harness. That is a much stronger signal than praise.
 4. **Have a long-horizon reliability story ready.** Any system you have run for hours that had to recover from partial failure - a data pipeline, a crawler, a job scheduler - transfers directly. Frame it in their language: state, checkpointing, resumption, blast radius.
 5. **For Deployed Engineer roles, prepare the customer half hard.** A 45-minute project presentation to a mixed panel and a timed simulated customer call are reported stages. Practise explaining a deep technical project in business terms to a non-expert, out loud, on a clock.
 
 ## Sources
 
-- [Cognition - Careers](https://cognition.com/careers) (fetched August 2026; role titles above)
+- [Cognition - Careers](https://cognition.com/careers) (role titles fetched August 2026, category counts checked October 2026)
 - [Cognition - Ashby job board](https://jobs.ashbyhq.com/cognition)
 - [Cognition - Blog index](https://cognition.com/blog)
 - [Don't Build Multi-Agents](https://cognition.com/blog/dont-build-multi-agents) (context engineering principles)
@@ -427,6 +445,11 @@ flowchart LR
 - [Blockdiff: How we built our own file format for VM disk snapshots](https://cognition.com/blog/blockdiff)
 - [Introducing SWE-1.5: Our Fast Agent Model](https://cognition.com/blog/swe-1-5) (end-to-end RL in the Cascade harness, reward hardening, Cerebras serving)
 - [SWE-grep and SWE-grep-mini: RL for Multi-Turn, Fast Context Retrieval](https://cognition.com/blog/swe-grep)
+- [SWE-1.7: Frontier Intelligence at a Fraction of the Cost](https://cognition.com/blog/swe-1-7) (July 2026)
+- [SWE-2: Pushing the Pareto Frontier](https://cognition.com/blog/swe-2) (September 2026; cost-penalised RL reward, effort levels)
+- [Introducing Devin Desktop & CLI](https://cognition.com/blog/introducing-devin-desktop) (June 2026; next generation of Windsurf, local and cloud agents, Agent Client Protocol)
+- [Do it all with Devin: Announcing our Series E](https://cognition.com/blog/series-e) (September 2026)
+- [Cognition Crosses $1B in Annualized Revenue Run Rate](https://cognition.com/blog/1b-run-rate) (September 2026)
 - [A review of OpenAI's o1 and how we evaluate coding agents](https://cognition.com/blog/evaluating-coding-agents) (cognition-golden, simulated users, evaluator agents)
 - [Cheeky Pint - Cognition CEO Scott Wu](https://cheekypint.substack.com/p/cognition-ceo-scott-wu-on-acquiring) (the eight-hour build-your-own-Devin quote, hiring philosophy, ex-founder team profile)
 - [techinterview.org - How Cognition hires the engineers behind Devin](https://www.techinterview.org/post/3233476023/cognition-devin-engineering-interview/) (third-party guide; stage shapes marked "reported" above)

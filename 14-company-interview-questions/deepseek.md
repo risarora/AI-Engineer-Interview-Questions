@@ -1,18 +1,19 @@
 # 🐋 DeepSeek - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - Public information on DeepSeek's actual interview loop is **thin**. What is reported (by third-party guides and press, not an official process page) is a short, **hardcore technical loop of roughly 3-4 rounds** weighted heavily toward research depth plus the ability to write correct, efficient code fast.
 - The bar is unusual: they hire **young researchers with strong publication records and near-zero required work experience**, but reject people who can talk about their niche and nothing else. Breadth across the efficient-LLM stack is the differentiator.
-- Expect architecture deep-dives on the things they invented or popularised: **Mixture-of-Experts routing, Multi-head Latent Attention (MLA), auxiliary-loss-free load balancing, multi-token prediction, GRPO for RL reasoning**, and FP8 / kernel-level training-systems efficiency.
+- Expect architecture deep-dives on the things they invented or popularised: **Mixture-of-Experts routing, Multi-head Latent Attention (MLA), auxiliary-loss-free load balancing, multi-token prediction, GRPO for RL reasoning**, FP8 / kernel-level training-systems efficiency, and since V3.2 and V4, **sparse and compressed attention for million-token context**.
+- Hiring scaled up sharply in mid-2026: after a large funding round, DeepSeek publicly said it would at least double headcount across all departments, advertising 33 positions in seven categories (algorithms and full-stack, AI core systems, operations, product, model data strategy, deep learning research, corporate). It is also reported to be staffing an **Agent Harness** team covering context management, memory, subagents and tool use. Expect a high volume of new-graduate hiring and more agent-systems questions than older reports describe (reported, varies).
 - The separator between hire and reject is reportedly the **software-engineering dimension**: can you turn equation 7 of a paper into a correct PyTorch implementation and reason about scaling it across a GPU cluster? Publications alone do not clear the coding bar.
 - Roles and teams are based in **Hangzhou and Beijing**; the company hires in Mandarin and pursues AGI openly, publishing detailed technical reports and open-weight models. Fluency in **their own papers** is the single best-calibrated prep signal.
 
 ## Company context
 
-DeepSeek is a Chinese frontier AI lab funded by the quant hedge fund High-Flyer and led by founder Liang Wenfeng, based in Hangzhou and Beijing. It became globally known for training frontier-class models at a small fraction of the usual cost and releasing them open-weight: the DeepSeek-V2/V3 line (large Mixture-of-Experts models with MLA for KV-cache compression, auxiliary-loss-free load balancing, multi-token prediction, and FP8 training) and DeepSeek-R1 (an open-weight reasoning model trained largely with reinforcement learning, which popularised GRPO). Their public identity is **efficiency**: architecture, kernels, and training-systems choices that squeeze more out of constrained hardware. "AI engineer" here is not a product-integration role - it usually means a research scientist or a systems/infra engineer sitting directly on training runs, inference kernels, and data pipelines, expected to both invent methods and ship the code that makes them run.
+DeepSeek is a Chinese frontier AI lab funded by the quant hedge fund High-Flyer and led by founder Liang Wenfeng, based in Hangzhou and Beijing. It became globally known for training frontier-class models at a small fraction of the usual cost and releasing them open-weight: the DeepSeek-V2/V3 line (large Mixture-of-Experts models with MLA for KV-cache compression, auxiliary-loss-free load balancing, multi-token prediction, and FP8 training) and DeepSeek-R1 (an open-weight reasoning model trained largely with reinforcement learning, which popularised GRPO). V3.2 introduced DeepSeek Sparse Attention, and the V4 family (April 2026) moved to a hybrid compressed-attention design with a native 1M-token context: V4-Pro at 1.6T total / 49B active parameters and V4-Flash at 284B / 13B active, both open-weight. Their public identity is **efficiency**: architecture, kernels, and training-systems choices that squeeze more out of constrained hardware. "AI engineer" here is not a product-integration role - it usually means a research scientist or a systems/infra engineer sitting directly on training runs, inference kernels, and data pipelines, expected to both invent methods and ship the code that makes them run.
 
 ## Roles & titles they hire
 
@@ -23,7 +24,8 @@ DeepSeek recruits primarily through its own site and Chinese job boards (Boss Zh
 - **Data engineers / data researchers** - large-scale data curation, filtering, and synthetic-data pipelines.
 - **Full-stack and front-end engineers** - the app, API, and product surface around the models.
 - **AI product and "AI tutor" / annotation-adjacent roles**, plus internships (LLM research interns are a common entry path).
-- More recent postings emphasise **agentic AI** as the company pushes past chat into tool-using systems (reported in press, 2026).
+- More recent postings emphasise **agentic AI** as the company pushes past chat into tool-using systems (reported in press, 2026), including a reported Agent Harness team for context management, memory, subagents and tool use.
+- The June 2026 hiring drive named server-side development engineers, pre-training data engineers, supercomputing-cluster R&D engineers, and domain data product managers for non-English languages, medicine and law (reported, varies).
 
 Locations cluster in Beijing and Hangzhou. Treat any single title list as approximate: they scale hiring in bursts and postings rotate.
 
@@ -240,11 +242,25 @@ The honest caveats a good candidate adds: the widely cited figure is a *final tr
 
 </details>
 
+### 13. DeepSeek-V4 serves a native 1M-token context. MLA already shrinks the KV cache, so why was it not enough, and how does V4's hybrid compressed attention work?
+
+<details><summary><b>Answer</b></summary>
+
+MLA compresses each token's KV entry, but it still stores one entry per token and every decoded token still attends over all of them. At 1M tokens the problem is the length of the sequence, not the width of each entry: KV memory and per-token attention FLOPs both grow linearly with context. V4 attacks the sequence axis directly, by compressing along it and by attending sparsely.
+
+It interleaves two attention types across layers. **Compressed Sparse Attention (CSA)** pools KV entries into blocks at roughly 4x compression using learned, softmax-gated pooling, then a cheap **lightning indexer** (run in FP4, with ReLU-scored dot products) scores the compressed blocks for each query and keeps only the top-k. **Heavily Compressed Attention (HCA)** compresses about 128x and skips selection entirely: the compressed sequence is short enough that dense attention over it is cheap. Both keep a sliding window of recent uncompressed tokens so local detail is never lost. The indexer idea comes from V3.2's DeepSeek Sparse Attention. DeepSeek reports that at 1M tokens V4-Pro needs about 27% of V3.2's single-token inference FLOPs and about 10% of its KV cache, with most KV stored in FP8.
+
+The trade-offs are what an interviewer will push on. Top-k selection is a hard, non-differentiable choice, so the indexer must be trained to agree with what dense attention would have attended to, and if it misses the block holding the evidence, the model never sees it. Compression blurs exact tokens, which hurts verbatim recall such as quoting an ID from 600K tokens back. Mixing CSA and HCA layers hedges both failure modes. Gathering top-k blocks is irregular memory access, so the win depends on kernels and on paged-KV layouts aligned to compression blocks. Evaluate with long-range retrieval and multi-hop tasks, not perplexity, which barely notices a missed needle.
+
+**Follow-ups:** How would you detect the indexer silently dropping the block a query needed? How does sequence-axis compression interact with prefix caching for agent sessions that keep appending tool output?
+
+</details>
+
 ## How to prepare
 
 Priority order for this repo's topics:
 
-1. **[02-llm-fundamentals](../02-llm-fundamentals/)** - the highest-leverage dir for DeepSeek. Attention variants and MoE are the whole conversation: know MHA/GQA/MLA, KV-cache math, RoPE (and why it complicates MLA), sparse MoE routing, and multi-token prediction well enough to *implement*, not just describe.
+1. **[02-llm-fundamentals](../02-llm-fundamentals/)** - the highest-leverage dir for DeepSeek. Attention variants and MoE are the whole conversation: know MHA/GQA/MLA, KV-cache math, RoPE (and why it complicates MLA), sparse and compressed attention for long context, sparse MoE routing, and multi-token prediction well enough to *implement*, not just describe.
 2. **[08-inference-and-production](../08-inference-and-production/)** - inference economics is their obsession. KV-cache compression, continuous batching, paged attention, prefill/decode disaggregation, quantization (FP8/INT4), speculative decoding, and MoE serving imbalance.
 3. **[05-fine-tuning-and-alignment](../05-fine-tuning-and-alignment/)** - RL for reasoning is a house specialty. GRPO vs PPO, reward design for verifiable tasks, reward hacking, and the SFT-then-RL pipeline behind R1.
 4. **[01-ml-and-dl-foundations](../01-ml-and-dl-foundations/)** and **[12-coding-challenges](../12-coding-challenges/)** - the reported hire/reject line is clean, efficient PyTorch under time pressure. Practise turning paper equations into correct implementations, and drill algorithmic coding too.
@@ -252,7 +268,7 @@ Priority order for this repo's topics:
 
 Company-specific moves:
 
-- **Read the DeepSeek-V3 and DeepSeek-R1 technical reports end to end** (both on arXiv; R1 is also in Nature). They are detailed and readable, and they are the single best-calibrated map of what this team cares about. Being fluent in MLA, DeepSeekMoE, auxiliary-loss-free balancing, MTP, FP8, and GRPO covers a large fraction of the plausible deep-dive.
+- **Read the DeepSeek-V3 and DeepSeek-R1 technical reports end to end** (both on arXiv; R1 is also in Nature), then the **V4 report**, which is the current architecture. They are detailed and readable, and they are the single best-calibrated map of what this team cares about. Being fluent in MLA, DeepSeekMoE, auxiliary-loss-free balancing, MTP, FP8, GRPO, and V4's compressed sparse attention covers a large fraction of the plausible deep-dive.
 - **Read their open-source infra releases** - FlashMLA, DeepEP, DeepGEMM, DualPipe, EPLB, 3FS. Even skimming the READMES teaches you why each component exists, which is the systems half of the interview.
 - **Run an open-weight DeepSeek model locally and inspect the config** - MoE layer counts, expert counts, MLA dimensions. Speaking from the actual config beats book knowledge in a lab that ships the weights.
 - **Prepare a data-curation story.** Have a real answer for filtering synthetic data, verifiable rewards, and avoiding model collapse; it is a distinct competence here.
@@ -267,5 +283,9 @@ Company-specific moves:
 - [DeepSeek AI Researcher interview guide, datainterview.com](https://www.datainterview.com/blog/deepseek-ai-researcher-interview) - third-party guide describing a 3-4 round hardcore technical loop, coding/efficiency emphasis, data-chemistry and system-design topics (unofficial)
 - [SCMP: DeepSeek's LinkedIn AI job listings](https://www.scmp.com/tech/big-tech/article/3316982/deepseeks-linkedin-ai-job-listings-show-hunger-international-chinese-talent) - roles, Hangzhou/Beijing locations, hiring of young talent
 - [Bloomberg: DeepSeek job postings highlight pivot to agentic AI](https://www.bloomberg.com/news/articles/2026-03-24/deepseek-s-latest-job-postings-highlight-pivot-to-agentic-ai) - recent agentic-AI role emphasis (2026)
+- [Hugging Face: DeepSeek-V4, a million-token context that agents can actually use](https://huggingface.co/blog/deepseekv4) - V4-Pro and V4-Flash sizes, CSA/HCA hybrid attention, lightning indexer, KV-cache and FLOP comparisons with V3.2, interleaved thinking across tool calls
+- [Caixin Global: DeepSeek plans major hiring spree after funding round](https://www.caixinglobal.com/2026-06-27/deepseek-plans-major-hiring-spree-after-74-billion-funding-round-102458157.html) - June 2026 plan to at least double headcount
+- [The Star: DeepSeek hiring spree, Chinese AI firm seeks newcomers](https://www.thestar.com.my/aseanplus/aseanplus-news/2026/06/29/deepseek-hiring-spree-chinese-ai-firm-seeks-newcomers-as-it-pursues-agi) - 33 positions in seven categories, Beijing and Hangzhou, emphasis on newcomers
+- [Let's Data Science: DeepSeek recruits Agent Harness team](https://letsdatascience.com/news/deepseek-recruits-harness-team-to-build-agent-products-d4fbc9e1) - Agent Harness team scope (secondary report)
 
 Note: DeepSeek does not publish an official interview-process page, and first-person candidate reports in English are scarce, so the loop section above is explicitly labelled as inference plus third-party report rather than confirmed process.

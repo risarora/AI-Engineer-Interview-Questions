@@ -12,7 +12,7 @@ The business logic here is easy - it is a four-tool CRUD agent over an availabil
 
 | Question | Assumption |
 |---|---|
-| Volume and concurrency? | 60k calls/day, average handle time ~3.2 min; peak ~900 concurrent calls at 18:00-20:00 local, ~4x the daily mean |
+| Volume and concurrency? | 60k calls/day, average handle time ~3.2 min; peak ~900 concurrent calls at 18:00-20:00 local, against a 24-hour mean of ~130 (60k × 3.2 min ÷ 1,440 min), so ~7x the daily mean and ~3-4x the mean over opening hours |
 | Channels? | ~85% PSTN via SIP trunks (G.711 mu-law, 8 kHz), ~15% WebRTC from the mobile app (Opus, 16-48 kHz) |
 | Intent mix? | Booking 45%, modify or cancel 20%, confirm an existing booking 10%, information questions 20%, everything else 5% |
 | What may the agent do autonomously? | Reads and confirmations freely; create, modify and cancel bookings within policy; never takes payment, never overrides a full service, never makes goodwill promises |
@@ -34,7 +34,7 @@ Scoping statement worth making early: containment must be defined as "no transfe
 - Full call artefacts: audio, aligned transcript, per-turn latency waterfall, every tool call, replayable.
 
 ### Non-functional
-- **Scale**: ~900 concurrent calls at peak, ~3.5k call-minutes/minute at peak. Capacity is planned in *concurrent sessions*, not QPS - a ringing phone cannot be queued.
+- **Scale**: ~900 concurrent calls at peak, which is ~900 call-minutes per minute and ~280 new calls arriving per minute (900 ÷ 3.2 min). Capacity is planned in *concurrent sessions*, not QPS - a ringing phone cannot be queued.
 - **Latency**: p50 voice-to-voice < 800 ms, p95 < 1.5 s, barge-in stop-audio latency < 120 ms, no dead air > 1.5 s.
 - **Audio quality**: works at 8 kHz mu-law with 1-2% packet loss and restaurant-level background noise (roughly 10-15 dB SNR).
 - **Correctness**: booking-accuracy error rate < 0.5% on audited calls (right party size, right date, right time, right location, right name spelling).
@@ -124,20 +124,21 @@ Three things fall out of this table that are worth saying out loud in the interv
 
 | | Cascade: ASR -> LLM -> TTS | Native speech-to-speech |
 |---|---|---|
-| Voice-to-voice latency | budgeted above, ~800 ms with hard work | lower, roughly 300 ms class, latency is the whole selling point |
+| Voice-to-voice latency | budgeted above, ~800 ms with hard work | lower, typically a few hundred ms less end to end once network and telephony are included, and latency is the main selling point |
 | Controllability | text in the middle, so deterministic policy checks, redaction and refusal handling are straightforward | harder, guardrails must act on audio or on model-emitted events |
 | Observability and audit | free: the transcript *is* the log, and it is what compliance wants | you must transcribe your own model output to log it, and the transcript is a reconstruction |
-| Tool calling | mature, same schemas and retry semantics as any text agent | improving but thinner, fewer patterns for long or failing tool calls |
+| Tool calling | mature, same schemas and retry semantics as any text agent | supported by the major realtime APIs and improving quickly, but with fewer proven patterns for long or failing tool calls and fewer places to put a deterministic policy check between steps |
 | Prosody and paralinguistics | lost at the ASR boundary, agent cannot hear frustration or hesitation | preserved, hears tone, can match energy, sounds markedly more human |
 | Vendor risk | mix and match, swap any stage independently | one vendor owns the whole turn |
-| Cost model | per audio-minute for ASR and per character for TTS, plus text tokens | per minute of audio in and out, not comparable line for line |
+| Cost model | per audio-minute for ASR and per character for TTS, plus text tokens | per audio token in and out (effectively per second of audio), with the growing conversation context re-processed each turn unless cached, so not comparable line for line |
 | Eval tooling | reuse text evals for the dialogue policy, add audio evals around it | evals must be audio-first end to end |
 
-**Decision: cascade for v1.** This agent moves real state - a booking is a promise to a customer and a held table for the restaurant - so the auditable text boundary and deterministic policy layer are worth more than the extra 300 ms of prosody. Say the reversal condition explicitly: if the eval suite shows the caller-experience metrics (abandonment, interruption rate, satisfaction) are bounded by *how the agent sounds* rather than *what it does*, then a hybrid becomes worth the complexity, with speech-to-speech on the open-ended segments and the cascade on transactional ones. The reason that hybrid is a v2 and not a v1 is not model quality, it is that two dialogue engines have to agree on state and share one voice identity mid-call.
+**Decision: cascade for v1.** This agent moves real state - a booking is a promise to a customer and a held table for the restaurant - so the auditable text boundary and deterministic policy layer are worth more than the latency and prosody gains. Say the reversal condition explicitly: if the eval suite shows the caller-experience metrics (abandonment, interruption rate, satisfaction) are bounded by *how the agent sounds* rather than *what it does*, then a hybrid becomes worth the complexity, with speech-to-speech on the open-ended segments and the cascade on transactional ones. The reason that hybrid is a v2 and not a v1 is not model quality, it is that two dialogue engines have to agree on state and share one voice identity mid-call.
 
 ### Turn taking
 
 - **Barge-in with echo cancellation.** VAD runs continuously on the inbound line even while TTS plays. On PSTN the agent's own audio leaks back through the carrier and through the caller's speakerphone, so acoustic echo cancellation at the media gateway is a precondition, not a nicety - without it the agent interrupts itself. Require energy above the noise floor for a minimum duration (roughly 120-200 ms) before firing, so a cough or a "mm-hmm" backchannel does not stop the agent mid-sentence.
+
 Endpointing tuned as a product decision, in code. Note that the threshold is a function of dialogue state and of the partial text, not a constant:
 
 ```python
@@ -187,8 +188,8 @@ The prompt asks for these constraints; the post-processor enforces them, because
 
 ```python
 def speech_safe(text: str) -> str:
-    if URL_RE.search(text) or EMAIL_RE.search(text):
-        text = URL_RE.sub("a link I can text you", text)
+    text = URL_RE.sub("a link I can text you", text)
+    text = EMAIL_RE.sub("an address I can text you", text)
     text = strip_markdown(text)              # bullets, bold, headings, tables
     text = spoken_form(text)                 # 7:30 PM -> seven thirty, 4 -> four
     text = lexicon.apply(text)               # brand and dish pronunciations
@@ -221,7 +222,7 @@ def may_mutate(booking, caller) -> Decision:
 ### Telephony realities
 
 - **8 kHz narrowband is the default case, not the edge case.** G.711 mu-law over PSTN throws away everything above 4 kHz, which is exactly where the fricatives that distinguish "s" from "f" live. Run ASR models tuned for telephony, and hold two configurations: narrowband for SIP and wideband for the WebRTC app path. Every eval set must include real 8 kHz audio, because WER measured on studio-quality 16 kHz audio is a fiction that will not survive launch.
-- **DTMF is a first-class input.** Accept RFC 2833 keypad events throughout, not just in an escape menu. It is the reliable channel when the caller is in a car, a bar, or a language the ASR handles poorly, and it is mandatory if card capture is ever added, with recording paused during entry.
+- **DTMF is a first-class input.** Accept RFC 4733 telephone-events (the successor to RFC 2833, which many SIP stacks still name it after) and in-band tones throughout, not just in an escape menu. It is the reliable channel when the caller is in a car, a bar, or a language the ASR handles poorly, and it is mandatory if card capture is ever added, with recording paused during entry.
 - **Warm transfer carries context.** Trigger on caller request (always honoured, first ask, no retention loop), policy escalation (large parties, disputes, anything about an allergy incident), repeated ASR failure (two failed confirmations of the same field), and loop detection. Transfer via SIP REFER, with a structured summary pushed to the agent desktop before the call lands: caller identity, intent, what was already collected, what failed, and the transcript. Post-transfer handle time is the metric that proves the handoff was warm rather than nominal.
 - **Failure modes unique to voice.** One-way audio from NAT or SIP misconfiguration is the classic: the call connects, neither side hears anything, and every application-level health check reports green. Detect it with an inbound-RTP watchdog per call - zero inbound packets or pure silence for several seconds means tear down and reroute, not wait. Similarly, callers who say nothing (pocket dials, hold music from another IVR) get two reprompts and a polite disconnect.
 
@@ -285,7 +286,7 @@ Voice is priced per minute of call, not per token, and per-minute thinking chang
 
 Compare against a human: at roughly $28/hour fully loaded, a 3.2-minute call plus one minute of wrap-up is about **$1.95**, so roughly 15x. Note where the money actually is: ASR and TTS together are more than half the bill, and both bill on *wall-clock audio*, so the biggest cost lever is not token efficiency, it is **talking less and ending calls sooner**. Shortening the agent's turns from three sentences to two cuts TTS spend and improves the product at the same time, which is a rare alignment worth pointing out.
 
-Two further notes for the interview. First, ASR runs continuously for the whole call while the LLM only runs on turns, which is why per-minute and per-token accounting give completely different pictures of the same system. Second, a native speech-to-speech model bills per minute of audio in *and* out rather than per text token, so its price sheet is not comparable line by line with the cascade - convert both to cost per call-minute at current list prices before letting cost decide the architecture.
+Two further notes for the interview. First, ASR runs continuously for the whole call while the LLM only runs on turns, which is why per-minute and per-token accounting give completely different pictures of the same system. Second, a native speech-to-speech model bills audio tokens in *and* out, which track seconds of audio rather than words, and each turn typically re-processes the accumulated conversation, so per-minute cost rises as the call gets longer unless the provider caches that context. Its price sheet is not comparable line by line with the cascade - convert both to cost per call-minute at current list prices, on your real call-length distribution, before letting cost decide the architecture.
 
 ## Failure modes & mitigations
 
@@ -319,7 +320,8 @@ Two further notes for the interview. First, ASR runs continuously for the whole 
 - *"You have a 300 ms latency-reduction budget. Where do you spend it?"* (Endpointing first, because it is the largest line and the cheapest to change - state-dependent thresholds plus a semantic hold. Then LLM TTFT via a smaller turn-level model and prefix caching. Then co-location to kill cross-region hops. Model swaps are the last resort because they cost quality; the first two cost only tuning.)
 - *"How do you regression-test barge-in?"* (Scripted audio fixtures that inject caller speech at fixed offsets into the agent's playback, run against the real media path. Assert stop-audio latency, that generation was actually cancelled, and that the recorded assistant turn equals the spoken prefix. Plus a false-barge-in set of coughs, backchannels and TV noise. It is a fixture suite, not a manual test, or it will silently rot.)
 - *"The agent booked Tuesday when the caller said Thursday. Walk me through the fix."* (Confirm the failure is ASR, not policy, by checking the transcript against the audio. If ASR: entity biasing on weekday terms, and force phonetic or numeric readback for dates. If policy: the model accepted a low-confidence entity without confirmation, so gate irreversible fields on a confidence threshold with mandatory readback. Then add the case to the WER-conditioned suite so it stays fixed.)
-- *"Why not native speech-to-speech, given it is faster?"* (Text in the middle buys deterministic policy checks, a transcript that satisfies audit, mature tool calling, and vendor independence per stage - all of which matter more than 300 ms when the agent creates real bookings. I would revisit when caller-experience metrics show prosody is the bottleneck, and I would hybridise rather than switch wholesale.)
+- *"Why not native speech-to-speech, given it is faster?"* (Text in the middle buys deterministic policy checks, a transcript that satisfies audit, mature tool calling, and vendor independence per stage - all of which matter more than a few hundred ms when the agent creates real bookings. I would revisit when caller-experience metrics show prosody is the bottleneck, and I would hybridise rather than switch wholesale.)
 - *"Peak is 900 concurrent calls and you are at capacity. What happens?"* (No queue for a ringing phone, so the choice is made in advance: overflow routes to the legacy tree or a callback offer, and the agent sheds the lowest-value intent first. Never let calls degrade into long silence, which is what an over-subscribed media node produces.)
 - *"What is different about the Spanish launch beyond a translated prompt?"* (A separate ASR model and biasing lists, a separate voice and pronunciation lexicon, different endpointing tuning because speaking rate and pause patterns differ, spoken-form normalisation for numbers and dates, and a full parallel eval suite with native-speaker synthetic callers. Quality is never uniform across languages, so the launch gate is per language.)
 - *"How would you cut cost per call-minute by half?"* (Shorten agent turns, which cuts TTS characters and call duration together. Then end calls faster with better dialogue design. Then consider self-hosting ASR at this volume, since it bills continuously and is the largest line. Token-level optimisation is last, because tokens are already the smallest line item.)
+- *"A growing share of your callers are other AI agents, or synthetic voices. What changes?"* (Consumer assistants now place calls on a user's behalf, and cloned voices are cheap, so treat voice as carrying no identity at all: the second-factor rule for mutations already assumes this, and voice biometrics stay off the table. Add per-ANI and per-name booking limits so an automated caller cannot hoard prime tables, watch for machine-speed turn patterns, and keep disclosing at call start that the agent is automated. The better long-term answer is to give agent callers a structured channel, a booking API or tool endpoint with the same policy layer behind it, so they never need to speak to a voice agent at all.)

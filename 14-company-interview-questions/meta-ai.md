@@ -1,11 +1,11 @@
 # 🦙 Meta (Superintelligence Labs & product AI) - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - The loop is the classic standardised Meta big-tech loop adapted for ML: recruiter screen → 45-min coding screen → full loop of up to six 45-min rounds (coding ×2, ML system design, sometimes infra system design, behavioural).
-- **Meta now runs an AI-enabled coding round** (rolled out October 2025): ~60 minutes in a CoderPad-style environment with an LLM assistant (GPT, Claude, Gemini, Llama models available). You're graded on how well you *direct and verify* AI, not on typing speed.
+- **Meta now runs an AI-enabled coding round** (piloted from October 2025 and reportedly expanded through 2026 across SWE and engineering-management loops up to E7/M2, typically paired with one classic AI-free coding round - reported, varies): ~60 minutes in a CoderPad-style environment with an LLM assistant (GPT, Claude, Gemini, Llama models available). You're graded on how well you *direct and verify* AI, not on typing speed.
 - Candidates consistently report the in-round assistant is **less helpful than in practice environments** (it reportedly will not just point at the bug), so your prompting strategy matters: guide it with your own approach and hypotheses rather than asking for wholesale solutions.
 - The coding bar for ML/AI roles is close to a pure SWE loop - Meta expects AI engineers to be strong software engineers first. Don't skimp on data structures and algorithms.
 - ML system design is where offers are won at E5+: end-to-end pipelines, ranking/recsys framing, metrics tied to business outcomes (engagement, revenue, integrity coverage) - not academic ML answers.
@@ -13,7 +13,7 @@
 
 ## Company context
 
-Meta consolidated its AI efforts in mid-2025 into **Meta Superintelligence Labs (MSL)** - comprising TBD Lab (frontier Llama-family model training), FAIR (research), Products and Applied Research, and MSL Infra - alongside the huge existing surface of product ML: ads ranking, Reels/Feed recommendations, integrity, and the Meta AI assistant. "AI engineer" at Meta usually means Machine Learning Engineer or Research Engineer: a strong software engineer who ships models into systems serving billions of users. Engineers want in for frontier-scale training runs, open-weight model impact (Llama), and arguably the largest recsys/ads ML deployment in the industry.
+Meta consolidated its AI efforts in mid-2025 into **Meta Superintelligence Labs (MSL)** - comprising TBD Lab (frontier model training), FAIR (research), Products and Applied Research, and MSL Infra - alongside the huge existing surface of product ML: ads ranking, Reels/Feed recommendations, integrity, and the Meta AI assistant. MSL's first public model, **Muse Spark** (April 2026), is a multimodal reasoning model that launched closed: it powers Meta AI across the app, WhatsApp, Instagram, Facebook, Messenger, and Ray-Ban glasses, with API access limited to a partner preview, while Meta says open-weight versions of future models are still planned. That is a real break from the open-weight Llama releases, and a candidate who talks about Meta only as an open-weights lab will sound out of date. "AI engineer" at Meta usually means Machine Learning Engineer or Research Engineer: a strong software engineer who ships models into systems serving billions of users. Engineers want in for frontier-scale training runs, the reach of shipping one model across Meta's apps and devices, the open-weight legacy of Llama, and arguably the largest recsys/ads ML deployment in the industry.
 
 ## Roles & titles they hire
 
@@ -276,6 +276,39 @@ Meta-specific calibration: quantify everything (metrics moved, weeks saved, team
 
 </details>
 
+### 13. One reasoning model now serves Meta AI across WhatsApp, Instagram, Facebook, and smart glasses. How would you cut reasoning tokens per query at that scale without losing accuracy?
+
+<details><summary><b>Answer</b></summary>
+
+Treat thinking tokens as a budget allocated per query, not a fixed habit. Most assistant traffic does not need long reasoning, so the wins come in three places: deciding whether to think, making thinking shorter when you do, and proving the hard tail did not regress. Meta pitched its April 2026 MSL model partly on reasoning efficiency, so expect this framing.
+
+**Route before reasoning.** A cheap classifier, or a learned first decision by the model itself, picks no-think, short, or long budget per query. Label training data offline: run queries with and without extended reasoning and mark the ones where reasoning changed the correct answer. Each surface sets a ceiling, because a spoken reply on glasses has a far tighter latency budget than a chat reply.
+
+**Train for concision.** In RL, combine the correctness reward with a penalty on tokens beyond a target budget, or score each sample against the shortest correct answer in its group, which GRPO-style group sampling makes cheap. Separately, distil: sample many traces, keep the shortest correct one, and fine-tune on those.
+
+**Control at inference.** Hard caps that force an answer once the budget is spent, and early exit when intermediate answers stop changing.
+
+**Measure the right thing.** Plot accuracy against tokens per category and compare Pareto curves, not mean token counts. Hold out hard slices, such as multi-step maths and tool use, because averages hide underthinking. Track p95 latency and serving cost per surface.
+
+**Risks to name.** A length penalty can teach the model to guess on hard problems instead of reasoning. Truncated traces can still score well on easy evals. And shorter, compressed reasoning is less legible to the safety monitors that read it, so check monitor recall did not drop.
+
+**Worth sketching.** The flow shows budget decided before generation, with the eval loop feeding back into the router.
+
+```mermaid
+flowchart TD
+    A["Query plus surface"] --> B{"Router: needs<br/>reasoning?"}
+    B -->|"no"| C["Direct answer"]
+    B -->|"yes"| D["Budgeted reasoning,<br/>surface ceiling"]
+    D --> E["Answer"]
+    C --> F["Pareto eval:<br/>accuracy vs tokens"]
+    E --> F
+    F -->|"hard-slice regression"| B
+```
+
+**Follow-ups:** Your length penalty cut tokens sharply and the aggregate eval is flat, but complaints on hard queries rise. How do you find the regression? How would you set the budget for a voice reply on glasses versus a chat reply?
+
+</details>
+
 ## How to prepare
 
 Mapped to this repo:
@@ -293,7 +326,7 @@ Company-specific moves:
 1. **Practice the AI-enabled round for real.** Recruiters reportedly provide CoderPad practice access - use it. Separately, practice fixing bugs in unfamiliar repos with an LLM in chat-only mode (no autocomplete, no file edits), narrating aloud. The bottleneck is reading unfamiliar code fast, not prompting.
 2. **Drill two-problems-in-45-minutes pacing** on Meta-tagged problem lists - the volume-and-speed bar is the most commonly reported failure mode.
 3. **Read Meta's official prep page** ([metacareers.com/ML-prep-onsite](https://www.metacareers.com/ML-prep-onsite/)) and download their MLE loop PDF - it's rare for a company to publish its own rubric; use it as ground truth over any third-party guide, including this one.
-4. **Read the Llama papers and Meta AI engineering blog posts** on Llama 3/4 training and infrastructure - training-reliability and architecture questions (Q4, Q9) map directly to what Meta has published.
+4. **Read the Llama papers and Meta AI engineering blog posts** on Llama 3/4 training and infrastructure - training-reliability and architecture questions (Q4, Q9) map directly to what Meta has published. Then read the April 2026 Muse Spark launch coverage for where MSL is heading: closed first, reasoning efficiency, and deployment across every Meta surface (Q13).
 5. **Use Meta AI and Reels seriously for a week** and form opinions with metrics attached: what would you measure, what's broken, what would you ship first? "Business acumen" is an explicit evaluation axis in their ML loops.
 
 ## Sources
@@ -301,6 +334,8 @@ Company-specific moves:
 - [Meta Careers - Preparing for Your Full Loop Interview (ML)](https://www.metacareers.com/ML-prep-onsite/) (official)
 - [Meta Careers - AI teams page](https://www.metacareers.com/teams/technology/ai/) (official)
 - [Hello Interview - Meta's AI-Enabled Coding Interview](https://www.hellointerview.com/blog/meta-ai-enabled-coding)
+- [PracHub - Meta's AI-Enabled Coding Interview: What to Expect in 2026](https://prachub.com/resources/meta-ai-coding-interview) (third-party; 2026 expansion up to E7/M2, one classic plus one AI-enabled round)
+- [Fortune - Meta unveils Muse Spark](https://www.fortune.com/2026/04/08/meta-unveils-muse-spark-mark-zuckerberg-ai-push) (April 2026; first MSL model, launched closed inside Meta products)
 - [Exponent - Meta Machine Learning Engineer Interview Guide](https://www.tryexponent.com/guides/meta-machine-learning-engineer-interview)
 - [interviewing.io - How to use AI in Meta's AI-assisted coding interview](https://interviewing.io/blog/how-to-use-ai-in-meta-s-ai-assisted-coding-interview-with-real-prompts-and-examples)
 - [IGotAnOffer - Meta Machine Learning Engineer Interview](https://igotanoffer.com/blogs/tech/facebook-machine-learning-engineer-interview)

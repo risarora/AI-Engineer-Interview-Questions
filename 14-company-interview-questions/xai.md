@@ -1,22 +1,23 @@
 # 🛰️ xAI - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
-- Short, fast, almost entirely technical loop: initial engineer call → live coding screen → (for some roles) a time-boxed take-home → in-person onsite → hiring-manager close. Publicly reported end-to-end time: ~2-3 weeks, sometimes faster.
+- Short, fast, almost entirely technical loop: initial engineer call → live coding screen → (for some roles) a time-boxed take-home → in-person onsite → hiring-manager close. Earlier reports put end-to-end time at ~2-3 weeks; a 2026 prep-site writeup puts it at 3-6 weeks with 4-6 onsite rounds (reported, varies).
 - Coding rounds are **practical object-oriented building, not LeetCode patterns**: key-value stores with transactions, LRU caches, iterators - then the interviewer layers on requirement changes to test whether your design absorbs them. Working, bug-free code is weighted over asymptotically-optimal-but-broken code.
 - A distinctive **codebase-reading component** shows up in reports: you're handed a partially implemented (sometimes LLM-related) codebase and asked to complete functions without a full spec.
 - System design skews toward **their scale**: inference batching, rate limiting for LLM APIs, and training/serving infrastructure reasoning shaped by the Colossus GPU buildout.
 - There is **no dedicated behavioural, values, or ethics round** per multiple public reports - a sharp contrast with Anthropic/OpenAI. The real culture filter is pace: in-person, intense, ship-fast. Public info on the loop is thinner and noisier than for other frontier labs; expect variation by team.
+- **2026 context.** xAI merged into SpaceX in February 2026 and rebranded as SpaceXAI in July 2026; Grok kept its name. In March 2026 Musk said xAI was being "rebuilt from the foundations up" and that he and talent lead Baris Akis were going back through interview history to re-contact declined candidates. A 2026 prep-site writeup describes coding rounds as generally AI-permissive, with fundamentals still checked (reported, varies). Ask your recruiter which entity, team and tool policy apply to your loop.
 
 ## Company context
 
-xAI builds Grok - a frontier LLM family served in the Grok apps, integrated into X, and available via API - and trains it on Colossus, its self-built GPU supercluster in Memphis (publicly described at 100K+ GPUs with stated plans to scale much further). Engineers join for the compute scale, the tiny-team-huge-blast-radius structure, and the speed of shipping. "AI engineer" at xAI means someone who can operate close to the metal - inference systems, training infrastructure, data pipelines, agent products - rather than someone who only orchestrates model APIs.
+xAI (operating as SpaceXAI since July 2026, after its February 2026 all-stock merger with SpaceX) builds Grok - a frontier LLM family served in the Grok apps, integrated into X, and available via API - and trains it on Colossus, its self-built GPU supercluster in Memphis (publicly described at 100K+ GPUs with stated plans to scale much further). Engineers join for the compute scale, the tiny-team-huge-blast-radius structure, and the speed of shipping. "AI engineer" at xAI means someone who can operate close to the metal - inference systems, training infrastructure, data pipelines, agent products - rather than someone who only orchestrates model APIs.
 
 ## Roles & titles they hire
 
-- **Member of Technical Staff** - the dominant title, usually with a team-specific suffix. Real examples from their public Greenhouse board: "Member of Technical Staff - Coding Agents, Post Training - RL, Evals" and "Member of Technical Staff - Coding Agents, Product".
+- **Member of Technical Staff** - the dominant title, usually with a team-specific suffix. Real examples from their public Greenhouse board: "Member of Technical Staff - Coding Agents, Post Training - RL, Evals" and "Member of Technical Staff - Coding Agents, Product". The coding-agents push was reinforced in March 2026 by reported hires of two former Cursor product engineering leaders.
 - **Member of Technical Staff (New Grad Software Engineer)** - the new-grad entry point.
 - **AI Engineer & Researcher** (historically posted with Fullstack / Backend variants on x.ai/careers) - their early canonical title; the dual "engineer & researcher" framing is deliberate.
 - Software engineers, ML/infrastructure engineers, and safety engineers across inference, training, data, and product teams; non-engineering "AI Tutor" (data/annotation) roles are hired separately and follow a different process.
@@ -30,7 +31,7 @@ Public information on xAI's loop is **thinner and less consistent than for OpenA
 |---|---|---|
 | Application + Exceptional Work Statement | Written | Evidence of exceptional output; concrete, quantified impact |
 | Initial engineer call | 15-30 min, virtual, with an engineer (not just a recruiter) | Background, motivation, technical interests; your work statement may come up |
-| Technical phone screen | ~60 min live coding (CoderPad-style) | Practical coding; completeness and bug-free execution over cleverness |
+| Technical phone screen | ~60 min live coding (CoderPad-style) | Practical coding; completeness and bug-free execution over cleverness. AI tools reportedly allowed in some coding rounds, with fundamentals still probed (reported, varies) |
 | Take-home project | ~4-hour time-boxed build - ship a small working product, often using AI tools | Shipping speed, scoping judgment, code quality under time pressure (reported, varies by role - some loops skip it) |
 | Onsite (in person, Bay Area) | 2-5 rounds: coding with layered extensions, codebase reading/completion, system design | OOD under changing requirements, reading unfamiliar production-style code, infra design at scale (round count varies by report) |
 | Project deep-dive | ~20 min presentation on your hardest technical problem + adversarial Q&A | Depth, ownership, tradeoff honesty, numbers (reported, varies) |
@@ -330,3 +331,6 @@ Company-specific moves:
 - [x.ai/careers](https://x.ai/careers) - official careers page (blocked automated fetch; consulted via search excerpts)
 - [xAI's public Greenhouse job board](https://job-boards.greenhouse.io/xai) - source of the Member of Technical Staff posting titles cited above
 - [Glassdoor - xAI interview experiences](https://www.glassdoor.com/Interview/xAI-Interview-Questions-E10404667.htm) - aggregated candidate reports (surfaced via search; individual reports unverified)
+- [techinterview.org - xAI Interview Process 2026](https://www.techinterview.org/post/3233474930/xai-interview-process-2026/) - 3-6 week timeline, 4-6 round loop, AI-permissive coding rounds (prep-site writeup, consulted October 2026)
+- [Gizmodo - xAI rebrands as SpaceXAI](https://gizmodo.com/xai-is-dead-long-live-spacexai-2000782034) - July 2026 rebrand following the February 2026 SpaceX merger
+- [Yahoo Finance - Musk admits xAI passed on promising candidates, launches hiring review](https://finance.yahoo.com/news/elon-musk-admits-xai-passing-120627338.html) - March 2026 hiring review, rebuild, Cursor hires

@@ -25,20 +25,25 @@ INTERVIEW NOTES
 A strong solution: subtracts the row max in softmax and explains WHY it is
 exact (softmax is shift-invariant: exp(x-c)/sum(exp(x-c)) == softmax(x));
 puts eps INSIDE the sqrt; uses the biased variance (ddof=0); knows RMSNorm
-drops mean-centering because re-centering empirically adds little while the
-mean reduction costs an extra pass - one reason Llama/Mistral/Qwen use it.
+drops mean-centring because re-centring empirically adds little while the
+mean reduction costs an extra pass - one reason Llama, Mistral, Qwen and
+most current open-weight LLMs use it.
 
 Common mistakes: eps outside the sqrt (subtly different, breaks checkpoint
 parity); normalizing over the wrong axis (batch instead of features - that's
-BatchNorm, and it breaks autoregressive inference since batch statistics
-leak across examples); log(softmax(x)) instead of a fused log-softmax;
-forgetting gamma/beta entirely.
+BatchNorm: outputs then depend on what else is in the batch, and in a causal
+LM, statistics over the batch and time axes leak future tokens during
+training); log(softmax(x)) instead of a fused log-softmax; forgetting
+gamma/beta entirely.
 
 Follow-up variations: pre-norm vs post-norm transformer blocks (pre-norm
-trains stably without warmup; post-norm was the original and is harder to
-train deep); why the final layer still needs a norm before the LM head;
-QK-norm to tame attention logit growth; where float16 overflows first and
-why norms usually run in float32 even in mixed-precision training.
+keeps a clean residual path and tolerates little or no warmup; post-norm was
+the original and is harder to train deep); why a pre-norm stack needs a
+final norm before the LM head (the residual stream itself is never
+normalized); QK-norm to tame attention logit growth; norms placed after the
+sublayer as well as, or instead of, before it in some recent open models;
+where float16 overflows first and why norms usually run in float32 even in
+mixed-precision training.
 """
 from __future__ import annotations
 
@@ -109,12 +114,17 @@ if __name__ == "__main__":
     assert np.allclose(y2, 2 * y + 3)
     # invariant to per-row shift and positive scale of the input
     assert np.allclose(layer_norm(4.0 * x + 7.0, ones, zeros), y, atol=1e-6)
+    # hand-computed: [1, 2, 3] has mean 2 and BIASED var 2/3, so the output is
+    # [-sqrt(1.5), 0, sqrt(1.5)]. Unbiased var (1.0) would give [-1, 0, 1].
+    ln3 = layer_norm(np.array([1.0, 2.0, 3.0]), np.ones(3), np.zeros(3), eps=0.0)
+    assert np.allclose(ln3, [-np.sqrt(1.5), 0.0, np.sqrt(1.5)])
 
-    # --- rms_norm: formula, scale-invariance, and NO shift-invariance ---
+    # --- rms_norm: hand-computed value, scale-invariance, NO shift-invariance ---
+    # [2, -2, 2, -2] has mean(x^2) = 4, rms = 2; gamma then scales per feature.
+    r4 = rms_norm(np.array([2.0, -2.0, 2.0, -2.0]), np.array([1.0, 2.0, 3.0, 4.0]), eps=0.0)
+    assert np.allclose(r4, [1.0, -2.0, 3.0, -4.0])
     g = np.ones(d)
     r = rms_norm(x, g)
-    manual = x / np.sqrt(np.mean(x**2, axis=-1, keepdims=True) + 1e-6)
-    assert np.allclose(r, manual)
     assert np.allclose(np.sqrt(np.mean(r**2, axis=-1)), 1.0, atol=1e-3)
     assert np.allclose(rms_norm(5.0 * x, g), r, atol=1e-6)      # scale-invariant
     assert not np.allclose(rms_norm(x + 10.0, g), r, atol=1e-2)  # shift matters

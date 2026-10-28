@@ -1,6 +1,6 @@
 # ML & Deep Learning Foundations - Interview Questions
 
-50 questions: 14 basic, 21 intermediate, 15 advanced.
+55 questions: 15 basic, 23 intermediate, 17 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -263,7 +263,7 @@ Mapping the modern LLM pipeline is the real point of the question:
 
 - **Pretraining** - self-supervised. Next-token prediction turns raw text into trillions of (context, next-token) pairs; the "label" is just the following token. Masked-language modeling (BERT) is the same idea with a different pretext task.
 - **SFT / instruction tuning** - plain supervised learning: curated (prompt, response) pairs, cross-entropy on the response tokens.
-- **Preference tuning (RLHF, or GRPO-style RL on rewards)** - reinforcement learning: the signal is a scalar reward (from a learned reward model, human preferences, or verifiable checkers for math/code), not per-token labels. DPO is the interesting edge case: it optimises a preference objective directly as a supervised-style loss on preference pairs, skipping the explicit RL loop.
+- **RL post-training (RLHF on preferences, or GRPO-style RL on verifiable rewards)** - reinforcement learning: the signal is a scalar reward (from a learned reward model, human preferences, or verifiable checkers for math/code), not per-token labels. DPO is the interesting edge case: it optimises a preference objective directly as a supervised-style loss on preference pairs, skipping the explicit RL loop.
 - **Embedding models / CLIP** - self-supervised contrastive learning: positives are co-occurring pairs (text/image, query/passage), negatives come free from the batch.
 - Genuinely **unsupervised** steps still exist around the edges: clustering user queries to discover intents, deduplicating pretraining corpora via near-duplicate detection.
 
@@ -290,7 +290,7 @@ flowchart LR
 
 They sit on opposite sides of the bias-variance lever. **Random forest** is bagging: train many deep trees in parallel, each on a bootstrap sample and each split considering a random feature subset, then average. Deep trees are low-bias and high-variance; averaging decorrelated trees kills the variance. Adding trees never hurts, so it is hard to overfit by tuning.
 
-**Gradient boosting** is sequential: each shallow tree fits the gradient of the loss with respect to the current ensemble's predictions, so every round reduces bias. It usually wins on accuracy, but it will overfit if you keep adding rounds, so learning rate, depth, subsample and early stopping actually matter. In practice that means LightGBM, XGBoost or CatBoost with a validation set wired into early stopping.
+**Gradient boosting** is sequential: each shallow tree fits the negative gradient of the loss with respect to the current ensemble's predictions (for squared error, literally the residuals), so every round reduces bias. It usually wins on accuracy, but it will overfit if you keep adding rounds, so learning rate, depth, subsample and early stopping actually matter. In practice that means LightGBM, XGBoost or CatBoost with a validation set wired into early stopping.
 
 Why trees beat MLPs on tabular:
 
@@ -300,7 +300,7 @@ Why trees beat MLPs on tabular:
 - **Mixed types and missing values** handled natively, plus categorical handling in CatBoost/LightGBM.
 - **Small data.** Most tabular datasets are thousands to millions of rows, where inductive bias matters more than capacity.
 
-Neural nets win when there is structure to exploit: high-cardinality entities you want shared embeddings for, multi-modal input (free text or images beside the table), or transfer from a pretrained model. The honest default in 2026 is still: LightGBM baseline first, and make anything fancier beat it.
+Neural nets win when there is structure to exploit: high-cardinality entities you want shared embeddings for, multi-modal input (free text or images beside the table), or transfer from a pretrained model. The honest default in 2026 is still: LightGBM baseline first, and make anything fancier beat it. The one real crack is small data: tabular foundation models such as TabPFN v2 do in-context prediction on tables up to roughly ten thousand rows and are competitive with tuned GBDTs there, so they belong in the baseline set for small problems. At scale, boosted trees still dominate.
 
 Common misconception to avoid: saying random forest "boosts", or quoting `n_estimators=1000` for GBDT with no early stopping.
 
@@ -389,9 +389,28 @@ What interviewers are actually testing is judgement about which regime you are i
 
 </details>
 
+### 15. Why does a neural network need non-linear activation functions, and how did the field move from sigmoid to ReLU to GELU-style activations?
+
+<details><summary><b>Answer</b></summary>
+
+Without a non-linearity, stacking layers buys nothing: W₂(W₁x + b₁) + b₂ is still one affine map, so a 100-layer network has the expressive power of a single linear layer. The activation is what lets depth compose simple features into functions that are not linear in the input, and it is what the universal approximation results rely on.
+
+The history since then is a story about gradients:
+
+- **Sigmoid and tanh** were the defaults through the 2000s. Both saturate: for large |z| the derivative goes to zero, and sigmoid's maximum derivative is only 0.25, so gradients shrink with every layer. Sigmoid is also not zero-centred, which makes updates zig-zag. Both survive today as gates (LSTM, GLU variants) and as output layers, where squashing into a range is the point.
+- **ReLU**, max(0, z), made deep supervised training practical in the AlexNet era. Its derivative is exactly 1 on the active side, it is cheap, and it gives sparse activations. Its failure mode is **dead units**: a neuron whose pre-activation is negative for every input gets zero gradient forever, often after a too-high learning rate knocks its bias negative. Leaky ReLU and PReLU keep a small negative slope to avoid that.
+- **GELU** (z·Φ(z)) and **SiLU/Swish** (z·σ(z)) are smooth ReLU-like curves with a small negative dip. Smoothness tends to optimise better at scale, which is why BERT and GPT-2 used GELU.
+- **Gated variants** (SwiGLU, GeGLU) multiply two linear projections, one passed through the activation, and are the standard choice in current LLM feed-forward blocks.
+
+What an interviewer listens for: the linear-collapse argument stated crisply, saturation tied to vanishing gradients, and the link to initialization (He init assumes ReLU zeroes half its inputs). For a new MLP on tabular or embedding inputs, ReLU or GELU is fine. The choice rarely matters as much as normalization, init and learning rate.
+
+**Follow-ups:** How would you detect dead ReLUs in a trained network? Why does SwiGLU usually use a hidden size of about 8/3 × d instead of 4 × d? Why is sigmoid still the right output for a multi-label classifier?
+
+</details>
+
 ## Intermediate
 
-### 15. What is data leakage? Give me three subtle examples you've seen or could imagine, and how you'd detect them.
+### 16. What is data leakage? Give me three subtle examples you've seen or could imagine, and how you'd detect them.
 
 <details><summary><b>Answer</b></summary>
 
@@ -424,7 +443,7 @@ flowchart TD
 
 </details>
 
-### 16. ROC-AUC vs PR-AUC - what does each measure, and why does ROC-AUC look deceptively good on imbalanced data?
+### 17. ROC-AUC vs PR-AUC - what does each measure, and why does ROC-AUC look deceptively good on imbalanced data?
 
 <details><summary><b>Answer</b></summary>
 
@@ -442,7 +461,7 @@ Two caveats that signal depth: PR-AUC depends on prevalence, so you can't compar
 
 </details>
 
-### 17. What does it mean for a classifier to be calibrated? How do you measure and fix miscalibration?
+### 18. What does it mean for a classifier to be calibrated? How do you measure and fix miscalibration?
 
 <details><summary><b>Answer</b></summary>
 
@@ -475,7 +494,7 @@ flowchart LR
 
 </details>
 
-### 18. Your fraud dataset is 0.5% positive. Walk me through your strategy for handling the imbalance.
+### 19. Your fraud dataset is 0.5% positive. Walk me through your strategy for handling the imbalance.
 
 <details><summary><b>Answer</b></summary>
 
@@ -511,7 +530,7 @@ flowchart TD
 
 </details>
 
-### 19. Explain momentum and Adam. What problem does each solve over vanilla SGD?
+### 20. Explain momentum and Adam. What problem does each solve over vanilla SGD?
 
 <details><summary><b>Answer</b></summary>
 
@@ -538,7 +557,7 @@ flowchart LR
 
 </details>
 
-### 20. Adam vs AdamW - what exactly is "decoupled weight decay," and why did AdamW become the transformer default?
+### 21. Adam vs AdamW - what exactly is "decoupled weight decay," and why did AdamW become the transformer default?
 
 <details><summary><b>Answer</b></summary>
 
@@ -556,7 +575,7 @@ w -= lr * lam * w                         # uniform multiplicative shrinkage
 
 Why the coupled version is broken: parameters with large gradient history (large v̂) have the L2 term divided down - precisely the weights moving the most get *the least* regularization, and the effective decay strength becomes an uncontrolled function of gradient statistics. It also entangles λ with the learning rate schedule in messy ways, making hyperparameters non-transferable across runs. With plain SGD, L2 and weight decay coincide - the distinction only exists for adaptive optimizers, which is exactly the trap the question tests.
 
-AdamW restores a clean interpretation - every weight shrinks by the same fraction lr·λ per step - decouples the λ/lr search dimensions, and empirically generalizes better. It's the default in essentially every modern transformer recipe (GPT-series, Llama, etc.), with typical settings λ ≈ 0.1, β₂ ≈ 0.95, and decay disabled for biases, LayerNorm/RMSNorm parameters, and often embeddings.
+AdamW restores a clean interpretation - every weight shrinks by the same fraction lr·λ per step - decouples the λ/lr search dimensions, and empirically generalizes better. It became the default in essentially every transformer recipe (GPT-series, Llama, etc.), with typical settings λ ≈ 0.1, β₂ ≈ 0.95, and decay disabled for biases, LayerNorm/RMSNorm parameters, and often embeddings. As of 2026 it is still the safe default, but no longer the only serious option: Muon-family optimizers, which orthogonalize the momentum update for 2D weight matrices, were used to pretrain Kimi K2 and GLM-4.5, with AdamW kept for embeddings, the output head and norm gains. Decoupled weight decay carries over to them unchanged.
 
 **Worth sketching.** Two paths from the same gradient, differing only in which side of the division the decay sits, is the entire fix in one picture.
 
@@ -574,7 +593,7 @@ flowchart TD
 
 </details>
 
-### 21. Why do transformer training recipes use learning-rate warmup, and what does the rest of the schedule look like?
+### 22. Why do transformer training recipes use learning-rate warmup, and what does the rest of the schedule look like?
 
 <details><summary><b>Answer</b></summary>
 
@@ -586,7 +605,7 @@ flowchart TD
 
 After warmup, the standard is **cosine decay** from peak LR down to ~10% of peak over the full token budget (the Chinchilla/Llama-style recipe). Decaying matters: high LR late in training keeps the model bouncing around the minimum; annealing lets it settle, and the final low-LR phase disproportionately improves the model.
 
-A modern alternative worth naming: **WSD (warmup - stable - decay)** - hold LR constant after warmup, then decay sharply only in the last ~10-20% of training. The benefit is operational: you can branch a decayed "finished" checkpoint off a still-running stable-phase run at any time, which suits continued pretraining and data-mixture experiments (used by MiniCPM and DeepSeek-era recipes).
+A modern alternative worth naming: **WSD (warmup - stable - decay)** - hold LR constant after warmup, then decay sharply only in the last ~10-20% of training. The benefit is operational: you can branch a decayed "finished" checkpoint off a still-running stable-phase run at any time, which suits continued pretraining and data-mixture experiments (popularised by MiniCPM, and close in spirit to the multi-step and constant-then-decay schedules in DeepSeek's reports).
 
 **Worth sketching.** Drawing WSD as a branch off the stable phase explains its whole selling point: you can cut a finished checkpoint whenever you like.
 
@@ -603,7 +622,7 @@ flowchart LR
 
 </details>
 
-### 22. Explain backpropagation to me like I'm a strong software engineer who's never done ML. Why is it efficient?
+### 23. Explain backpropagation to me like I'm a strong software engineer who's never done ML. Why is it efficient?
 
 <details><summary><b>Answer</b></summary>
 
@@ -631,7 +650,7 @@ flowchart LR
 
 </details>
 
-### 23. What are vanishing and exploding gradients? What causes them, and what does modern architecture design do about them?
+### 24. What are vanishing and exploding gradients? What causes them, and what does modern architecture design do about them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -652,7 +671,7 @@ Diagnosis in practice: log per-layer gradient norms. A geometric decay across de
 
 </details>
 
-### 24. Why can't you initialize all weights to zero? What do Xavier and He initialization actually do?
+### 25. Why can't you initialize all weights to zero? What do Xavier and He initialization actually do?
 
 <details><summary><b>Answer</b></summary>
 
@@ -671,7 +690,7 @@ Good candidates connect init to everything else: init, normalization, residuals,
 
 </details>
 
-### 25. Batch norm vs layer norm: how does each work, and why do transformers use layer norm?
+### 26. Batch norm vs layer norm: how does each work, and why do transformers use layer norm?
 
 <details><summary><b>Answer</b></summary>
 
@@ -683,7 +702,7 @@ Why BN is wrong for transformers/LLMs:
 - **Train/inference mismatch**: BN needs running statistics for inference - a persistent source of train/eval bugs - and is awkward for autoregressive decoding, where you generate one token at a time with effective batch size 1 per position.
 - LayerNorm has none of these issues: each token normalizes itself, identical math at train and inference, any batch size.
 
-Modern refinements worth knowing: **RMSNorm** (Llama, Mistral, most current LLMs) drops mean-centring and just divides by the root-mean-square, with a learned gain - cheaper, empirically as good. **Placement matters more than flavour**: the original transformer used **post-norm** (normalize after the residual add), which is unstable at depth and demands careful warmup; **pre-norm** (normalize inside the branch, before attention/MLP) keeps an unimpeded identity path through the residual stream and trains stably - universal since GPT-2. Some recent models add extra norms (e.g., QK-norm on attention queries/keys) specifically to prevent attention-logit blowups at scale.
+Modern refinements worth knowing: **RMSNorm** (Llama, Mistral, most current LLMs) drops mean-centring and just divides by the root-mean-square, with a learned gain - cheaper, empirically as good. **Placement matters more than flavour**: the original transformer used **post-norm** (normalize after the residual add), which is unstable at depth and demands careful warmup; **pre-norm** (normalize inside the branch, before attention/MLP) keeps an unimpeded identity path through the residual stream and trains stably - the dominant default since GPT-2. Recent models add extra norms on top: QK-norm on attention queries/keys to prevent attention-logit blowups at scale, and a second norm on each sublayer's output before the residual add (Gemma's "sandwich" norm, OLMo 2's reordered norm) to keep the residual stream's magnitude bounded.
 
 **Worth sketching.** Naming the axis each one reduces over is the answer; everything else on the diagram follows from that single choice.
 
@@ -701,7 +720,7 @@ flowchart TD
 
 </details>
 
-### 26. Derive cross-entropy loss from first principles. Why is it "the right" loss for classification and language modeling?
+### 27. Derive cross-entropy loss from first principles. Why is it "the right" loss for classification and language modeling?
 
 <details><summary><b>Answer</b></summary>
 
@@ -721,7 +740,7 @@ The framing that lands in interviews: cross-entropy isn't one loss among many - 
 
 </details>
 
-### 27. Explain softmax and the temperature parameter. How do you compute softmax stably, and where does temperature show up across ML?
+### 28. Explain softmax and the temperature parameter. How do you compute softmax stably, and where does temperature show up across ML?
 
 <details><summary><b>Answer</b></summary>
 
@@ -750,7 +769,7 @@ Temperature appears all over the stack, and connecting the dots is what makes th
 
 </details>
 
-### 28. Compare PCA, t-SNE and UMAP. When would you use each, and how do people misread these plots?
+### 29. Compare PCA, t-SNE and UMAP. When would you use each, and how do people misread these plots?
 
 <details><summary><b>Answer</b></summary>
 
@@ -774,7 +793,7 @@ For embedding work specifically, treat these as debugging aids. Do my paraphrase
 
 </details>
 
-### 29. Your new model scores 87.2% on the test set, the incumbent scores 86.5%. Ship it?
+### 30. Your new model scores 87.2% on the test set, the incumbent scores 86.5%. Ship it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -805,7 +824,7 @@ The LLM-era version bites harder: eval sets are often 200 to 1,000 items, so mos
 
 </details>
 
-### 30. What is training-serving skew? How do you detect it and how do you design it out?
+### 31. What is training-serving skew? How do you detect it and how do you design it out?
 
 <details><summary><b>Answer</b></summary>
 
@@ -846,7 +865,7 @@ flowchart TD
 
 </details>
 
-### 31. You're running an A/B test on a new model. Walk me through designing it, and tell me what you'd refuse to do once it's live.
+### 32. You're running an A/B test on a new model. Walk me through designing it, and tell me what you'd refuse to do once it's live.
 
 <details><summary><b>Answer</b></summary>
 
@@ -885,7 +904,7 @@ flowchart TD
 
 </details>
 
-### 32. About 10% of your training labels are wrong. What happens, and what do you do about it?
+### 33. About 10% of your training labels are wrong. What happens, and what do you do about it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -910,7 +929,7 @@ The 2026 shortcut: have a strong model pre-label and surface disagreements for h
 
 </details>
 
-### 33. You're adapting a pretrained model to a new task. What do you freeze, what do you train, and how do you decide?
+### 34. You're adapting a pretrained model to a new task. What do you freeze, what do you train, and how do you decide?
 
 <details><summary><b>Answer</b></summary>
 
@@ -940,7 +959,7 @@ For LLM applications specifically, the ordering matters: try prompting, few-shot
 
 </details>
 
-### 34. What goes wrong when you validate a model on time-ordered data, and how do you do it properly?
+### 35. What goes wrong when you validate a model on time-ordered data, and how do you do it properly?
 
 <details><summary><b>Answer</b></summary>
 
@@ -979,7 +998,7 @@ flowchart LR
 
 </details>
 
-### 35. How do you choose k in clustering, and how do you evaluate a clustering when you have no labels?
+### 36. How do you choose k in clustering, and how do you evaluate a clustering when you have no labels?
 
 <details><summary><b>Answer</b></summary>
 
@@ -999,9 +1018,60 @@ On embeddings, which is the common case now (cluster user queries to discover in
 
 </details>
 
+### 37. What is conformal prediction, and how would you use it to put a statistical guarantee on a classifier's or an LLM pipeline's outputs?
+
+<details><summary><b>Answer</b></summary>
+
+Conformal prediction wraps any trained model and turns its scores into **prediction sets** with a guaranteed coverage rate: for a chosen error level α, the set contains the true label at least 1 − α of the time, averaged over new examples. It assumes nothing about the model being correct or calibrated, only that calibration and test data are **exchangeable** (roughly, drawn from the same distribution).
+
+Split conformal, the version you actually ship:
+
+1. Hold out a calibration set the model never trained on, a few hundred to a few thousand examples.
+2. Define a nonconformity score, for example 1 − p(true class) for a classifier, or |y − ŷ| for regression.
+3. Score every calibration example and take the ⌈(n+1)(1−α)⌉/n empirical quantile, q̂.
+4. At inference, keep every label whose score is at most q̂. For regression that gives the interval ŷ ± q̂.
+
+The set size is the useful signal. An easy input gets a singleton, an ambiguous one gets several labels, an out-of-scope one gets a large set. That maps straight onto product decisions: act automatically on singletons, route large sets to a human or a stronger model. The same machinery applies to LLM pipelines, for example choosing a threshold on a verifier or judge score so that answers accepted without review meet a target error rate. Conformal risk control generalises the guarantee from miscoverage to other bounded losses.
+
+What candidates get wrong: the guarantee is **marginal**, averaged over inputs, not per input. A model can over-cover easy cases and under-cover a hard subgroup. Class-conditional or group-conditional conformal fixes that at the cost of more calibration data per group. And exchangeability breaks under distribution shift, so refresh the calibration set from recent traffic and monitor realised coverage in production like any other metric.
+
+**Worth sketching.** The quantile step is the whole method, and placing it between the frozen model and the routing decision shows it is a thin, model-agnostic wrapper.
+
+```mermaid
+flowchart LR
+    A["Trained model, frozen"] --> B["Score a held-out<br/>calibration set"]
+    B --> C["Nonconformity scores,<br/>e.g. 1 - p(true label)"]
+    C --> D["Take the 1 - alpha<br/>quantile, q_hat"]
+    D --> E["New input: keep every<br/>label scoring at most q_hat"]
+    E -->|"singleton"| F["Act automatically"]
+    E -->|"large set"| G["Route to a human<br/>or a stronger model"]
+```
+
+**Follow-ups:** Why the (n+1) correction in the quantile? How would you get coverage that holds per class rather than on average? Traffic shifts after a product launch: what happens to coverage, and how would you detect it?
+
+</details>
+
+### 38. A stakeholder asks which features drive your gradient-boosted model. Compare built-in importance, permutation importance and SHAP, and tell me where each one misleads.
+
+<details><summary><b>Answer</b></summary>
+
+All three answer "what does the model rely on". None of them answers "what causes the outcome", and they disagree in predictable ways. Say that first, because the stakeholder usually wants the causal answer.
+
+- **Built-in (split-count or gain) importance** is free and the least trustworthy. Split count favours continuous and high-cardinality features that offer many split points, and gain is measured on training data, so it rewards features the trees used to fit noise. Fine for a quick look, not for a slide.
+- **Permutation importance** shuffles one column on a held-out set and measures the metric drop. It is model-agnostic and tied to real predictive value. Two failure modes: correlated features (shuffle one of a pair and the model leans on the twin, so both look unimportant, and shuffling also creates unrealistic rows the model never saw), and cost, since it needs a scoring pass per feature per repeat.
+- **SHAP** decomposes each individual prediction into additive per-feature contributions based on Shapley values, giving local explanations and, by averaging absolute values, a global ranking. TreeSHAP computes them exactly and quickly for tree ensembles. Caveats: results depend on the background data and on how "absent" features are simulated (interventional versus conditional), correlated features split credit in ways that look arbitrary, and a large SHAP value means "moved this prediction", not "would change the outcome if you intervened".
+
+What I would actually do: permutation importance on held-out data for the global story, shuffling correlated clusters together so twins cannot hide each other. SHAP for individual decisions, such as reason codes on a credit decision. Partial dependence or ICE plots when someone asks about direction and shape. And if a feature ranks high and nobody can explain why, treat it as a leakage suspect before treating it as an insight.
+
+When the real question is "what happens if we change X", the answer is an experiment or a causal model, not an attribution method.
+
+**Follow-ups:** Two features are 0.95 correlated and both show near-zero permutation importance. What is going on, and how do you report it? Why might two SHAP tools give different values for the same model?
+
+</details>
+
 ## Advanced
 
-### 36. Why is MSE a bad loss for classification, even though it "works"? Connect it to the probabilistic view of loss functions.
+### 39. Why is MSE a bad loss for classification, even though it "works"? Connect it to the probabilistic view of loss functions.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1017,7 +1087,7 @@ Nuance to volunteer: Brier score (MSE on probabilities) *is* a proper scoring ru
 
 </details>
 
-### 37. Explain contrastive learning and the InfoNCE loss. How are modern embedding models (CLIP, text retrievers) actually trained?
+### 40. Explain contrastive learning and the InfoNCE loss. How are modern embedding models (CLIP, text retrievers) actually trained?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1051,7 +1121,7 @@ flowchart LR
 
 </details>
 
-### 38. Beyond L1/L2: explain early stopping, data augmentation, and label smoothing as regularizers. What is regularization, really?
+### 41. Beyond L1/L2: explain early stopping, data augmentation, and label smoothing as regularizers. What is regularization, really?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1069,7 +1139,7 @@ Also in the family: dropout, weight decay, small-batch gradient noise, and - the
 
 </details>
 
-### 39. What kinds of distribution shift exist, and how would you monitor a deployed model - classical or LLM-based - for them?
+### 42. What kinds of distribution shift exist, and how would you monitor a deployed model - classical or LLM-based - for them?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1080,7 +1150,7 @@ Three canonical types, distinguished by *what* changes between training and serv
 - **Concept drift**: P(y|x) itself changes - the same input now means something else. Adversarial domains (fraud, spam, abuse) drift *because* your model exists; attackers adapt to it.
 
 Monitoring stack, ordered by signal latency:
-1. **Input drift** (immediate): compare live feature distributions to a training/reference window - PSI, KL divergence, Kolmogorov - Smirnov tests per feature; for unstructured inputs, monitor drift in **embedding space** (distance between live and reference embedding distributions).
+1. **Input drift** (immediate): compare live feature distributions to a training/reference window - PSI, KL divergence, Kolmogorov-Smirnov tests per feature; for unstructured inputs, monitor drift in **embedding space** (distance between live and reference embedding distributions).
 2. **Prediction drift** (immediate): shifts in the output score distribution or predicted-class mix often flag trouble before labels arrive.
 3. **Proxy/behavioural metrics** (fast): CTR, user corrections, thumbs-down rates, escalation-to-human rates, retry rates.
 4. **Ground-truth metrics** (delayed): true accuracy/PR once labels land - chargebacks at 60 days, churn at 90. The delay is why layers 1-3 exist.
@@ -1094,19 +1164,19 @@ Responses: retrain/fine-tune on recent data, recalibrate thresholds (cheap, ofte
 
 </details>
 
-### 40. When does cosine similarity mislead you? Discuss embedding-space pathologies relevant to retrieval systems.
+### 43. When does cosine similarity mislead you? Discuss embedding-space pathologies relevant to retrieval systems.
 
 <details><summary><b>Answer</b></summary>
 
 Cosine similarity is only as meaningful as the geometry of the space it's computed in, and several pathologies corrupt that geometry:
 
-**Anisotropy.** Raw hidden states from language models occupy a narrow cone rather than spreading over the hypersphere - average pairwise cosine between *random* sentences can be very high (this is why early "BERT embeddings via mean pooling" underperformed word-frequency baselines on similarity tasks). Consequence: absolute cosine values are uninterpretable; a 0.8 might be noise floor. Contrastive fine-tuning (the SimCSE lineage, and all modern embedders) explicitly spreads the space - the InfoNCE loss has a **uniformity** term pushing points apart and an **alignment** term pulling positives together. Practical rule: never ship nearest-neighbour search on base-LLM activations; use a contrastively trained embedder.
+**Anisotropy.** Raw hidden states from language models occupy a narrow cone rather than spreading over the hypersphere - average pairwise cosine between *random* sentences can be very high (this is why early "BERT embeddings via mean pooling" underperformed plain averaged GloVe vectors on similarity tasks, as the Sentence-BERT paper showed). Consequence: absolute cosine values are uninterpretable; a 0.8 might be noise floor. Contrastive fine-tuning (the SimCSE lineage, and all modern embedders) explicitly spreads the space - the InfoNCE loss has a **uniformity** term pushing points apart and an **alignment** term pulling positives together. Practical rule: never ship nearest-neighbour search on base-LLM activations; use a contrastively trained embedder.
 
 **Hubness.** In high dimensions, some points become "hubs" that appear in the k-NN lists of a disproportionate share of queries - an artefact of concentration of distances. Symptom: the same handful of chunks retrieved for everything. Mitigations: better embedders, score normalization per candidate, reranking with a cross-encoder.
 
 **Training/serving metric mismatch.** A model trained with cosine (normalized) but indexed with raw inner product lets vector *norms* - which the training objective never disciplined - dominate rankings. Normalize at index time and query time, and configure the ANN index metric (IP vs L2 vs cosine) to match.
 
-**Isotropic-but-meaningless directions.** Cosine weights all dimensions equally; if a few dimensions carry high-variance nuisance information (length, language, formatting), similarity reflects those. Matryoshka-style training and whitening transforms partially address this.
+**Isotropic-but-meaningless directions.** Cosine weights all dimensions equally; if a few dimensions carry high-variance nuisance information (length, language, formatting), similarity reflects those. Whitening transforms and task-specific fine-tuning of the embedder partially address this.
 
 **Task mismatch** - the subtlest one for RAG: "similar" is task-relative. Question-to-answer relevance is asymmetric; a question is often most cosine-similar to *other questions*, not to passages answering it. Hence instruction-prefixed asymmetric embedders (separate query/passage prompts, E5/BGE-style) and cross-encoder rerankers on the top-k.
 
@@ -1114,7 +1184,7 @@ Cosine similarity is only as meaningful as the geometry of the space it's comput
 
 </details>
 
-### 41. What is maximum likelihood estimation? Show how it generates the standard loss functions, and where the Bayesian view (MAP) connects to regularization.
+### 44. What is maximum likelihood estimation? Show how it generates the standard loss functions, and where the Bayesian view (MAP) connects to regularization.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1136,7 +1206,7 @@ Properties worth citing: MLE is consistent and asymptotically efficient under re
 
 </details>
 
-### 42. What is double descent, and how does it change the classical story about model size and overfitting?
+### 45. What is double descent, and how does it change the classical story about model size and overfitting?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1152,7 +1222,7 @@ Why it matters for the LLM era: it dissolves the "your model is too big, it will
 
 </details>
 
-### 43. Your LLM pretraining loss just spiked. Talk me through training stability: gradient clipping, mixed precision, and your debugging playbook.
+### 46. Your LLM pretraining loss just spiked. Talk me through training stability: gradient clipping, mixed precision, and your debugging playbook.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1160,11 +1230,11 @@ Loss spikes are endemic to large-scale transformer training - occasional bad bat
 
 **Standing defences** in every serious recipe:
 - **Gradient clipping by global norm** (typically 1.0): compute the norm over all parameters; if it exceeds the threshold, rescale the whole gradient vector. Preserves direction, caps magnitude. Clipping *frequency* is itself a health metric - clipping every step means your LR is too high.
-- **Mixed precision done right.** fp16 has a tiny dynamic range (max ~65k, and underflow is the bigger killer) and requires **loss scaling** - multiply the loss by a factor so small gradients survive fp16, unscale before the optimizer step, and skip steps whose gradients contain inf/NaN (dynamic loss scaling automates this). **bf16** keeps fp32's 8 exponent bits at lower mantissa precision, eliminating loss scaling - the modern default on A100/H100/TPU. Either way, keep **fp32 master weights and optimizer states**; accumulate large reductions in fp32.
+- **Mixed precision done right.** fp16 has a tiny dynamic range (max ~65k, and underflow is the bigger killer) and requires **loss scaling** - multiply the loss by a factor so small gradients survive fp16, unscale before the optimizer step, and skip steps whose gradients contain inf/NaN (dynamic loss scaling automates this). **bf16** keeps fp32's 8 exponent bits at lower mantissa precision, eliminating loss scaling - the standard mixed-precision format on current GPUs and TPUs. Large runs increasingly push the matmuls further to **FP8** with fine-grained (per-block) scaling, as DeepSeek-V3 reported, while keeping sensitive ops in higher precision. Either way, keep **fp32 master weights and optimizer states**; accumulate large reductions in fp32.
 - **Architectural/objective stabilisers**: pre-norm placement, QK-norm to stop attention-logit growth, and an auxiliary **z-loss** (used in PaLM, ~1e-4 · log²Z) keeping the softmax normalizer from drifting.
 - Warmup + sane peak LR, β₂ ≈ 0.95 (shorter second-moment memory reacts faster to gradient-scale changes than 0.999).
 
-**The playbook when a spike hits**: check grad-norm and per-layer norm logs - a grad-norm spike *preceding* the loss spike implicates optimization; no grad spike suggests data. Inspect the offending batch (corrupt documents, pathological repetition - data issues are the most common culprit). Standard remediations, escalating: rely on clipping and let it recover; **rewind to the last good checkpoint and skip the offending data shard** (used in OPT and BLOOM-era runs, documented candidly in OPT's logbook); lower peak LR; add stabilisers (QK-norm, z-loss). Also rule out infrastructure: a flaky GPU producing silent NaNs looks exactly like an optimization problem - per-rank gradient-norm logging localises it.
+**The playbook when a spike hits**: check grad-norm and per-layer norm logs - a grad-norm spike *preceding* the loss spike implicates optimization; no grad spike suggests data. Inspect the offending batch (corrupt documents, pathological repetition - data issues are the most common culprit). Standard remediations, escalating: rely on clipping and let it recover; **rewind to the last good checkpoint and skip the offending data batches** (the PaLM paper describes exactly this, and OPT's public logbook documents repeated rollbacks); lower peak LR; add stabilisers (QK-norm, z-loss). Also rule out infrastructure: a flaky GPU producing silent NaNs looks exactly like an optimization problem - per-rank gradient-norm logging localises it.
 
 **Worth sketching.** The first branch is the whole playbook: whether the grad-norm moved before the loss did tells you if this is optimization, data, or hardware.
 
@@ -1183,7 +1253,7 @@ flowchart TD
 
 </details>
 
-### 44. Design the evaluation for a fraud model at 0.1% prevalence, end to end: metrics, thresholding, validation protocol, and monitoring.
+### 47. Design the evaluation for a fraud model at 0.1% prevalence, end to end: metrics, thresholding, validation protocol, and monitoring.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1215,7 +1285,7 @@ flowchart LR
 
 </details>
 
-### 45. Your model hits 0.87 AUC offline, you launch it, and the business metric doesn't move. Debug it.
+### 48. Your model hits 0.87 AUC offline, you launch it, and the business metric doesn't move. Debug it.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1250,7 +1320,7 @@ flowchart TD
 
 </details>
 
-### 46. Attention vs convolution: compare them as inductive biases, and tell me what that implies for architecture choice.
+### 49. Attention vs convolution: compare them as inductive biases, and tell me what that implies for architecture choice.
 
 <details><summary><b>Answer</b></summary>
 
@@ -1258,7 +1328,7 @@ Convolution hardcodes locality and translation equivariance with weight sharing.
 
 Mechanically: a conv layer applies a fixed kernel independent of input content over a fixed local window. Receptive field grows linearly with depth (exponentially with dilation), and parameter count is O(k·C_in·C_out) regardless of input size. Self-attention computes an input-dependent all-pairs mixing matrix: dynamic weights, global receptive field in a single layer, permutation-equivariant so position must be injected explicitly. The bill is O(n²·d) versus O(n·k·d).
 
-The governing principle is the **bias/data tradeoff**. A strong prior is worth a great deal when data is scarce and costs you when data is abundant. Vision transformers underperform CNNs when trained from scratch on ImageNet-scale data and overtake them once pretrained on substantially larger corpora, because the prior a CNN hands you for free is something attention can learn if you show it enough examples. That is the lesson of the last decade compressed into one comparison: general architectures plus scale beat hand-built priors past a data threshold, and below that threshold the prior wins.
+The governing principle is the **bias/data tradeoff**. A strong prior is worth a great deal when data is scarce and costs you when data is abundant. Vision transformers underperform CNNs when trained from scratch on ImageNet-scale data and overtake them once pretrained on substantially larger corpora (DeiT later closed much of the small-data gap with heavy augmentation and distillation, which is just another way of supplying the prior), because the prior a CNN hands you for free is something attention can learn if you show it enough examples. That is the lesson of the last decade compressed into one comparison: general architectures plus scale beat hand-built priors past a data threshold, and below that threshold the prior wins.
 
 Attention can express convolution (learn a local, position-only mask) but pays quadratic cost for the privilege. Which is why in practice everything converged on hybrids: conv stems and patchify layers in vision transformers, depthwise convolutions interleaved with attention in speech models, sliding-window and local attention in long-context LLMs. That last one is literally reintroducing the locality prior because the quadratic cost became the binding constraint. The state-space and linear-attention line does the same thing with a recurrent prior to recover O(n).
 
@@ -1268,7 +1338,7 @@ What this changes in my decisions: with thousands of examples and a strongly loc
 
 </details>
 
-### 47. Your churn model has 0.9 AUC. Product wants to send retention discounts to the top 5%. Why might that be a bad plan?
+### 50. Your churn model has 0.9 AUC. Product wants to send retention discounts to the top 5%. Why might that be a bad plan?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1301,16 +1371,16 @@ flowchart TD
 
 </details>
 
-### 48. Your model meets quality but runs at 4s p95 and you need 400ms with 10x the throughput. Design the compression plan.
+### 51. Your model meets quality but runs at 4s p95 and you need 400ms with 10x the throughput. Design the compression plan.
 
 <details><summary><b>Answer</b></summary>
 
-Measure first, and establish whether you are compute-bound or memory-bandwidth-bound, because the answer picks the technique. Autoregressive decode is bandwidth-bound (every token reads all the weights), so weight-only quantization buys close to linear speedup. Prefill is compute-bound, so it wants lower-precision *math*, not just smaller weights. Getting this backwards is how people quantize aggressively and see no latency win.
+Measure first, and establish whether you are compute-bound or memory-bandwidth-bound, because the answer picks the technique. Autoregressive decode at small batch is bandwidth-bound (every token reads all the weights), so weight-only quantization buys close to linear speedup. As you raise batch size to hit the throughput target, decode drifts toward compute-bound and the KV cache becomes the memory you are actually reading. Prefill is compute-bound, so it wants lower-precision *math*, not just smaller weights. Getting this backwards is how people quantize aggressively and see no latency win.
 
 Order of operations, cheapest first:
 
 1. **Serving-level wins that cost zero quality.** Continuous batching, paged KV cache, prefix caching for shared system prompts, and speculative decoding with a small draft model. Speculative decoding is lossless: the accept/reject rule preserves the target model's output distribution exactly. Do all of this before touching weights.
-2. **Post-training quantization.** 8-bit weight-only is typically a rounding error in quality. 4-bit with group-wise scales (GPTQ/AWQ-style) costs more and needs a real eval. FP8 on recent hardware gives compute speedup as well as size reduction. Quantizing the KV cache matters specifically for long context, where it can dominate memory.
+2. **Post-training quantization.** 8-bit weight-only is typically a rounding error in quality. 4-bit with group-wise scales (GPTQ/AWQ-style) costs more and needs a real eval. FP8 on Hopper-class and newer GPUs gives compute speedup as well as size reduction, and Blackwell-class hardware adds block-scaled 4-bit formats (NVFP4, MXFP4) for teams willing to run the eval. Quantizing the KV cache matters specifically for long context, where it can dominate memory.
 3. **Distillation into a smaller model.** Biggest win, biggest project. Train the student on the teacher's outputs, ideally soft logits or on-policy sequences over *your* task distribution. Task-specific distillation goes far further than general distillation; a small student on a narrow task can match a much larger generalist.
 4. **Structured pruning or layer dropping plus a healing fine-tune.** Unstructured sparsity rarely pays without hardware support for it.
 
@@ -1339,7 +1409,7 @@ flowchart TD
 
 </details>
 
-### 49. You have 10M unlabelled examples and budget for 20k labels. How do you spend it?
+### 52. You have 10M unlabelled examples and budget for 20k labels. How do you spend it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1379,7 +1449,7 @@ flowchart TD
 
 </details>
 
-### 50. Why do ensembles work, when are they worth the cost, and where do they show up in LLM systems?
+### 53. Why do ensembles work, when are they worth the cost, and where do they show up in LLM systems?
 
 <details><summary><b>Answer</b></summary>
 
@@ -1394,5 +1464,62 @@ When it is not worth it: 10x inference cost for ~1 point is a bad trade in produ
 LLM-era ensembling is alive and renamed. **Self-consistency** (sample k chains, majority vote) is bagging over stochastic decodes. **Best-of-n with a verifier or reward model** is a selection ensemble. **Multi-model juries** for evals reduce single-model idiosyncrasy. All of these are test-time compute, and the cost/quality curve is the classic ensembling tradeoff with tokens as the currency.
 
 **Follow-ups:** Self-consistency with 8 samples helps on maths and barely moves open-ended generation. Why? You have a 5-model ensemble that beats your single model by 2 points. Walk me through distilling it and what you expect to lose.
+
+</details>
+
+### 54. What is the Muon optimizer, how does it differ from AdamW, and why have some frontier pretraining runs adopted it?
+
+<details><summary><b>Answer</b></summary>
+
+Muon treats each hidden weight matrix as a matrix rather than a bag of independent scalars. It keeps a momentum buffer like SGD, then replaces that momentum matrix with its nearest **semi-orthogonal** matrix (singular values pushed to roughly 1) before applying it. AdamW instead rescales every element independently by its own running gradient variance.
+
+Why orthogonalize: updates for transformer weight matrices tend to be close to low-rank, dominated by a few singular directions. Applied directly, they mostly move the weights along those few directions. Equalising the singular values gives rare but useful directions a comparable step. One reading is steepest descent under a spectral-norm constraint, which suits matrices that act as linear maps.
+
+Mechanics worth knowing:
+
+- An exact SVD every step is too expensive, so Muon runs about five **Newton-Schulz iterations**, a matmul-only polynomial that approximately orthogonalizes and runs fine in bf16.
+- It applies only to hidden 2D matrices. Embeddings, the output head, biases and norm gains stay on AdamW, so a real run uses two optimizers.
+- It keeps one state buffer instead of Adam's two, roughly halving optimizer memory for those parameters.
+- Scaling it needed extra work: decoupled weight decay, and per-matrix update scaling so the update size matches AdamW's and existing LR schedules transfer. Moonshot's MuonClip adds QK-clip, rescaling query and key weights when attention logits grow too large, which they credit for a spike-free Kimi K2 pretraining run.
+
+Evidence: Muon set records in NanoGPT speedrun-style benchmarks by reaching target loss in fewer steps, and Moonshot and Zhipu report using it to pretrain Kimi K2 and GLM-4.5. Costs: Newton-Schulz adds compute per step, and each orthogonalization needs the full matrix, which complicates sharded training.
+
+AdamW remains the safe default and the baseline for fine-tuning. What interviewers probe is the reasoning: matrix geometry rather than elementwise scaling.
+
+**Worth sketching.** Splitting parameters into two optimizer paths is the practical detail people forget, and it shows exactly where orthogonalization happens.
+
+```mermaid
+flowchart TD
+    A["Gradient for each parameter"] --> B{"Hidden 2D<br/>weight matrix?"}
+    B -->|"yes"| C["Momentum buffer"]
+    C --> D["About 5 Newton-Schulz steps:<br/>singular values pushed to 1"]
+    D --> E["Rescale to AdamW-like<br/>update size, apply decay"]
+    B -->|"no: embeddings, head,<br/>norms, biases"| F["AdamW update"]
+    E --> G["Updated weights"]
+    F --> G
+```
+
+**Follow-ups:** Why might switching to Muon to fine-tune an AdamW-pretrained model go badly? How does QK-clip differ from QK-norm? What does Muon's need for the full matrix do to ZeRO or FSDP sharding?
+
+</details>
+
+### 55. What is superposition in neural networks, and how do sparse autoencoders try to recover interpretable features from it? Where have they fallen short?
+
+<details><summary><b>Answer</b></summary>
+
+Superposition is the hypothesis that a network represents more features than it has neurons by storing them as nearly orthogonal directions in activation space, rather than one feature per neuron. High-dimensional spaces hold far more than d almost-orthogonal directions, and if features are sparse (rarely active together) the interference between them is tolerable. The visible symptom is **polysemantic neurons**: one unit fires for unrelated concepts, so neuron-by-neuron interpretation fails.
+
+A **sparse autoencoder (SAE)** is dictionary learning aimed at undoing that. Collect activations from one layer, often the residual stream, then train an encoder-decoder many times wider than the layer to reconstruct them through a hidden layer forced to be sparse, with an L1 penalty or a hard TopK constraint. Each hidden unit is a candidate feature with its own decoder direction. Anthropic, OpenAI and Google DeepMind scaled this to large models (Claude 3 Sonnet, GPT-4, the Gemma 2 family) and found many features that read as monosemantic and that can be clamped up or down to steer behaviour.
+
+Where it falls short, which a strong answer says plainly:
+
+- **Reconstruction is lossy.** Splicing SAE outputs back into the model raises its loss noticeably, so the dictionary misses part of what the model computes.
+- **Features depend on choices.** Dictionary size, sparsity strength and layer change which features appear, and large dictionaries split one concept into many near-duplicates.
+- **Labels are interpretations.** Feature names come from humans or another model reading top activations, and can be confidently wrong.
+- **Downstream utility is mixed.** Google DeepMind's interpretability team reported in 2025 that SAE-based probes underperformed plain linear probes at detecting harmful intent out of distribution, and deprioritised fundamental SAE work as a result.
+
+The working picture: SAEs and their successors (transcoders, attribution-graph circuit tracing) are good exploratory tools for generating hypotheses about mechanisms. When you have labels for the concept you care about, a linear probe is the cheap, strong baseline to beat.
+
+**Follow-ups:** Why does feature sparsity make superposition cheap? An SAE feature fires on deception-related text: what would you need before calling it a deception detector? When would you choose a linear probe over an SAE?
 
 </details>

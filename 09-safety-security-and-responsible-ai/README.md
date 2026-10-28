@@ -10,7 +10,7 @@ An LLM's context window has **no privilege separation**. System prompt, user mes
 
 ### Prompt injection: direct vs indirect
 
-**Direct injection**: the attacker *is* the user ("ignore previous instructions and..."). **Indirect injection**: the attacker plants instructions in content your app will process on someone else's behalf - a web page, an email, a résumé, a PDF, a calendar invite, a tool result. Indirect is the dangerous one: the victim never sees the attack, and it scales (one poisoned page hits every agent that browses it). The term was coined by Simon Willison in 2022; the SQL-injection analogy is apt except there is **no equivalent of parameterised queries**. Training-time mitigations like OpenAI's instruction hierarchy (privileged system > user > tool content) reduce attack success rates but are probabilistic - and in security, a 99% filter just means the attacker iterates until they're in the 1%. **Design assuming injection succeeds.**
+**Direct injection**: the attacker *is* the user ("ignore previous instructions and..."). **Indirect injection**: the attacker plants instructions in content your app will process on someone else's behalf - a web page, an email, a résumé, a PDF, a calendar invite, a tool result. Indirect is the dangerous one: the victim never sees the attack, and it scales (one poisoned page hits every agent that browses it). Simon Willison named "prompt injection" in 2022, and Greshake et al. characterised the indirect variant in 2023. The SQL-injection analogy is apt except there is **no equivalent of parameterised queries**. Training-time mitigations like OpenAI's instruction hierarchy (privileged system > user > tool content) reduce attack success rates but are probabilistic - and in security, a 99% filter just means the attacker iterates until they're in the 1%. **Design assuming injection succeeds.**
 
 ### Jailbreaks are a different attack
 
@@ -25,14 +25,14 @@ No single layer works. Stack them and shrink blast radius:
 
 ```mermaid
 flowchart LR
-    U[User / untrusted content] --> IF["Input layer:<br/>heuristics + injection classifier<br/>+ moderation model"]
+    U["User / untrusted content"] --> IF["Input layer:<br/>heuristics + injection classifier<br/>+ moderation model"]
     IF --> LLM["Model<br/>(instruction-hierarchy trained,<br/>untrusted content delimited)"]
     LLM --> OF["Output layer:<br/>moderation + PII scan +<br/>schema validation + URL allowlist"]
-    OF --> ACT{Consequential<br/>action?}
-    ACT -->|yes| HITL[Human approval]
-    ACT -->|no| OUT[Response]
+    OF --> ACT{"Consequential<br/>action?"}
+    ACT -->|"yes"| HITL[Human approval]
+    ACT -->|"no"| OUT[Response]
     HITL --> OUT
-    OUT --> LOG[(Audit log +<br/>monitoring)]
+    OUT --> LOG[("Audit log +<br/>monitoring")]
 ```
 
 Principles that generate the layers: **least privilege** (minimal tool scopes, read-only defaults), **treat all model output as untrusted** (escape it, parameterise it, sandbox it - it's transitively attacker-controlled), **structural constraints** (a model forced to emit `{"category": one of 5 enums}` can't exfiltrate a secret no matter what's injected), **human approval for irreversible actions**, and **audit logging** for everything.
@@ -43,11 +43,11 @@ Simon Willison's design test for agents. An agent that combines **(1) access to 
 
 ### Design-level defences
 
-The **dual-LLM pattern**: a *privileged* LLM plans and calls tools but never reads untrusted content; a *quarantined* LLM processes untrusted content and returns results only as typed variables (`$email_summary`) the privileged side handles symbolically without reading. **CaMeL** (Google DeepMind, 2025) hardens this into plan-then-execute: the planner writes code from the trusted request alone, a custom interpreter runs it, and capability policies track which data may flow to which sink. Real prompt-injection resistance by construction - at the cost of flexibility (the plan can't adapt to what the data says) and engineering effort.
+The **dual-LLM pattern** (Willison, 2023): a *privileged* LLM plans and calls tools but never reads untrusted content; a *quarantined* LLM processes untrusted content and returns results only as typed variables (`$email_summary`) the privileged side handles symbolically without reading. **CaMeL** (Google DeepMind, 2025) hardens this into plan-then-execute: the planner writes code from the trusted request alone, a custom interpreter runs it, and capability policies track which data may flow to which sink. Real prompt-injection resistance by construction - at the cost of flexibility (the plan can't adapt to what the data says) and engineering effort. A mid-2025 paper (Beurer-Kellner et al.) catalogues six such patterns: action-selector, plan-then-execute, LLM map-reduce, dual LLM, code-then-execute and context-minimisation. All of them trade capability for one guarantee: untrusted text never gets to choose the agent's next action.
 
 ### OWASP Top 10 for LLM Applications (2025)
 
-The shared vocabulary of AI security reviews: **LLM01 Prompt Injection**, **LLM02 Sensitive Information Disclosure**, **LLM03 Supply Chain**, **LLM04 Data & Model Poisoning**, **LLM05 Improper Output Handling**, **LLM06 Excessive Agency**, **LLM07 System Prompt Leakage**, **LLM08 Vector & Embedding Weaknesses**, **LLM09 Misinformation**, **LLM10 Unbounded Consumption**. For agent products, 01 + 05 + 06 form the critical chain: injected instructions → unsanitised output → over-privileged tools.
+The shared vocabulary of AI security reviews: **LLM01 Prompt Injection**, **LLM02 Sensitive Information Disclosure**, **LLM03 Supply Chain**, **LLM04 Data & Model Poisoning**, **LLM05 Improper Output Handling**, **LLM06 Excessive Agency**, **LLM07 System Prompt Leakage**, **LLM08 Vector & Embedding Weaknesses**, **LLM09 Misinformation**, **LLM10 Unbounded Consumption**. For agent products, 01 + 05 + 06 form the critical chain: injected instructions → unsanitised output → over-privileged tools. In December 2025 the OWASP GenAI Security Project added a separate **Top 10 for Agentic Applications** (ASI01 Agent Goal Hijack through ASI10 Rogue Agents) covering tool misuse, identity and privilege abuse, memory poisoning and inter-agent communication. In an agent review, use both lists.
 
 ### Guardrails engineering
 
@@ -65,11 +65,12 @@ Sensitive data leaks through more paths than the model: **prompts to vendors, ob
 - **Tools:** least-privilege scopes per task (read-only default, short-lived creds), validated arguments (path roots, URL allowlists, read-only DB users), approval gates for irreversible actions.
 - **Code execution:** sandbox (container/gVisor/Firecracker/WASM), **no network egress by default**, resource limits, throwaway filesystems.
 - **MCP/third-party tools:** tool *descriptions* enter your context - they're an injection vector (**tool poisoning**); servers can change descriptions after you approved them (**rug pull**) or instruct the model to misuse *other* tools (**shadowing**); a stdio server is arbitrary code on your machine. Pin versions, review descriptions, diff on change, allowlist registries.
-- **Model artifacts:** pickle-based checkpoints execute arbitrary code on load - use **safetensors** (data-only format); recent PyTorch defaults `torch.load(weights_only=True)`. Pin revisions and verify hashes.
+- **Identity and memory:** an agent holding broad credentials while acting for a less-privileged user is a **confused deputy** - prefer delegated, user-scoped tokens over a shared service account. Persistent memory turns a one-shot injection into a durable one (**memory poisoning**), so treat memory writes as untrusted input with provenance, review and expiry.
+- **Model artifacts:** pickle-based checkpoints execute arbitrary code on load - use **safetensors** (data-only format); PyTorch 2.6 and later default to `torch.load(weights_only=True)`. Pin revisions and verify hashes.
 
 ### Alignment, for engineers
 
-Pretraining creates capabilities, including harmful ones. **RLHF** (and DPO/RLAIF successors) shapes the behaviour distribution - helpfulness *and* refusals live in the weights. **Constitutional AI / RLAIF** in one line: the model critiques and revises its own outputs against written principles, and AI preference labels replace most human ones. A system prompt merely *conditions* this trained policy; it can't remove a capability and it can be overridden - which is why "alignment via system prompt" is a red-flag phrase. The flip side is **over-refusal**: a model that refuses benign requests is trivially "safe" and useless, so safety evals must always pair harmful-compliance rates with benign-refusal rates.
+Pretraining creates capabilities, including harmful ones. **RLHF** (and DPO/RLAIF successors) shapes the behaviour distribution - helpfulness *and* refusals live in the weights. **Constitutional AI / RLAIF** in one line: the model critiques and revises its own outputs against written principles, then AI preference labels replace human ones for harmlessness during RL. A system prompt merely *conditions* this trained policy; it can't remove a capability and it can be overridden - which is why "alignment via system prompt" is a red-flag phrase. The flip side is **over-refusal**: a model that refuses benign requests is trivially "safe" and useless, so safety evals must always pair harmful-compliance rates with benign-refusal rates.
 
 ### Hallucination is a safety problem
 
@@ -77,15 +78,15 @@ Confident fabrication burns users (lawyers have been sanctioned for filing fabri
 
 ### Red-teaming and safety evals
 
-**Pre-launch:** manual expert red-teaming (security + domain experts) plus automated scanners (garak, PyRIT) and attacker-LLM loops, covering OWASP categories and your app's specific worst-case harms. **Continuous:** re-run on every model swap, prompt change, and new tool - behaviour is not stable across versions. Convert every finding into a regression eval; track attack success rate over time. Know the benchmark names (HarmBench, StrongREJECT, AgentHarm for agents, XSTest for over-refusal) and their limits: static benchmarks go stale against adaptive attackers and never cover your domain.
+**Pre-launch:** manual expert red-teaming (security + domain experts) plus automated scanners (garak, PyRIT) and attacker-LLM loops, covering OWASP categories and your app's specific worst-case harms. **Continuous:** re-run on every model swap, prompt change, and new tool - behaviour is not stable across versions. Convert every finding into a regression eval; track attack success rate over time. Know the benchmark names (HarmBench, StrongREJECT, AgentHarm for harmful agent tasks, AgentDojo for prompt injection against tool-using agents, XSTest for over-refusal) and their limits: static benchmarks go stale against adaptive attackers and never cover your domain.
 
 ### Responsible-AI process
 
-**Model cards / system cards** document intended use, evals, and limitations (model card = the model; system card = your deployed system). **EU AI Act**: risk tiers - prohibited practices, high-risk (hiring, credit, medical - conformity assessments, logging, human oversight), transparency-tier (chatbots must disclose they're AI), minimal - plus separate obligations for general-purpose models, phasing in 2025-2027. **NIST AI RMF** in one line: a voluntary framework organised as Govern / Map / Measure / Manage. **Audit logging**: immutable records of prompts, outputs, tool calls, and approvals - with the privacy tension (log everything vs. retain nothing) resolved via redacted logs plus restricted raw access.
+**Model cards / system cards** document intended use, evals, and limitations (model card = the model; system card = your deployed system). **EU AI Act**: risk tiers - prohibited practices, high-risk (hiring, credit, medical - conformity assessments, logging, human oversight), transparency-tier (chatbots must disclose they're AI), minimal - plus separate obligations for general-purpose models. Prohibitions applied from February 2025 and GPAI obligations from August 2025; the Digital Omnibus deal agreed in May 2026 moved stand-alone (Annex III) high-risk obligations to December 2027 and product-embedded (Annex I) ones to August 2028, so confirm the adopted text before quoting dates. **NIST AI RMF** in one line: a voluntary framework organised as Govern / Map / Measure / Manage, with a Generative AI Profile (NIST AI 600-1) mapping it to LLM risks. **ISO/IEC 42001** is the certifiable AI management-system standard enterprise buyers increasingly ask for. **Audit logging**: immutable records of prompts, outputs, tool calls, and approvals - with the privacy tension (log everything vs. retain nothing) resolved via redacted logs plus restricted raw access.
 
 ## Interview questions
 
-See [questions.md](questions.md) - **26 questions** with answers, from injection basics to full secure-agent design.
+See [questions.md](questions.md) - **52 questions** with answers, from injection basics to full secure-agent design.
 
 ## Red flags interviewers watch for
 
@@ -102,7 +103,11 @@ See [questions.md](questions.md) - **26 questions** with answers, from injection
 
 - [The lethal trifecta for AI agents - Simon Willison](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) - the essential agent-security mental model.
 - [Prompt injection series - Simon Willison](https://simonwillison.net/series/prompt-injection/) - from the 2022 coinage through dual-LLM and CaMeL.
+- [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection - Greshake et al.](https://arxiv.org/abs/2302.12173) - the paper that defined indirect injection.
+- [Defeating Prompt Injections by Design (CaMeL) - Debenedetti et al.](https://arxiv.org/abs/2503.18813) - capability-tracked plan-then-execute.
+- [Design Patterns for Securing LLM Agents against Prompt Injections - Beurer-Kellner et al.](https://arxiv.org/abs/2506.08837) - six architectural patterns and their tradeoffs.
 - [OWASP Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) - the shared vocabulary for LLM security reviews.
+- [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) - the agent-specific companion list (ASI01-ASI10).
 - [Universal and Transferable Adversarial Attacks on Aligned Language Models - Zou et al.](https://arxiv.org/abs/2307.15043) - GCG; why prompt-level safety is brittle.
 - [Many-shot jailbreaking - Anthropic](https://www.anthropic.com/research/many-shot-jailbreaking) - long context as an attack surface.
 - [Constitutional AI: Harmlessness from AI Feedback - Bai et al.](https://arxiv.org/abs/2212.08073) - the RLAIF paper behind "alignment lives in the weights."

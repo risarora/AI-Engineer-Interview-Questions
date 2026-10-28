@@ -1,6 +1,6 @@
 # 🚘 Waymo - AI Engineer Interview Questions
 
-> **Last reviewed: August 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, technical reports, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
@@ -8,11 +8,11 @@
 - The onsite for ML roles is reported as roughly: one general coding round, one **ML coding round** (numpy-heavy: broadcasting, reshaping, trajectory manipulation), one **ML system design** round, and one to two behavioural or project deep-dive rounds, each 45-60 minutes (reported, varies).
 - The DS&A bar is reportedly a real Google-level medium-to-hard bar, and ML candidates are the ones who most often fall over it. Reported flavours skew geometric and graph-shaped: grids, BFS/DFS, collision physics, trajectory maths, sometimes wrapped in driving framing.
 - The domain content is what makes this loop distinctive: perception → prediction → planning as a pipeline versus end-to-end learned driving, sensor fusion and why redundancy exists, long-tail scenario mining, closed-loop simulation, and **evaluating a system whose failure rate is one serious event per tens of millions of miles**. Correctness and structured reasoning beat speed here, because the product is safety-critical.
-- Waymo publishes a lot: the Foundation Model / Driver-Simulator-Critic architecture, scaling-law results for motion forecasting and planning, EMMA, Waymax, the Open Dataset challenges, and peer-reviewed crash-rate comparisons. Reading that material is the single highest-leverage prep move, because it is where the interview vocabulary comes from.
+- Waymo publishes a lot: the Foundation Model / Driver-Simulator-Critic architecture, the Genie 3-based Waymo World Model for camera and lidar simulation (February 2026), scaling-law results for motion forecasting and planning, EMMA, Waymax, the Open Dataset challenges, and peer-reviewed crash-rate comparisons. Reading that material is the single highest-leverage prep move, because it is where the interview vocabulary comes from.
 
 ## Company context
 
-Waymo builds the Waymo Driver: the autonomy stack, sensor hardware, simulation infrastructure, and fleet operations behind a commercial rider-only robotaxi service. As of their December 2025 post they report over 100 million fully autonomous miles, and their peer-reviewed safety work compares rider-only crash rates against human benchmarks over tens of millions of miles. Engineers want in because it is one of the very few places where a learned system makes consequential physical decisions at scale, and where the evaluation problem is genuinely unsolved. "AI engineer" here is broader than LLM plumbing: perception and behaviour prediction modelling, planning and learned policies, foundation and world models, simulation and sim agents, ML platform and data infrastructure, evaluation and metrics, and onboard inference under a fixed power and latency budget. If your mental model of ML is "call an API and evaluate on a benchmark", this loop will not go well.
+Waymo builds the Waymo Driver: the autonomy stack, sensor hardware, simulation infrastructure, and fleet operations behind a commercial rider-only robotaxi service. As of their February 2026 World Model post they report nearly 200 million fully autonomous miles, and their peer-reviewed safety work compares rider-only crash rates against human benchmarks over tens of millions of miles. Engineers want in because it is one of the very few places where a learned system makes consequential physical decisions at scale, and where the evaluation problem is genuinely unsolved. "AI engineer" here is broader than LLM plumbing: perception and behaviour prediction modelling, planning and learned policies, foundation and world models, simulation and sim agents, ML platform and data infrastructure, evaluation and metrics, and onboard inference under a fixed power and latency budget. If your mental model of ML is "call an API and evaluate on a benchmark", this loop will not go well.
 
 ## Roles & titles they hire
 
@@ -47,7 +47,7 @@ Typical for the category, and not always visible as live postings: Perception, B
 | Hiring committee | Offline packet review | Alphabet-style committee independent of the interviewers (inferred from Alphabet practice, reported) |
 | Team match | Conversations with hiring managers | Fit to a specific team and level (reported, varies) |
 
-Reported end-to-end timeline is roughly 4-8 weeks. Aggregated Glassdoor difficulty sits near the middle of the scale with mixed candidate sentiment, so drive scheduling actively.
+2026 prep guides still describe a virtual onsite of about five 45-60 minute rounds, and no public change to Waymo's AI-tool policy for interviews has been reported, so ask your recruiter rather than assume assistants are allowed (reported, varies). Reported end-to-end timeline is roughly 4-8 weeks. Aggregated Glassdoor difficulty sits near the middle of the scale with mixed candidate sentiment, so drive scheduling actively.
 
 Domain knowledge in perception, planning, or vehicle kinematics helps but is repeatedly described as not mandatory: they also hire strong generalist engineers with distributed systems or ML backgrounds and expect them to learn the domain. Do not let that stop you preparing the domain, though - it is where you differentiate.
 
@@ -56,7 +56,7 @@ Domain knowledge in perception, planning, or vehicle kinematics helps but is rep
 - **Safety as an engineering artefact, not a slogan.** Waymo publishes a Safety Framework, a goal-based Safety Case approach, and a readiness-determination process governed by a Safety Board, all built around the phrase "absence of unreasonable risk". Expect at least one moment where the right answer is "I would not ship that yet, and here is what evidence would change my mind."
 - **Evaluation of rare events.** Serious crashes are so rare that no A/B test on the road can gate a release. Their public work leans on human-benchmark comparisons per million miles, counterfactual analysis, closed-loop simulation, and leading indicators. Being fluent in why a single headline metric is inadequate is a genuine differentiator.
 - **Modular versus end-to-end, resolved as a hybrid.** Their December 2025 post describes a Foundation Model that backpropagates end to end while still materialising structured representations (objects, semantic attributes, roadgraph) so that a separate onboard validation layer can verify the trajectory. Argue the tradeoff, do not pick a tribe.
-- **Simulation as first-class infrastructure.** Waymax, the Open Sim Agents Challenge, SceneDiffuser++ and SceneCrafter, plus WOD-E2E for long-tail scenarios: simulation is a research area with its own metrics, not a testing afterthought.
+- **Simulation as first-class infrastructure.** Waymax, the Open Sim Agents Challenge, SceneDiffuser++ and SceneCrafter, WOD-E2E for long-tail scenarios, and since February 2026 the Waymo World Model, adapted from Google DeepMind's Genie 3 to generate controllable camera and lidar scenes: simulation is a research area with its own metrics, not a testing afterthought.
 - **Scaling, but measured honestly.** Their 2025 scaling-law work over 500,000 hours of driving shows power-law improvement in motion forecasting and planning with data and compute, while being explicit that open-loop metrics and closed-loop driving quality are different things.
 - **Redundancy and hardware reality.** The sixth-generation Driver runs 13 cameras, 4 lidars, and 6 radars plus external audio receivers, deliberately fewer sensors than the previous generation while retaining overlapping coverage. Cost, thermal budget, and fail-operational design are engineering constraints they talk about publicly.
 
@@ -402,6 +402,42 @@ Resist the urge to explain it. Triage in order of cheapness, and separate "is th
 
 </details>
 
+### 13. Waymo now generates camera and lidar simulation from a world model adapted from a general-purpose video world model. What does that buy over log replay and reconstruction, and how would you decide its output is valid enough to gate a release?
+
+<details><summary><b>Answer</b></summary>
+
+It buys coverage of scenes the fleet has never logged, and it moves the trust problem rather than removing it.
+
+**What it adds.** Log replay and reconstruction-based simulators can only re-render what the sensors actually saw. A world model pre-trained on a very large, diverse video corpus carries priors about how the world looks and moves, so it can render situations with no fleet precedent (Waymo's examples include flooded streets and an animal on the road). It is also steerable: by driving actions for counterfactuals, by scene layout and signal states, and by language for weather or time of day. Waymo says it emits both camera and lidar, and can lift ordinary dashcam footage into a multimodal scenario, which turns public video of rare events into test inputs.
+
+**What it costs.** A generative sensor model can hallucinate: objects that flicker between frames, lidar returns geometrically inconsistent with the camera view, motion that looks plausible but is physically wrong. Its errors may also correlate with your perception stack's blind spots if both learned from similar data. Long rollouts drift, and a cheaper variant trades fidelity for length.
+
+**How I would validate it.** Treat it as a sensor model with its own test suite:
+
+1. **Fidelity:** condition on real logs, generate the held-out continuation, compare per modality against what was actually recorded.
+2. **Cross-modal consistency:** project generated lidar into the generated camera frames and measure agreement.
+3. **Downstream equivalence:** run perception and the planner on real and regenerated versions of the same scenario. The simulator is valid for gating only where the Driver behaves the same in both, within a stated tolerance.
+4. **Control checks:** request rain and verify it appears in both modalities and nothing else changed.
+
+**What it may gate.** Start with discovery and stress testing. Promote a scenario family to a release gate only after it passes downstream-equivalence checks, and never let a world-model-only result carry a safety claim on its own.
+
+**Worth sketching.** Generated scenes earn gate status only through explicit validity checks.
+
+```mermaid
+flowchart LR
+    D["Fleet log or dashcam"] --> W["World model"]
+    P["Prompt, layout,<br/>driving actions"] --> W
+    W --> C["Camera frames"]
+    W --> L["Lidar returns"]
+    C --> V["Fidelity, consistency,<br/>downstream equivalence"]
+    L --> V
+    V --> G["Promote to release gate"]
+```
+
+**Follow-ups:** A generated scenario exposes a Driver failure you cannot reproduce on any real log. Is that a Driver bug or a simulator bug, and how do you find out? How would you detect that the world model and your perception stack share a blind spot?
+
+</details>
+
 ## How to prepare
 
 **Repo topics, in priority order:**
@@ -417,7 +453,7 @@ Resist the urge to explain it. Triage in order of cheapness, and separate "is th
 
 **Company-specific moves:**
 
-1. Read Waymo's own material, because it is where the interview vocabulary comes from: the Demonstrably Safe AI post describing the Foundation Model and the Driver, Simulator and Critic architecture; the 2025 scaling-laws post; the EMMA blog and paper; and the Safety Case Approach white paper. Being able to argue with these, not just recite them, is the differentiator.
+1. Read Waymo's own material, because it is where the interview vocabulary comes from: the Demonstrably Safe AI post describing the Foundation Model and the Driver, Simulator and Critic architecture; the 2025 scaling-laws post; the February 2026 World Model post; the EMMA blog and paper; and the Safety Case Approach white paper. Being able to argue with these, not just recite them, is the differentiator.
 2. Do something hands-on with the Waymo Open Dataset. Run a Waymax notebook, look at the Sim Agents Challenge metrics, or read the WOD-E2E paper and understand why the Rater Feedback Score exists. "I ran this and noticed X" beats any amount of reading.
 3. Prepare one crisp position on modular versus end-to-end and one on how you would evaluate a rare-event system. Those two themes recur across almost every round, and a considered, hedged answer signals more seniority than a confident one.
 4. Drill numpy specifically: broadcasting, multi-dimensional reductions, masked means, gather with fancy indexing, and 3D trajectory and rotation manipulation. The reported ML coding round is a numpy round, not a PyTorch round.
@@ -435,7 +471,9 @@ Resist the urge to explain it. Triage in order of cheapness, and separate "is th
 - [Waymo Safety Impact](https://waymo.com/safety/impact/) and the peer-reviewed [Comparison of Waymo Rider-Only crash rates by crash type to human benchmarks at 56.7 million miles](https://www.tandfonline.com/doi/full/10.1080/15389588.2025.2499887), *Traffic Injury Prevention* (2025)
 - [WOD-E2E: Waymo Open Dataset for End-to-End Driving in Challenging Long-tail Scenarios](https://arxiv.org/abs/2510.26125) (0.03% frequency definition, Rater Feedback Score)
 - [The Waymo Open Sim Agents Challenge](https://arxiv.org/pdf/2305.12032) and the [Waymax simulator repository](https://github.com/waymo-research/waymax)
+- [The Waymo World Model: A New Frontier for Autonomous Driving Simulation](https://waymo.com/blog/2026/02/the-waymo-world-model-a-new-frontier-for-autonomous-driving-simulation/) (Genie 3 base, camera and lidar generation, language, layout and driving-action control, nearly 200M autonomous miles)
 - [Exponent - Waymo interview process](https://www.tryexponent.com/blog/waymo-interview-process) (loop shape, ML round breakdown, reported question topics)
+- [Exponent - Waymo machine learning engineer interview guide](https://www.tryexponent.com/guides/waymo-machine-learning-engineer-interview) (2026 virtual onsite shape, consulted October 2026)
 - [TechPrep - Waymo's interview process](https://www.techprep.app/blog/waymo-interview-process) (stage list, timeline, evaluation emphasis)
 - [levels.fyi - Waymo](https://www.levels.fyi/jobs/company/waymo)
 - Interview Query and Dataford Waymo software engineer guides (aggregated candidate reports; consulted via search, sites rate-limited automated fetch)

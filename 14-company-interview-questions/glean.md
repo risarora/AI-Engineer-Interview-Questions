@@ -1,13 +1,14 @@
 # 🔎 Glean - AI Engineer Interview Questions
 
-> **Last reviewed: July 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
+> **Last reviewed: October 2026.** Based only on public information - official pages, engineering blogs, and publicly shared candidate reports. Processes change and vary by team; treat this as a map, not a contract. No confidential or leaked material.
 
 ## TL;DR
 
 - Reported loop: recruiter screen → hiring manager screen (~45 min) → technical phone screen (~60 min, coding + light design) → 4-5 round virtual onsite: two coding rounds, one system design round (frequently search/retrieval flavoured), a behavioural round, and an ML/RAG round for ML-track roles. Senior+ candidates often get a founder/exec conversation.
-- The one **officially stated** element: Glean's job postings say every candidate completes "a brief AI-focused exercise or discussion" about how you think about, design, and use AI in your work. Come with a real, concrete answer.
+- The one **officially stated** element: Glean's job postings (still present in October 2026) say every candidate completes "a brief AI-focused exercise or discussion" about how you think about, design, and use AI in your work. Come with a real, concrete answer.
 - Coding rounds reportedly weight *working, bug-free code* over clever optimal tricks - mediums dominate, hards appear at senior levels.
 - System design is where they differentiate: indexing pipelines, ranking layers, query-serving paths, and reasoning about latency, freshness, permissions, and multi-tenant scale. Founding DNA is ex-Google search; IR depth matters more here than at most AI companies.
+- **New 2026 role families.** The October 2026 board adds *Agents Governance* and *Machine Learning Engineer, Assistant Quality* tracks beside Agents and Evals, in step with Glean's 2026 releases on governed agents (publish-time agent scanning, admin governance policies). Expect agent-governance and assistant-quality design questions on those teams (reported, varies).
 - Everything about their product funnels back to one theme: **permissions-aware retrieval over messy, heterogeneous enterprise data, evaluated rigorously**. Prep RAG, search ranking, and eval design harder than anything else.
 
 ## Company context
@@ -16,11 +17,11 @@ Glean builds a "Work AI" platform: enterprise search and an AI assistant/agent l
 
 ## Roles & titles they hire
 
-From Glean's Greenhouse board (July 2026):
+From Glean's Greenhouse board (October 2026):
 
-- **Software Engineer** - generalist, plus specialised tracks: *Agents*, *AI Infrastructure*, *AI & Security*, *APIs & Context Platform*, *Context Platform*, *Evals*, *Data Foundations*, *Storage*, *Compute Infrastructure*, Frontend/Fullstack/Backend
+- **Software Engineer** - generalist, plus specialised tracks: *Agents*, *Agents Governance*, *AI/ML Infrastructure*, *AI & Security*, *APIs & Context Platform*, *Evals*, *Data Foundations*, *Storage*, *Cloud Infrastructure*, *Cloud Deployment Infrastructure*, *Developer Productivity*, Frontend/Fullstack/Backend
 - **Software Engineer, Machine Learning**
-- **Machine Learning Engineer** - *Enterprise Brain*, *LLM Evals & Observability*, *Search Quality*
+- **Machine Learning Engineer** - *Assistant Quality*, *Search Quality* (the July 2026 board also listed *Enterprise Brain* and *LLM Evals & Observability*)
 - **Founding Forward Deployed Engineer** (0-to-1 product building embedded with strategic customers; production LLM experience - prompting, agents, eval frameworks - explicitly required)
 - Adjacent: Application Security Engineer, Cloud Infrastructure Engineer, SRE, Tech Lead Manager
 
@@ -48,7 +49,7 @@ Reported timeline: roughly 3-5 weeks end to end. Multiple sources describe the b
 
 - **Search/IR fundamentals, not just LLM plumbing.** Their public engineering writing argues explicitly for RAG over fine-tuning for enterprise knowledge, hybrid lexical+dense retrieval, and learned ranking over dozens of signals (semantic similarity, keyword match, freshness, personalisation). Expect design conversations to go several layers below "call the vector DB."
 - **Permissions as a first-class constraint.** Their platform's core promise is that users only ever see what source-system ACLs allow. Any design answer that treats permissions as an afterthought will read as not understanding the product.
-- **Evaluation discipline.** They hire engineers specifically for *Evals* and *LLM Evals & Observability*. Be ready to define metrics, judged sets, and LLM-as-judge pipelines - and their failure modes - for systems where you cannot look at customer data.
+- **Evaluation discipline.** They hire engineers specifically for *Evals* and *Assistant Quality* (and earlier in 2026, *LLM Evals & Observability*). Be ready to define metrics, judged sets, and LLM-as-judge pipelines - and their failure modes - for systems where you cannot look at customer data.
 - **Practical shipping over theory.** Reported coding rounds reward organised, running code; the FDE track explicitly wants 0-to-1 builders with production LLM experience.
 - **High ownership, customer-driven.** Their stated values ("make it customer-driven / make it happen / make it better / make it together") show up in behavioural rounds as questions about ownership, ambiguity, and resilience.
 - **AI fluency in your own workflow.** The official AI exercise means "I use Copilot sometimes" is not an answer. Bring a specific story of designing or using AI to change an outcome.
@@ -143,7 +144,7 @@ Layered evals, from what you fully control to what you can only observe in aggre
 
 **Layer 3 - behavioural telemetry.** Aggregate, privacy-preserving signals: thumbs up/down rates, retry/reformulation rates, citation click-through, session abandonment, segmented by tenant and connector mix so a regression affecting only Jira-heavy customers is visible.
 
-Tie the layers together with release gates: no model/prompt/retriever change ships without Layer 1 pass and a canary watched on Layer 2/3 metrics. Glean hiring dedicated LLM Evals & Observability engineers tells you they treat this as a product surface, not a side task.
+Tie the layers together with release gates: no model/prompt/retriever change ships without Layer 1 pass and a canary watched on Layer 2/3 metrics. Glean hiring dedicated Evals and Assistant Quality engineers tells you they treat this as a product surface, not a side task.
 
 **Follow-ups:** Your judge model updates and every groundedness score shifts 5 points - what now? How do you eval multi-step agent runs, not just single answers?
 
@@ -281,6 +282,24 @@ Context passing between steps is where leaks appear. A step reading a document t
 
 </details>
 
+### 13. Employees across a 20,000-person company build their own agents in a no-code builder. Design the governance layer: what is checked before an agent goes live, what is enforced at run time, and how do you know an agent is worth keeping?
+
+<details><summary><b>Answer</b></summary>
+
+Treat an agent definition as deployable code written by someone who is not an engineer, and put it through the three gates any production change gets: review before release, enforcement while running, and measurement afterwards.
+
+**Publish time.** A definition is instructions, tools, data sources and sharing settings, so it can be analysed statically. Flag over-provisioned write tools (a summariser that can send email), vague write instructions ("update the ticket as needed"), sharing wider than the data sources it reads, and steps where untrusted retrieved content feeds a write action. Assign severity and route high-risk definitions to a moderator queue rather than rejecting them silently, so builders learn what to fix. Glean's 2026 agent releases describe publish-time scanning with moderator approval in this shape.
+
+**Run time.** A scan cannot predict what a model does with adversarial input, so deterministic policy still sits at the tool boundary (Q12). Express policy as composable rules - who may run or edit the agent, which actions it may take, usage and spend limits - scoped to groups or individual agents and evaluated on every call. Runs execute under the invoking user's identity, so a shared agent never becomes a privilege-escalation path for whoever runs it.
+
+**After launch.** Keep an inventory with owners, last-run dates and usage; agents with no owner or no runs for a quarter get flagged for retirement, which is how you stop sprawl. Measure outcomes, not invocations: task completion, confirmation-decline rate on proposed writes, user-reported failures, and time saved where the task has a real baseline. Any definition edit re-triggers the scan, and agents with meaningful usage get a small regression set so an edit or a model upgrade cannot silently break them.
+
+The tradeoff to name: every gate adds friction. Tier controls by blast radius, so a read-only personal agent publishes instantly while an org-wide agent with write tools waits for review.
+
+**Follow-ups:** A popular agent's owner leaves the company - what happens to it? How would you detect prompt-injection exposure in a definition without executing it?
+
+</details>
+
 ## How to prepare
 
 **Repo directories, in priority order:**
@@ -288,7 +307,7 @@ Context passing between steps is where leaks appear. A step reading a document t
 - **[04-rag-and-retrieval](../04-rag-and-retrieval/)** - the core of every technical conversation here: hybrid BM25+dense retrieval, reranking, chunking, retrieval evaluation, and ACL-aware RAG. Go deepest here.
 - **[11-ai-system-design](../11-ai-system-design/)** - especially the **[enterprise RAG assistant case study](../11-ai-system-design/case-studies/01-enterprise-rag-assistant.md)**, which is essentially Glean's product, and **[semantic search](../11-ai-system-design/case-studies/04-semantic-search.md)** for the indexing/ranking/query-serving design round.
 - **[07-evaluation-and-observability](../07-evaluation-and-observability/)** - Glean hires engineers *specifically* for evals and LLM observability; expect metric-driven follow-ups on any claim you make.
-- **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - they ship agents over enterprise tools and hire a dedicated Agents team; know tool-use patterns, trajectory evals, and prompt-injection defences.
+- **[06-agents-and-tool-use](../06-agents-and-tool-use/)** - they ship agents over enterprise tools and hire dedicated Agents and Agents Governance teams; know tool-use patterns, trajectory evals, and prompt-injection defences.
 - **[12-coding-challenges](../12-coding-challenges/)** - two coding rounds reportedly weight clean, working code; practice heaps/graphs/strings and small build-a-feature exercises, not just puzzles.
 - **[13-interview-process-and-behavioral](../13-interview-process-and-behavioral/)** - behavioural rounds reportedly probe ownership and ambiguity with measurable outcomes; map stories to their four "make it" values.
 
@@ -302,7 +321,7 @@ Context passing between steps is where leaks appear. A step reading a document t
 
 ## Sources
 
-- [Glean Greenhouse job board](https://job-boards.greenhouse.io/gleanwork) - live engineering/ML/FDE role titles (fetched July 2026)
+- [Glean Greenhouse job board](https://job-boards.greenhouse.io/gleanwork) - live engineering/ML/FDE role titles (fetched July and October 2026)
 - [Founding Forward Deployed Engineer posting](https://job-boards.greenhouse.io/gleanwork/jobs/4651991005) - role requirements and the official "AI-focused exercise" statement
 - [Glean careers page](https://www.glean.com/careers) - values, office/hybrid setup
 - [Glean blog: Learning lessons from building an enterprise AI assistant](https://www.glean.com/blog/how-to-build-an-ai-assistant-for-the-enterprise) - RAG-vs-fine-tuning rationale, hybrid ranking, freshness/permissions/explainability framing
@@ -311,4 +330,6 @@ Context passing between steps is where leaks appear. A step reading a document t
 - [Blind: Glean interview discussions](https://www.teamblind.com/company/Glean/posts) - candidate-reported loop variations
 - [Glean blog: How knowledge graphs work and why they are the key to context for enterprise AI](https://www.glean.com/blog/knowledge-graph-agentic-engine) - graph structure over people/content/activity, multi-hop and access-controlled traversal
 - [Glean docs: About the Glean MCP server](https://docs.glean.com/administration/platform/mcp/about) - admin-registered MCP servers, tool gateway, OAuth and permission enforcement
+- [Glean blog: Glean Agents can now work independently, build faster, and stay governed at scale](https://www.glean.com/blog/glean-agents-go-2026) - publish-time agent scanning, moderator approval, admin governance policies (2026)
+- [Glean press: the enterprise Agent Development Lifecycle](https://www.glean.com/press/glean-introduces-the-enterprise-agent-development-lifecycle-codifying-how-enterprises-build-govern-and-measure-ai-agents) - framework for building, governing and measuring agents (May 2026)
 - [levels.fyi: Glean](https://www.levels.fyi/companies/glean) - compensation data

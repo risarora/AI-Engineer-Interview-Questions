@@ -1,6 +1,6 @@
 # Multimodal Models - Interview Questions
 
-35 questions: 10 basic, 14 intermediate, 11 advanced.
+40 questions: 10 basic, 16 intermediate, 14 advanced.
 
 > **On the diagrams: drawing is optional.** Some answers include a small sketch you could
 > reproduce on a whiteboard or in a shared doc. You never have to draw anything to score well,
@@ -18,7 +18,7 @@ Three components: a **vision encoder**, a **projector**, and the **LLM**. The im
 
 Two details interviewers listen for. First, the vision encoder is almost never trained from scratch: it's a CLIP- or SigLIP-pretrained ViT, so its features are already language-aligned, which is why a tiny projector is enough to bridge the two models. Second, training is staged: stage 1 freezes both towers and trains only the projector on image-caption pairs (cheap alignment), stage 2 unfreezes the LLM for visual instruction tuning on image-question-answer data, and later stages add high-resolution handling and preference tuning.
 
-Design variations worth naming: **resampler/Q-Former** projectors (Flamingo, BLIP-2) compress hundreds of patch embeddings into a fixed set of ~32-64 learned query tokens to save context; Flamingo instead injects vision via gated cross-attention layers rather than inline tokens; Fuyu drops the vision encoder entirely and linearly projects raw patches straight into the decoder. Modern open models (LLaVA-NeXT, Qwen-VL, InternVL) mostly converge on MLP projector + image tiling for high resolution.
+Design variations worth naming: **resampler/Q-Former** projectors (Flamingo, BLIP-2) compress hundreds of patch embeddings into a fixed set of ~32-64 learned query tokens to save context; Flamingo instead injects vision via gated cross-attention layers rather than inline tokens; Fuyu drops the vision encoder entirely and linearly projects raw patches straight into the decoder. Modern open models (LLaVA-NeXT, Qwen-VL, InternVL) mostly converge on an MLP projector plus either image tiling (LLaVA-NeXT, InternVL) or native dynamic resolution, where the ViT itself accepts a variable patch grid (Qwen2-VL onwards).
 
 **Worth sketching.** Drawing the three boxes and the patch count between them makes clear that the projector is the only new part, which is why stage 1 is cheap.
 
@@ -69,7 +69,7 @@ flowchart LR
 
 The vision encoder emits one embedding per patch, and each of those occupies a sequence position in the LLM exactly like a text token - so token count scales with (resolution ÷ patch size)². More pixels means more patches means more tokens, and you pay for tokens in dollars, latency, and context budget.
 
-Concrete provider math: OpenAI's GPT-4o-class high-detail mode resizes the image and cuts it into 512×512 tiles at ~170 tokens per tile plus 85 base tokens (newer models count small patches, same area-scaling principle); Anthropic charges roughly (width × height) / 750 tokens and downscales anything over ~1568px on the long edge, capping an image around ~1.6k tokens; Gemini charges ~258 tokens for small images and tiles larger ones into 768×768 crops at ~258 tokens each. Order of magnitude to keep in your head: **a readable document page is ~1-2k tokens**, so a 100-page PDF sent as images is ~150k tokens per request - that's a real cost and may not even fit the context window.
+Concrete provider math (the schemes change with model generations, so check the current docs before you quote a bill): OpenAI's GPT-4o-class high-detail mode resizes the image and cuts it into 512×512 tiles at ~170 tokens per tile plus 85 base tokens (newer models count small patches, same area-scaling principle); Anthropic charges roughly (width × height) / 750 tokens and downscales to a per-model cap, ~1568px on the long edge and ~1.6k tokens for most models, with newer flagship models allowing higher resolution and a cap of a few thousand tokens; Gemini 2.x charged ~258 tokens per small image or per 768×768 tile, while Gemini 3 replaced the tiling arithmetic with a `media_resolution` setting that fixes a per-image budget, roughly 280 to 2,240 tokens from low to ultra-high. Order of magnitude to keep in your head: **a readable document page is ~1-2k tokens**, so a 100-page PDF sent as images is ~150k tokens per request - that's a real cost and may not even fit the context window.
 
 This is why **tiling / dynamic resolution** schemes exist (LLaVA-NeXT's AnyRes, Qwen-VL's dynamic resolution): the model gets a downscaled global view plus native-resolution crops, spending tokens proportional to image size instead of a fixed budget. It's also why resolution is the first knob in any quality-vs-cost tradeoff: OCR accuracy on small text collapses below a legibility threshold, but pixels beyond the encoder's effective resolution buy nothing. A good answer connects this to prefill compute too - image tokens dominate prefill for vision-heavy workloads, which is where prompt caching of repeated images earns its keep.
 
@@ -140,7 +140,7 @@ Whisper is a plain **encoder-decoder transformer** applied to speech. Audio is r
 
 The elegant part is the **multitask token interface**: the decoder's output is prefixed with special tokens that specify the task - language ID, transcribe vs. translate-to-English, whether to emit timestamps. One model, one architecture, task selected by prompt tokens rather than separate heads. Sizes ranged from ~39M (tiny) to ~1.5B (large) parameters.
 
-Robustness comes from data, not architecture: **~680k hours of weakly-supervised** audio-transcript pairs scraped from the web, spanning accents, background noise, domains, and dozens of languages. Prior ASR systems trained on ~1k hours of clean read speech (LibriSpeech) achieved superhuman benchmark numbers but fell apart on real-world audio; Whisper traded a little benchmark WER for far better out-of-distribution behaviour. That "scale weak supervision beats curated supervision" lesson is the same one as CLIP's, and interviewers like hearing the parallel drawn.
+Robustness comes from data, not architecture: **~680k hours of weakly-supervised** audio-transcript pairs scraped from the web, spanning accents, background noise, domains, and dozens of languages. Prior ASR systems trained on ~1k hours of clean read speech (LibriSpeech) achieved superhuman benchmark numbers but fell apart on real-world audio; Whisper traded a little benchmark WER for far better out-of-distribution behaviour. That "scale weak supervision beats curated supervision" lesson is the same one as CLIP's, and interviewers like hearing the parallel drawn. The later large-v3 checkpoint pushed the same lever further, adding millions of hours of pseudo-labelled audio. By 2026 Whisper is the reference baseline rather than the top of the leaderboards (newer open models such as NVIDIA's Parakeet and Canary families beat it on accuracy and speed on many benchmarks), but its design lessons are the ones interviewers probe.
 
 Failure modes to volunteer: **hallucination on non-speech** - silence, music, or noise can trigger fluent invented text (it's a language model decoder; it wants to talk), repetition loops on long-form audio, and no native speaker diarization (who spoke when - needs a separate system). Long audio requires chunking with overlap and merge logic. The evaluation metric is **WER** (word error rate = insertions + deletions + substitutions over reference length), reported per-domain because aggregate WER hides accent and noise disparities.
 
@@ -154,7 +154,7 @@ Failure modes to volunteer: **hallucination on non-speech** - silence, music, or
 
 Grounding is tying a piece of language to a specific region of the image. Mechanically there is no detection head: the model emits coordinates as ordinary text tokens, autoregressively, the same way it emits any other answer.
 
-A few conventions are in play. Most models normalise coordinates into a fixed range and emit them as ordinary number text: the original Qwen-VL uses integers 0 to 1000, Shikra uses decimals in 0 to 1. Some instead reserve dedicated location tokens in the vocabulary, one per coordinate bin, as in Kosmos-2 and PaliGemma. Others emit absolute pixel coordinates against the preprocessed image, which is what Qwen2.5-VL does. Either way you get four numbers per box, typically top-left and bottom-right.
+A few conventions are in play. Most models normalise coordinates into a fixed range and emit them as ordinary number text: the original Qwen-VL uses integers 0 to 1000, Shikra uses decimals in 0 to 1. Some instead reserve dedicated location tokens in the vocabulary, one per coordinate bin, as in Kosmos-2 and PaliGemma. Others emit absolute pixel coordinates against the preprocessed image, which is what Qwen2.5-VL does. Conventions can change between versions of the same model family, so read the model card for the exact release you deploy rather than assuming. Either way you get four numbers per box, typically top-left and bottom-right.
 
 The consequences follow directly from "it is just text":
 
@@ -235,7 +235,7 @@ What that buys you:
 - **It works at small batch sizes**, where softmax contrastive degrades badly because there are too few negatives to form a meaningful denominator.
 - **The scaling finding is the interesting part.** The paper's headline result is that quality saturates at a batch size well below what the field assumed, so "just use a bigger batch" was never the lever people believed it was.
 
-Why it ends up inside most modern VLMs: better features per unit of training compute at realistic scales, patch-level features that hold up better for dense and text-heavy tasks, and released checkpoints across a useful range of resolutions and sizes.
+Why it ends up inside most modern VLMs: better features per unit of training compute at realistic scales, patch-level features that hold up better for dense and text-heavy tasks, and released checkpoints across a useful range of resolutions and sizes. SigLIP 2 (2025) kept the sigmoid loss and added captioning-style, self-distillation and masked-prediction objectives for better localisation and dense features, plus a NaFlex variant that accepts native aspect ratios, which is why it became a common encoder choice for newer open VLMs.
 
 What has not changed: it is still a dual-encoder image-text contrastive objective, so it inherits the same weaknesses. Bag-of-words-ish compositionality, weak counting, weak relational understanding, and a modality gap. "SigLIP is CLIP but better" without naming the loss is the answer that gets marked down.
 
@@ -253,7 +253,9 @@ Start with the decision axes: **cost per page, accuracy on your specific fields,
 
 **OCR pipeline**: layout analysis + text recognition (open-source Tesseract/PaddleOCR, or managed Textract / Google Document AI / Azure Document Intelligence) produces text with bounding boxes; an LLM (or templates, for fixed forms) extracts fields from that text. Strengths: cheap at scale - managed OCR runs on the order of ~$1.50 per 1,000 pages for plain text (~10× more with table/form analysis), roughly an order of magnitude cheaper than frontier-VLM page reads - self-hosted OCR widens that to 100×+; character-level coordinates enable click-to-verify audit UIs and redaction; behaviour is stable and debuggable. Weaknesses: multi-column reading order, complex layouts, handwriting, stamps, checkboxes, and tables that span pages - and OCR errors poison the downstream LLM silently.
 
-**OCR-free VLM**: send the page image with an extraction prompt, get structured JSON back. Strengths: handles layout, handwriting, and visual context jointly; one stage to build and maintain; dramatically better on messy heterogeneous documents. Weaknesses: cost; **plausible-value hallucination** on fields it can't read (worst possible failure for invoices and medical records); most models don't return coordinates, weakening auditability; resolution limits on dense pages.
+**OCR-free VLM**: send the page image with an extraction prompt, get structured JSON back. Strengths: handles layout, handwriting, and visual context jointly; one stage to build and maintain; dramatically better on messy heterogeneous documents. Weaknesses: cost; **plausible-value hallucination** on fields it can't read (worst possible failure for invoices and medical records); coordinates only if you explicitly ask for grounding, and those boxes are coarser than OCR word boxes, weakening auditability; resolution limits on dense pages.
+
+**Document-specialised small VLMs** blur the line since 2025: open models such as olmOCR, PaddleOCR-VL, DeepSeek-OCR and dots.ocr, plus managed services such as Mistral OCR, turn page images into markdown with reading order and tables, some with layout boxes, at a cost much closer to OCR than to a frontier VLM when self-hosted. Treat them as a middle tier: they fix most reading-order and table problems of classic OCR, but they still hallucinate on illegible regions, so the validation layer below does not go away.
 
 The production answer is a **cascade**: classify documents first; run cheap OCR on everything; handle clean, templated docs with the cheap path; escalate hard or high-value pages to a VLM - and when you do, give the VLM *both* the page image and the OCR text, since they fail differently and the combination beats either. Independently of path: validate against a schema (types, ranges, checksums like line-items-sum-to-total), compute per-field confidence, and route low-confidence extractions to human review. Measure per-field accuracy on a labelled set from your own traffic - public benchmark scores won't predict your invoice layout.
 
@@ -335,7 +337,7 @@ pred = eps_uncond + s * (eps_cond - eps_uncond)   # s = guidance scale
 
 The vector `(eps_cond - eps_uncond)` isolates *the direction in which the prompt changes the prediction*; multiplying by `s > 1` exaggerates exactly that component. It replaced classifier guidance, which needed a separate noise-robust classifier and its gradients - CFG gets the same effect from the generative model itself, which is why it's "classifier-free."
 
-Effects of the scale: `s = 1` is pure conditional sampling - prompt adherence is mediocre because the condition only weakly shifts the prediction. Typical operating range is ~5-9. As you push higher: prompt adherence and apparent sharpness improve, but **diversity collapses** (samples converge toward a prompt-archetype), colours oversaturate, contrast blows out, and anatomical/geometric artifacts appear - you're extrapolating outside the distribution the model was trained to denoise. Practical costs and consequences worth naming: CFG **doubles compute per sampling step** (two forward passes, usually batched); **negative prompts** are just replacing the unconditional branch's null embedding with an "away-from-this" condition, so the extrapolation points away from the negative; and distilled few-step models often bake guidance in during distillation, which is why turbo-style models expose no meaningful CFG knob.
+Effects of the scale: `s = 1` is pure conditional sampling - prompt adherence is mediocre because the condition only weakly shifts the prediction. Typical operating range for SD-1.5-era models was ~5-9, and newer flow-matching models tend to run lower. As you push higher: prompt adherence and apparent sharpness improve, but **diversity collapses** (samples converge toward a prompt-archetype), colours oversaturate, contrast blows out, and anatomical/geometric artifacts appear - you're extrapolating outside the distribution the model was trained to denoise. Practical costs and consequences worth naming: CFG **doubles compute per sampling step** (two forward passes, usually batched); **negative prompts** are just replacing the unconditional branch's null embedding with an "away-from-this" condition, so the extrapolation points away from the negative; and distilled few-step models often bake guidance in during distillation, which is why turbo-style models expose no meaningful CFG knob.
 
 **Worth sketching.** Two branches per step is the detail people miss, and it explains both the doubled cost and how negative prompts slot in.
 
@@ -361,7 +363,7 @@ flowchart LR
 
 Tradeoffs:
 
-- **Integration and instruction following**: an AR image head inside an omni-model (GPT-4o-style native image generation) shares the LLM's world knowledge and conversation state. That's why these systems are strikingly better at rendering long correct text in images, following multi-constraint prompts, and **conversational editing** ("same scene, but make it night") - the "prompt understanding" is the LLM itself, not a bolted-on CLIP/T5 encoder feeding cross-attention.
+- **Integration and instruction following**: an AR image head inside an omni-model (GPT-4o-style native image generation, which OpenAI describes as autoregressive, though most labs, Google's Gemini image models included, do not disclose their decoder internals) shares the LLM's world knowledge and conversation state. That's why these systems are strikingly better at rendering long correct text in images, following multi-constraint prompts, and **conversational editing** ("same scene, but make it night") - the "prompt understanding" is the LLM itself, not a bolted-on CLIP/T5 encoder feeding cross-attention.
 - **Latency shape**: diffusion does 20-50 full-canvas passes (1-4 when distilled); AR decodes thousands of image tokens sequentially, which is slow, though scale-prediction and parallel-decoding variants narrow the gap.
 - **Fidelity bottlenecks**: AR quality is capped by the discrete tokenizer's reconstruction quality; diffusion's analogue is the VAE, but continuous latents lose less. Diffusion still tends to win on fine texture and photorealism per unit compute.
 - **Training**: AR reuses the entire LLM stack - loss, infra, scaling laws (Parti showed clean scaling to 20B); diffusion has its own mature recipe and its transformer variant (DiT) gets similar scaling benefits.
@@ -376,7 +378,7 @@ The 2026 landscape is honestly hybrid: diffusion-first products for pure text-to
 
 <details><summary><b>Answer</b></summary>
 
-Two architectures. The **pipeline**: streaming ASR → LLM → streaming TTS. The **native speech-to-speech model**: one model consumes and emits audio tokens directly (GPT-4o Realtime-style; open equivalents like Moshi).
+Two architectures. The **pipeline**: streaming ASR → LLM → streaming TTS. The **native speech-to-speech model**: one model consumes and emits audio tokens directly (OpenAI's Realtime API models and Gemini's Live API native-audio models are the hosted examples; Moshi is the best-known open one).
 
 **Latency is the defining constraint.** Human turn-taking gaps average ~200ms; anything over ~1 second voice-to-voice feels laggy, so the bar is **sub-second, target ~500-800ms**. A pipeline's budget decomposes roughly as: VAD/endpointing 100-300ms (you must wait to decide the user finished - the irreducible tax), streaming-ASR finalisation ~100-200ms, LLM time-to-first-token 200-500ms, TTS time-to-first-audio 100-300ms, plus network. Naively summed you blow the budget, so everything overlaps: ASR streams partials while the user speaks, the LLM starts on the endpoint (or speculatively before it), TTS begins on the first sentence rather than the full reply, and audio plays while later sentences generate. A small/fast model for the conversational layer with tool calls to heavier systems is a common split. Speech-to-speech models collapse the stack - ~300ms-class average response is achievable - and they hear prosody (sarcasm, hesitation, emotion) and generate expressive audio without a lossy text bottleneck. Their cost: the text midpoint disappears, so guardrails, logging, evals, and precise output control get harder, and tool integration runs through event protocols rather than plain text.
 
@@ -403,7 +405,7 @@ flowchart LR
 
 <details><summary><b>Answer</b></summary>
 
-Predominantly: **sample frames, encode them like images, add the audio track, and let the LLM reason over the sequence.** The default is uniform sampling around ~1 fps (Gemini's documented approach; ~258 tokens per frame there). The immediate consequence is cost: at ~1 fps, an hour of video is ~3,600 frames ≈ ~1M tokens - video is the most token-hungry modality by far, and most practical engineering is about spending those tokens well.
+Predominantly: **sample frames, encode them like images, add the audio track, and let the LLM reason over the sequence.** The default is uniform sampling around ~1 fps (Gemini's documented approach, at ~258 tokens per frame on Gemini 2.x and a `media_resolution`-dependent ~70 to ~280 per frame on Gemini 3). The immediate consequence is cost: at ~1 fps and ~258 tokens per frame plus the audio track, an hour of video is ~3,600 frames ≈ ~1M tokens, and even the lowest-resolution settings leave it in the hundreds of thousands - video is the most token-hungry modality by far, and most practical engineering is about spending those tokens well.
 
 Sampling strategies, in increasing sophistication: **uniform** (simple, misses fast events between samples); **scene-change/keyframe detection** (cheap classical CV picks visually distinct frames - much better token efficiency on cut-heavy content); **query-aware two-pass** (cheap low-fps pass to segment and summarise, then re-sample the relevant window densely - the video analogue of retrieve-then-read); and **audio-first** (transcribe with ASR, use the transcript to locate moments, then look at frames - for talky content the transcript carries most of the information at a fraction of the cost).
 
@@ -472,7 +474,7 @@ Second, position indices explode. A high-resolution page can be thousands of pat
 
 Third, and worst for native-resolution models: the same spatial offset maps to a different position delta at a different resolution, because W changed. Nothing transfers across image sizes, which is precisely what dynamic resolution needs.
 
-The modern answer is a multimodal rotary embedding. Qwen2-VL's M-RoPE splits the rotary dimensions into three groups encoding temporal, height, and width. An image patch gets a constant t plus its own (row, column). A text token gets the same index in all three components, which collapses exactly back to standard 1D RoPE, so text behaviour is untouched and you can graft this onto a pretrained LLM. Video increments t per frame. Qwen2.5-VL ties the temporal component to absolute time rather than frame index, so the model can reason in seconds regardless of the sampling fps you chose.
+The modern answer is a multimodal rotary embedding. Qwen2-VL's M-RoPE splits the rotary dimensions into three groups encoding temporal, height, and width. An image patch gets a constant t plus its own (row, column). A text token gets the same index in all three components, which collapses exactly back to standard 1D RoPE, so text behaviour is untouched and you can graft this onto a pretrained LLM. Video increments t per frame. Qwen2.5-VL ties the temporal component to absolute time rather than frame index, so the model can reason in seconds regardless of the sampling fps you chose. Qwen3-VL refined both ideas: interleaved M-RoPE spreads t, h and w across the low- and high-frequency rotary bands instead of giving each axis its own contiguous block, and video timing moved to explicit text timestamp tokens placed between frame groups.
 
 Benefits: spatial adjacency is native, (h, w) mean the same thing at any resolution, and position ids grow with the max over components rather than the product, which materially helps many-image contexts.
 
@@ -511,7 +513,7 @@ Screenshot-only is the universal fallback, not the design goal. Use structured s
 
 Sources available: the DOM or the platform accessibility tree gives exact element bounds, roles, labels, and text with zero perception error, and it covers most web and native apps. Pixels cover everything else - canvas apps, remote desktops, games, PDFs in a viewer, screen-shared content.
 
-The strong design is hybrid: pull candidate interactive elements from the tree, render them as a numbered set-of-marks overlay on the screenshot, and have the model select an element ID rather than emit raw coordinates. This turns a coordinate regression problem into a classification problem, and it eliminates the entire "off by 40 pixels" failure class. Only fall back to raw coordinate prediction when no tree is available.
+The strong design is hybrid: pull candidate interactive elements from the tree, render them as a numbered set-of-marks overlay on the screenshot, and have the model select an element ID rather than emit raw coordinates. This turns a coordinate regression problem into a classification problem, and it eliminates the entire "off by 40 pixels" failure class. Only fall back to raw coordinate prediction when no tree is available. Frontier computer-use models are now trained to emit screen coordinates directly and are far better at it than general VLMs were, which narrows the gap, but an element ID is still easier to validate, log and replay than a pixel pair.
 
 The constraints that actually bind:
 
@@ -624,7 +626,7 @@ You cannot fix it by tuning X, because the correct X is not constant. It depends
 
 The fix, in layers:
 
-1. **Semantic turn detection.** A small classifier over streaming ASR partials predicting "is this complete?", used to modulate the silence threshold: roughly ~200-400 ms when it looks complete, ~1.5-2 s when it looks mid-sentence. Open-source models built for exactly this exist now, and this is the single biggest quality win available.
+1. **Semantic turn detection.** A small classifier over streaming ASR partials predicting "is this complete?", used to modulate the silence threshold: roughly ~200-400 ms when it looks complete, ~1.5-2 s when it looks mid-sentence. Open models built for exactly this exist (LiveKit's turn detector and Pipecat's Smart Turn are two), and this is the single biggest quality win available.
 2. **Prosody.** Falling pitch and final lengthening cue turn ends. Audio-native models get this for free; a cascaded pipeline throws it away at the STT boundary, which is a real argument for speech-to-speech.
 3. **Context.** After "what is your date of birth?", expect a slot and be patient. After "anything else?", be quick. Let the dialogue state set the prior.
 4. **Speculative generation.** Start the LLM on the partial as soon as it looks complete, cancel if the user resumes. Hides latency at the cost of wasted tokens.
@@ -651,9 +653,50 @@ flowchart TD
 
 </details>
 
+### 25. A marketplace wants AI-generated lifestyle photos of sellers' own products. How do you keep the product itself accurate: LoRA, IP-Adapter, ControlNet, or an editing model?
+
+<details><summary><b>Answer</b></summary>
+
+Do not let the generator redraw the product at all if you can avoid it. Segment the product from the seller's photo, generate or edit only the background and lighting around a fixed mask, then composite the original product pixels back and harmonise edges and shadows. Logos, small text and exact colour are precisely what diffusion models get subtly wrong, and a marketplace that alters the label on a listed item has a trust and legal problem, not a quality problem.
+
+When the product must change pose or appear in a genuinely new scene, pick the conditioning tool by what you need to control:
+
+- **ControlNet-style conditioning** fixes structure. Edge, depth or pose maps steer layout through a trainable copy of the denoiser's encoder, joined by zero-initialized layers so the base model starts unchanged. It controls geometry, not identity.
+- **IP-Adapter-style image prompts** add a separate cross-attention path for reference-image features. No per-subject training, so it scales to millions of products, but identity is approximate: shape and colour, not readable text.
+- **Per-subject fine-tuning** (DreamBooth, usually trained as a LoRA of a few to tens of MB) on ~10-30 photos gives the best identity, but costs GPU-minutes per subject plus storage and moderation for every adapter. Right for a brand's hero products, wrong for a long-tail catalogue.
+- **Instruction-based editing models** (FLUX.1 Kontext, Qwen-Image-Edit, and the Gemini and GPT image models) take reference images in context and handle "same product, on a marble counter" with no training. Since 2025 this is the default starting point, with the composite step still guarding the exact pixels.
+
+Evaluation has to target the failure that matters, which is product fidelity, not aesthetics. Check it automatically: OCR the label and compare it with the original, measure colour difference inside the product region, and score embedding or VLM similarity against the source photo. Auto-reject below threshold and sample the rest for human review, because a beautiful image of the wrong product is the worst output this feature can produce.
+
+**Follow-ups:** How would you harmonise lighting and shadows when compositing original product pixels into a generated scene? A seller uploads one blurry photo: which of these approaches still works, and what do you tell the seller? How would you detect that an editing model subtly changed the text on a label?
+
+</details>
+
+### 26. When should a VLM hand off to a dedicated vision model, such as a detector, segmenter or tracker, instead of answering from pixels itself?
+
+<details><summary><b>Answer</b></summary>
+
+Whenever the output must be geometrically precise, exhaustive, or cheap at volume. A VLM is a reasoning and language interface over a fixed token budget, not a measuring instrument, so the strong 2026 pattern is a VLM that plans and verifies while specialist models do the measuring.
+
+Hand off when you need:
+
+- **Pixel-accurate masks or boxes.** VLM boxes are coarse and sampled as text. Promptable segmenters return precise masks: SAM 2 extended this to video with memory-based tracking, and SAM 3 takes short noun-phrase or exemplar prompts and returns every matching instance, which closes much of the open-vocabulary gap that used to favour VLMs.
+- **Counting at scale.** Ask a detector or segmenter for instances and count them in code. Let the VLM resolve the ambiguous part, what should count. VLM counts degrade past a handful of objects.
+- **Tracking through video.** Identity across frames is a tracker's job. Sampled-frame VLMs lose objects between samples.
+- **Throughput and latency.** A detector or small classifier runs in milliseconds per image on one GPU or an edge device. A VLM call costs ~1-2k tokens and hundreds of milliseconds to seconds. For a fixed label set at millions of images per day, use the VLM to label a training set and distil into a small model.
+- **Auditable text.** OCR returns word boxes and confidences a reviewer can check.
+
+Keep the VLM for what specialists cannot do: open-ended questions, instructions that change per request, relations and context ("is the operator wearing a harness while the platform is raised?"), and judging whether a specialist's output actually answers the question.
+
+Two wiring patterns. VLM-as-orchestrator: it chooses which tool to call and reads structured results back. Specialist-first: a detector proposes regions and the VLM verifies or describes the crops. The second is cheaper, more predictable and easier to evaluate, so it is the usual production choice. Either way, pass coordinates in one documented convention and test the round trip on images where you know the answer.
+
+**Follow-ups:** How would you distil a VLM's labels into a small classifier without inheriting its systematic errors? A safety-compliance camera system must flag missing harnesses: sketch the specialist-first pipeline and where the VLM sits. What breaks when the detector and the VLM disagree, and who wins?
+
+</details>
+
 ## Advanced
 
-### 25. Design multimodal RAG over 50k PDFs full of tables, charts, and diagrams. Where does ColPali-style retrieval fit?
+### 27. Design multimodal RAG over 50k PDFs full of tables, charts, and diagrams. Where does ColPali-style retrieval fit?
 
 <details><summary><b>Answer</b></summary>
 
@@ -661,7 +704,7 @@ Three architectures, in ascending fidelity:
 
 1. **Parse-to-text RAG**: extract text, chunk, embed, retrieve. Fails the premise - charts and diagrams vanish, tables mangle. Baseline only.
 2. **Caption-and-embed**: at ingestion, a VLM writes a dense description of every figure, chart, and table; descriptions are embedded alongside body text (tables often dual-indexed as markdown + description). At answer time, retrieve descriptions but hand the *original image* to the VLM for generation - the caption is a retrieval key, not the evidence. This is the pragmatic production default: works with any text-retrieval stack, cheap at query time. Its ceiling: retrieval quality is capped by caption quality - whatever the captioner didn't mention is unfindable.
-3. **Screenshot-based retrieval (ColPali)**: skip parsing entirely. A VLM (PaliGemma in the original paper) encodes each **page image** into ~1k patch-level embeddings; queries encode into token-level embeddings; scoring is ColBERT-style **late interaction** - for each query token, take the max similarity over the page's patch vectors, and sum. Because matching happens at patch granularity, a query about "the latency graph" can match the actual chart region without anyone having described it. On visually-rich document benchmarks (ViDoRe) this beats OCR-based pipelines significantly. Costs: **multi-vector storage** (~1k vectors per page, and 50k PDFs can easily mean a million pages - mitigated by pooling and binary quantization, but real), ingestion GPU time, and answer-time cost since retrieved evidence is page *images* the generator VLM must read (~1-2k tokens per page).
+3. **Screenshot-based retrieval (ColPali)**: skip parsing entirely. A VLM (PaliGemma in the original paper, Qwen-VL backbones in the ColQwen successors) encodes each **page image** into ~1k patch-level embeddings; queries encode into token-level embeddings; scoring is ColBERT-style **late interaction** - for each query token, take the max similarity over the page's patch vectors, and sum. Because matching happens at patch granularity, a query about "the latency graph" can match the actual chart region without anyone having described it. On visually-rich document benchmarks (ViDoRe) this beats OCR-based pipelines significantly. Costs: **multi-vector storage** (~1k vectors per page, and 50k PDFs can easily mean a million pages - mitigated by pooling and binary quantization, but real), ingestion GPU time, and answer-time cost since retrieved evidence is page *images* the generator VLM must read (~1-2k tokens per page).
 
 My design for 50k PDFs: hybrid. Text-chunk retrieval and ColPali-style page retrieval run in parallel, fused (RRF), with retrieved pages rendered to the VLM as images alongside top text chunks. Cite page numbers with thumbnail provenance. Evaluate retrieval (recall@k on a labelled query set, checking specifically that figure-dependent questions retrieve the right pages) separately from generation faithfulness.
 
@@ -683,11 +726,11 @@ flowchart TD
 
 </details>
 
-### 26. How do you evaluate multimodal systems - understanding and generation?
+### 28. How do you evaluate multimodal systems - understanding and generation?
 
 <details><summary><b>Answer</b></summary>
 
-**Understanding.** The standard instruments are VQA-style benchmarks: VQAv2 (natural-image QA), TextVQA and OCRBench (text-in-image), DocVQA (documents - scored with ANLS, a normalized edit-distance metric that forgives near-miss strings), ChartQA (charts - "relaxed accuracy," within 5% of the true value, because exact chart reading is estimation), and MMMU (college-level multi-discipline reasoning) as the flagship capability benchmark. Know the caveats you'd raise as a practitioner: contamination (benchmarks leak into training data; treat vendor-reported numbers sceptically), and the short-answer format's mismatch with real product tasks. For open-ended outputs, **VLM-as-judge** with an explicit rubric works, with two rules: the judge must actually see the image (a text-only judge scoring image answers is a real and embarrassing anti-pattern), and the judge inherits VLM blind spots - don't judge counting or spatial tasks with a model that fails them; verify judge-human agreement on a calibration set first.
+**Understanding.** The standard instruments are VQA-style benchmarks: VQAv2 (natural-image QA), TextVQA and OCRBench (text-in-image), DocVQA (documents - scored with ANLS, a normalized edit-distance metric that forgives near-miss strings), ChartQA (charts - "relaxed accuracy," within 5% of the true value, because exact chart reading is estimation), and MMMU (college-level multi-discipline reasoning) as the flagship capability benchmark, now largely saturated at the frontier, which is why MMMU-Pro (filtered, more options, vision-only input) is the version to quote. Know the caveats you'd raise as a practitioner: contamination (benchmarks leak into training data; treat vendor-reported numbers sceptically), and the short-answer format's mismatch with real product tasks. For open-ended outputs, **VLM-as-judge** with an explicit rubric works, with two rules: the judge must actually see the image (a text-only judge scoring image answers is a real and embarrassing anti-pattern), and the judge inherits VLM blind spots - don't judge counting or spatial tasks with a model that fails them; verify judge-human agreement on a calibration set first.
 
 For products, the benchmark that matters is one you build: for document AI, **per-field extraction accuracy** on a few hundred labelled documents from your own traffic, sliced by document type and field criticality, catches regressions no public benchmark will.
 
@@ -697,7 +740,7 @@ For products, the benchmark that matters is one you build: for document AI, **pe
 
 </details>
 
-### 27. Compare projector/adapter designs - MLP vs resampler vs cross-attention. How does the choice interact with the training recipe?
+### 29. Compare projector/adapter designs - MLP vs resampler vs cross-attention. How does the choice interact with the training recipe?
 
 <details><summary><b>Answer</b></summary>
 
@@ -705,7 +748,7 @@ Three families:
 
 - **Linear/MLP projection** (LLaVA line): map every patch embedding into the LLM's embedding space, splice inline. Lossless - all visual detail reaches the LLM - and trivially simple, but token cost scales with resolution: with tiling, a single high-res image can be 2-3k tokens. The pragmatic modern compromise adds light pooling (e.g. 2×2 average of adjacent patch tokens) to cut tokens ~4× with modest loss.
 - **Resampler / Q-Former** (Flamingo's Perceiver Resampler, BLIP-2): a small transformer with N learned query vectors (~32-64) cross-attends into the patch features and outputs exactly N tokens regardless of input size. Constant, cheap token budget - great for interleaved many-image contexts and video - but it's a lossy information bottleneck: fixed capacity regardless of content is precisely wrong for dense documents, which is why resampler-based models historically lagged on OCR/document benchmarks and why the field swung back to MLP+tiling as document use cases became dominant.
-- **Cross-attention insertion** (Flamingo's gated cross-attn layers): vision never enters the token sequence; instead, new cross-attention layers interleaved into the frozen LLM read visual features directly. Zero context consumed, and gating (initialized to zero) provably preserves the base LLM at initialization - but you're modifying the LLM's architecture, adding parameters per layer, and complicating serving; it has largely lost to the inline-token approaches in open models.
+- **Cross-attention insertion** (Flamingo's gated cross-attn layers): vision never enters the token sequence; instead, new cross-attention layers interleaved into the frozen LLM read visual features directly. Zero context consumed, and gating (initialized to zero) provably preserves the base LLM at initialization - but you're modifying the LLM's architecture, adding parameters per layer, and complicating serving; it has largely lost to the inline-token approaches in open models (Llama 3.2 Vision was the notable 2024 exception, and Meta moved to an early-fusion design for Llama 4).
 
 Interaction with training: MLP projectors enable the cheap staged recipe - stage 1 trains only the projector (millions of caption pairs, both towers frozen), stage 2 unfreezes the LLM for instruction tuning; whether to unfreeze the *vision encoder* is a real decision (unfreezing helps at scale with enough data, but degrades the encoder on small budgets). Resamplers have more trainable capacity in the adapter itself, needing more stage-1 data. High-resolution support is its own late stage - you extend tiling after basic alignment. And the projector choice sets the KV-cache and prefill economics of every future inference: fixed-64-token images are 20-30× cheaper to serve than 2k-token images.
 
@@ -713,17 +756,17 @@ Interaction with training: MLP projectors enable the cheap staged recipe - stage
 
 </details>
 
-### 28. You need to process 10M document pages per month. VLM or traditional OCR? Do the math.
+### 30. You need to process 10M document pages per month. VLM or traditional OCR? Do the math.
 
 <details><summary><b>Answer</b></summary>
 
 Set up the unit economics first, then let accuracy requirements pick the point on the curve.
 
-**VLM path**: a page at readable resolution is ~1.5k input tokens, plus prompt; structured output ~500 tokens. 10M pages ≈ ~15B input + ~5B output tokens/month. At small-model pricing (~$0.15/M input, ~$0.60/M output) that's ~$2k + $3k ≈ **~$5k/month**; at frontier pricing (~$3/M input, ~$15/M output) it's ~$45k + $75k ≈ **~$120k/month**. Batch APIs typically cut this ~50% if latency allows. Self-hosting an open VLM changes the calculus to GPU-hours: at ~1-2s/page per GPU, 10M pages is ~3-6k GPU-hours/month - tens of thousands of dollars on cloud H100s, less on reserved capacity, plus engineering.
+**VLM path**: a page at readable resolution is ~1.5k input tokens, plus prompt; structured output ~500 tokens. 10M pages ≈ ~15B input + ~5B output tokens/month. The rates below are illustrative, so plug in current price sheets, which move every few months. At small-model rates (~$0.15/M input, ~$0.60/M output) that's ~$2k + $3k ≈ **~$5k/month**; at frontier mid-tier rates (~$3/M input, ~$15/M output) it's ~$45k + $75k ≈ **~$120k/month**. Batch APIs typically cut this ~50% if latency allows. Self-hosting an open VLM changes the calculus to GPU-hours: at a conservative ~1-2 s of GPU time per page, 10M pages is ~3-6k GPU-hours/month, which on cloud H100s is roughly $5-20k depending on the hourly rate you get, less on reserved capacity, plus engineering. Well-batched small VLMs, including document-specialised OCR models, do several times better than that per GPU, so measure your own throughput before committing.
 
 **OCR path**: managed OCR runs ~$1.50 per 1,000 pages for plain text (**~$15k/month**), roughly 10× more with table/form analysis; self-hosted open OCR is near-pure compute at cents per thousand pages. But OCR alone doesn't extract fields - add an LLM pass over the OCR *text* (~500-800 tokens/page instead of 1.5k of image tokens, and cheap models suffice) for a few thousand dollars more.
 
-So the naive comparison - small VLM (~$5k) vs OCR+LLM (~$5-20k) - is closer than most people expect in 2026; the real differentiators are elsewhere: **accuracy on your fields** (handwriting and messy layouts favour VLMs; clean templated forms don't need one), **auditability** (OCR gives coordinates; most VLMs don't), **error character** (OCR fails visibly with garbage; VLMs fail invisibly with plausible values - the latter is worse for financial data), and **latency/throughput**.
+So the naive comparison - small VLM (~$5k) vs OCR+LLM (~$5-20k) - is closer than most people expect in 2026; the real differentiators are elsewhere: **accuracy on your fields** (handwriting and messy layouts favour VLMs; clean templated forms don't need one), **auditability** (OCR gives word-level coordinates; VLM grounding, where available, is coarser), **error character** (OCR fails visibly with garbage; VLMs fail invisibly with plausible values - the latter is worse for financial data), and **latency/throughput**.
 
 My actual recommendation is a **cascade**: document classifier up front; templated/clean pages through OCR+small-LLM; hard pages (handwriting, degraded scans, weird layouts - maybe 10-20% of volume) through a VLM with both image and OCR text; validation and low-confidence human review at the end. That buys ~VLM accuracy at ~OCR-dominated cost.
 
@@ -731,7 +774,7 @@ My actual recommendation is a **cascade**: document classifier up front; templat
 
 </details>
 
-### 29. How does modern TTS work, and what makes speech generation hard in a real-time product?
+### 31. How does modern TTS work, and what makes speech generation hard in a real-time product?
 
 <details><summary><b>Answer</b></summary>
 
@@ -751,7 +794,7 @@ What's actually hard:
 
 </details>
 
-### 30. Adapter-based VLMs vs natively multimodal (early-fusion) models - what's the real tradeoff?
+### 32. Adapter-based VLMs vs natively multimodal (early-fusion) models - what's the real tradeoff?
 
 <details><summary><b>Answer</b></summary>
 
@@ -761,13 +804,13 @@ Why adapters dominate open-source: they're **cheap and modular** - you reuse two
 
 What early fusion buys: **deeper cross-modal integration** (attention mixes modalities from layer 0, learned jointly across all of pretraining rather than in a short alignment phase), **unified generation and understanding** (a token-based model emits image tokens as readily as text - one model both reads and draws, enabling native image generation and true interleaved output), and freedom from encoder constraints (Fuyu handles arbitrary resolutions and aspect ratios by construction). What it costs: full multimodal pretraining at frontier scale, delicate data mixture balancing (modalities can degrade each other), and real training-stability problems - Chameleon documented divergences from modality competition under a shared softmax, requiring QK-norm and norm-placement surgery to train at all.
 
-The honest 2026 summary: frontier labs converged on native multimodality because at their compute scale the integration quality wins; the open ecosystem remains overwhelmingly adapter-based because the recipe is reproducible for ~0.1% of the cost - and for most understanding tasks, well-executed adapters remain competitive.
+The honest 2026 summary: frontier labs converged on native multimodality because at their compute scale the integration quality wins; the open ecosystem remains mostly adapter-based because the recipe is reproducible for a small fraction of the cost - and for most understanding tasks, well-executed adapters remain competitive. The categories also blur in practice: Llama 4's "early fusion" still feeds a separately pretrained vision encoder into a backbone that is then pretrained jointly on text and images, so ask which parts were pretrained together rather than arguing over the label.
 
 **Follow-ups:** Why does a shared softmax over mixed-modality tokens cause instability? If you had one frontier pretraining run, what data-mixture questions would you have to answer? Where do adapter models still beat native ones on benchmarks, and why?
 
 </details>
 
-### 31. You're shipping an image-generation feature. Walk me through the safety design: NSFW filtering, deepfakes, and provenance.
+### 33. You're shipping an image-generation feature. Walk me through the safety design: NSFW filtering, deepfakes, and provenance.
 
 <details><summary><b>Answer</b></summary>
 
@@ -775,7 +818,7 @@ Defence in depth across four stages - no single layer survives contact with adve
 
 **Training time**: filter the training corpus (NSFW, CSAM via hash-matching against known-material databases like PhotoDNA/NCMEC's, and decide your policy on real people and artist styles) - capability the model never learned is the only filter that can't be jailbroken. **Input time**: prompt classifiers plus policy checks, catching not just explicit requests but circumlocution ("attractive person, no clothes, artistic"); for image inputs (editing/reference features), scan uploads - real-person likeness, minors, and known-CSAM hashes; combining an uploaded face with sexualised or violent prompts is *the* deepfake abuse vector, so face-editing paths deserve the strictest rules. **Output time**: run vision classifiers on every generated image before display (nudity, violence, real-person likeness); this catches emergent unsafe outputs from innocent-seeming prompts. Tune thresholds knowing base rates: at millions of generations/day, a 1% false-positive rate is a support catastrophe - measure both directions.
 
-**Provenance** - know the two mechanisms and their distinct failure modes: **C2PA Content Credentials** attach a cryptographically signed manifest (who made it, with what tool, edit history) - strong when present, but it's metadata: screenshots, re-encodes, and platform stripping remove it, so absence proves nothing. **Invisible watermarking** (Google's SynthID class) embeds a signal in pixels that survives compression, resizing, and mild edits - more robust, but detectable only with the owner's detector and removable by determined adversaries. Ship both; OpenAI, Google, and Meta all do some combination. Say the honest part: provenance lets *your* content be identified; it does not solve deepfake *detection* in the wild - post-hoc classifiers for arbitrary synthetic media are an unreliable arms race, which is why policy (impersonation rules, takedown processes) and regulation (EU AI Act synthetic-media transparency obligations) carry weight that classifiers can't.
+**Provenance** - know the two mechanisms and their distinct failure modes: **C2PA Content Credentials** attach a cryptographically signed manifest (who made it, with what tool, edit history) - strong when present, but it's metadata: screenshots, re-encodes, and platform stripping remove it, so absence proves nothing. **Invisible watermarking** (Google's SynthID class) embeds a signal in pixels that survives compression, resizing, and mild edits - more robust, but detectable only with the owner's detector and removable by determined adversaries. Ship both; OpenAI, Google, and Meta all do some combination. Say the honest part: provenance lets *your* content be identified; it does not solve deepfake *detection* in the wild - post-hoc classifiers for arbitrary synthetic media are an unreliable arms race, which is why policy (impersonation rules, takedown processes) and regulation (the EU AI Act's Article 50 transparency obligations on marking and disclosing synthetic content, scheduled to apply from August 2026) carry weight that classifiers can't.
 
 Operationally: red-team continuously (jailbreaks evolve weekly), log for abuse-pattern review, human-review appeal paths for false positives, and rate-limit + investigate accounts probing the filters.
 
@@ -783,7 +826,7 @@ Operationally: red-team continuously (jailbreaks evolve weekly), log for abuse-p
 
 </details>
 
-### 32. Your VLM extracts invoice fields at ~91% per-field accuracy. The customer needs 99% and you cannot fine-tune the model. What do you do?
+### 34. Your VLM extracts invoice fields at ~91% per-field accuracy. The customer needs 99% and you cannot fine-tune the model. What do you do?
 
 <details><summary><b>Answer</b></summary>
 
@@ -805,7 +848,7 @@ Start by being honest: you almost certainly do not reach 99% fully automatic. Th
 
 </details>
 
-### 33. Does test-time compute help on visual tasks? Where does it help, where does it not, and how would you actually use it?
+### 35. Does test-time compute help on visual tasks? Where does it help, where does it not, and how would you actually use it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -839,7 +882,7 @@ flowchart TD
 
 </details>
 
-### 34. You need one embedding space for your own domain: product photos, spec sheets as PDFs, and text queries. Off-the-shelf CLIP is not good enough. How do you build it?
+### 36. You need one embedding space for your own domain: product photos, spec sheets as PDFs, and text queries. Off-the-shelf CLIP is not good enough. How do you build it?
 
 <details><summary><b>Answer</b></summary>
 
@@ -867,7 +910,7 @@ Ship criteria: an offline Recall@k gate, then an online A/B. Offline gains frequ
 
 </details>
 
-### 35. You are self-hosting a VLM for a document pipeline and throughput is a third of what you projected from the LLM's specs. Why, and what do you do?
+### 37. You are self-hosting a VLM for a document pipeline and throughput is a third of what you projected from the LLM's specs. Why, and what do you do?
 
 <details><summary><b>Answer</b></summary>
 
@@ -898,5 +941,103 @@ flowchart LR
 ```
 
 **Follow-ups:** How would you decide the pixel budget per document class rather than globally? Walk me through what changes if the workload shifts to one question per image with no reuse.
+
+</details>
+
+### 38. How do text-to-video models like Veo or Sora work, and why is video generation so much more expensive than image generation?
+
+<details><summary><b>Answer</b></summary>
+
+Same recipe as latent image diffusion, lifted one dimension: compress the video into a spatiotemporal latent, cut it into spacetime patches, and run a diffusion transformer, now usually trained with flow matching, over all of them at once. The expense is token count, multiplied by attention's quadratic cost, multiplied again by sampling steps.
+
+The components:
+
+- **3D video VAE.** Open models such as HunyuanVideo and Wan compress roughly ~4x in time and ~8x8 in space, usually causally in time so the first frame is encoded on its own. That lets one model train on images (one-frame videos) and video together, which matters because well-captioned video is scarce next to images.
+- **Spacetime patches.** Each latent frame is patchified, commonly 2x2, into tokens. Five seconds of 720p at 24 fps becomes ~30 latent frames of ~3,600 tokens each, so ~100k tokens per clip.
+- **DiT with full 3D attention.** Every token attends across space and time. Factorised spatial-then-temporal attention is cheaper but weaker on motion coherence, which is why most strong open models pay for full attention.
+- **Text conditioning** from a large text encoder or an LLM. Training captions are rewritten densely by a VLM, and short user prompts are expanded the same way at inference, so train and test captions match.
+- **Joint audio.** Veo 3 and Sora 2 generate synchronised sound with the picture rather than dubbing it afterwards.
+
+Cost arithmetic: ~100k tokens, 30-50 sampling steps, doubled by classifier-free guidance, is why a few seconds of video takes GPU-minutes. The levers are step distillation, guidance distillation, sparse or sliding-window attention, reusing features across adjacent steps, and generating at low resolution before a separate upsampler.
+
+What stays hard: object permanence through occlusion, plausible physics, identity drift across a long shot, and length itself. Longer clips are produced by conditioning on the last frames of the previous chunk, and errors accumulate, which is why products cap clip length and build longer pieces by stitching shots.
+
+**Worth sketching.** One loop over ~100k spacetime tokens is the whole cost story.
+
+```mermaid
+flowchart LR
+    A["Text prompt"] --> B["Text encoder"]
+    C["Noise in a spatiotemporal latent"] --> D["DiT with full 3D attention<br/>~100k spacetime tokens"]
+    B -->|"conditioning"| D
+    D -->|"30-50 steps, x2 for CFG"| E["Clean video latent"]
+    E --> F["3D VAE decoder"]
+    F --> G["Video frames"]
+```
+
+**Follow-ups:** Why does a causal 3D VAE make joint image and video training possible? You must cut generation cost 10x for a preview feature: which levers do you pull first and what quality do you lose? How would you evaluate temporal consistency automatically?
+
+</details>
+
+### 39. What is a vision-language-action (VLA) model, and how do you turn a VLM into a robot policy that runs at control frequency?
+
+<details><summary><b>Answer</b></summary>
+
+A VLA is a VLM fine-tuned to output robot actions instead of, or as well as, text: camera images and an instruction in, end-effector or joint commands out. The appeal is transfer. The web-scale visual and semantic knowledge in the VLM lets the policy follow novel instructions and handle objects that never appeared in robot data.
+
+Two ways to emit actions:
+
+- **Actions as tokens.** RT-2 and OpenVLA discretise each action dimension into 256 bins and train the VLM to output them as ordinary tokens. Simple, and it reuses the LLM head, but autoregressive decoding of several dimensions per timestep is slow, and naive per-step binning represents smooth, high-frequency motion poorly. Compressed action tokenizers such as FAST (frequency-space tokenization of action chunks) narrow that gap.
+- **A continuous action head.** pi0 attaches a flow-matching "action expert" to a PaliGemma backbone and emits chunks of continuous actions for control at up to ~50 Hz. Better for dexterous work, at the cost of a second objective to train.
+
+The central systems problem is the frequency mismatch. A multi-billion-parameter VLM takes tens to hundreds of milliseconds per forward pass, while control loops want 50-200 Hz. Two answers, usually combined: **action chunking**, predicting the next ~0.5-1 s of actions per inference and executing them while the next chunk computes, and **dual-system designs** (NVIDIA's GR00T N1, Figure's Helix) that pair a slower VLM for scene and task understanding with a small fast policy for motor control.
+
+Data is the binding constraint, not architecture. Each teleoperated demonstration costs human time, so teams pool cross-embodiment datasets such as Open X-Embodiment and co-train on web vision-language data to stop the VLM forgetting what it knew. Evaluation is the other hard part: simulators flatter policies, and real-robot trials are slow and noisy, so report success over many trials with confidence intervals, split by seen versus unseen objects, scenes and instructions.
+
+**Worth sketching.** Two loops at different rates is the answer to "how can a 7B model drive a 200 Hz controller".
+
+```mermaid
+flowchart LR
+    A["Camera frames<br/>plus instruction"] --> B["VLM backbone<br/>slow, ~5-10 Hz"]
+    B --> C["Latent plan or<br/>action chunk"]
+    C --> D["Fast action policy<br/>50-200 Hz"]
+    E["Joint and gripper state"] --> D
+    D --> F["Motor commands"]
+    F -->|"new observations"| A
+```
+
+**Follow-ups:** Why does co-training on web vision-language data matter when you only care about robot success? What goes wrong when an action chunk is executed open-loop and the scene changes mid-chunk? How would you compare two VLA checkpoints fairly with only 50 real-robot trials each?
+
+</details>
+
+### 40. How does a full-duplex speech model listen and talk at the same time, and when would you choose one over a turn-based voice pipeline?
+
+<details><summary><b>Answer</b></summary>
+
+A turn-based system, whether a cascaded pipeline or a hosted speech-to-speech model sitting behind VAD or semantic turn detection, alternates: decide the user has finished, then respond. A full-duplex model has no turn boundary. It consumes the user's audio stream and produces its own audio stream in parallel, every frame, and staying silent is just one of the things it can generate.
+
+Kyutai's Moshi is the reference design worth knowing:
+
+- **Audio as tokens.** The Mimi codec encodes speech at 12.5 frames per second, each frame a stack of residual vector quantization (RVQ) codebooks. The first codebook is distilled towards self-supervised speech features, so it carries mostly content (a semantic token), and the rest carry voice and acoustic detail.
+- **Two streams.** At every frame the model reads the user's tokens and generates its own, so overlap, interruptions and backchannels ("mhm" while the user talks) are learned behaviour rather than rules in an orchestrator.
+- **Inner monologue.** It predicts time-aligned text tokens for its own speech ahead of the audio tokens, which measurably improves the linguistic quality of what it says.
+- **Latency.** One 80 ms frame plus a small acoustic delay gives a theoretical ~160 ms, around ~200 ms in practice, well under a cascaded pipeline.
+
+Why most products still ship turn-based in 2026: control. With no text midpoint and no discrete turn, it is hard to insert a tool call, run a guardrail on the reply before it is spoken, keep a clean transcript, or enforce a script. Full-duplex models are also usually far smaller than frontier text models, so reasoning and instruction following lag. And training needs large volumes of natural two-channel conversation, which is scarce and often synthesised.
+
+Choose full-duplex when naturalness is the product: companionship, language practice, low-stakes conversation. Choose a pipeline or turn-based speech-to-speech when the agent must take actions, follow policy, or be audited. Either way, evaluate turn-taking directly (overlap rate, response gap, interruption handling) alongside content quality.
+
+**Worth sketching.** Both streams advance every 80 ms, which is why there is no endpointing step to tune.
+
+```mermaid
+flowchart LR
+    A["User audio stream"] --> B["Mimi encoder<br/>12.5 frames per second"]
+    B --> C["Joint transformer,<br/>one step per 80 ms frame"]
+    C --> D["Own text token,<br/>the inner monologue"]
+    C --> E["Own audio tokens,<br/>silence included"]
+    D --> E
+    E --> F["Mimi decoder to speaker"]
+```
+
+**Follow-ups:** Why does distilling the first codebook towards semantic features help a speech language model? How would you add a safety filter to a full-duplex model without reintroducing turn latency? What training data would you need to teach backchannelling, and how would you get it?
 
 </details>

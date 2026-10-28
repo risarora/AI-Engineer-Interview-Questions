@@ -7,6 +7,7 @@ Three plans depending on how much runway you have. All of them assume ~2 hours/d
 3. **Type out the coding challenges yourself** - don't read the solutions first. The interview is a blank editor, not a multiple-choice test.
 4. **Practice system design on a whiteboard or doc**, talking through the [framework](11-ai-system-design/) before checking the case study.
 5. The night before any interview: [CHEATSHEET.md](CHEATSHEET.md).
+6. **Do at least one real mock before the real loop.** Use the [mock interview kit](13-interview-process-and-behavioral/mock-interview-kit.md) with a friend, or book a mock interview or mentorship session with an experienced interviewer at [enginebogie.com/u/om](https://enginebogie.com/u/om) or [topmate.io/ombharatiya](https://topmate.io/ombharatiya).
 
 ---
 

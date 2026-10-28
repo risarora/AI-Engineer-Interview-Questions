@@ -149,7 +149,7 @@ def retrieve(user, query_text, query_vec, k=50):
 
 ### Generation & citations
 
-- Context builder assembles: system prompt (grounding rules, refusal policy, citation format) + top chunks with IDs + conversation history, under a ~12-16k token budget. Order matters - put the strongest chunks first and last ("lost in the middle").
+- Context builder assembles: system prompt (grounding rules, refusal policy, citation format) + top chunks with IDs + conversation history, under a ~12-16k token budget. Put the strongest chunks first: current models are much less position-sensitive at ~7k tokens than the 2023 "lost in the middle" results suggest, but ordering by relevance costs nothing and still helps weaker, cheaper tiers.
 - Prompt contract: *answer only from provided context; every factual claim cites `[chunk_id]`; if context is insufficient, say so and name what's missing*. A grounded "I don't know" is a success mode, not a failure - say this explicitly in the interview.
 - **Citation verifier** post-step: check every cited chunk_id exists in the retrieved set (catches hallucinated citations cheaply); optionally run a small-model entailment check that each claim is supported by its cited chunk - run async and sampled if latency-sensitive, inline for high-stakes surfaces.
 - Model tiering: default to a mid-tier model (most Q&A doesn't need frontier reasoning); route to a frontier model on signals like multi-document synthesis, long context, or a retry-after-thumbs-down.
@@ -165,7 +165,8 @@ def retrieve(user, query_text, query_vec, k=50):
 
 - **RAG, not fine-tuning, for knowledge** - corpus churns 1-2% daily and is permission-bound; fine-tuned weights can't enforce per-user ACLs and go stale immediately. This is the canonical "why RAG" scenario; state it crisply.
 - Fine-tuning only appears later, if at all: possibly a small fine-tuned query-rewriter or a distilled reranker once we have traffic data.
-- Context budget per query: ~500-token system prompt (shared prefix → **provider prompt caching** cuts its cost ~90%) + ~6-8 chunks × 500 tokens ≈ 3-4k + history ≈ 1-2k → **~6-8k input tokens typical**.
+- Context budget per query: ~500-token system prompt + ~8 chunks × ~600 tokens (breadcrumb headers included) ≈ 4-5k + history ≈ 1-2k → **~6-8k input tokens typical**.
+- **Provider prompt caching** discounts cached prefix tokens heavily (roughly 50-90% depending on provider), but most providers only cache prefixes above a minimum length, on the order of 1k tokens. A bare 500-token system prompt may not qualify, so put the citation rules, refusal policy and few-shot examples in one stable prefix, and in multi-turn sessions keep earlier turns ahead of the freshly retrieved chunks so they stay cacheable. Even then the cacheable share is small here, because retrieved chunks change every turn.
 - Corpus hygiene beats model cleverness: dedupe near-identical pages, exclude archived spaces by default, let admins blocklist known-bad content. Most "the AI is wrong" reports trace back to the corpus containing two contradictory pages.
 - Structured sources (Jira, HR systems) may be better served by **tools** (live API lookup) than by indexing snapshots - mention this as a v2 direction rather than complicating v1.
 
@@ -204,7 +205,7 @@ Illustrative token math with assumed ~prices (state your assumptions; exact pric
 |---|---|---|
 | Generation input | 30k q/day × 7k tokens × ~$3/M (frontier-mid tier) | ~$630/day |
 | - with prompt caching + 70% mid-tier routing (~$0.5/M) | blended ~$1.2/M effective | ~$250/day |
-| Generation output | 30k × 400 tokens × ~$10/M blended | ~$120/day |
+| Generation output | 30k × 400 tokens × ~$10/M blended (conservative: a 70/30 mid/frontier split is closer to ~$6/M) | ~$70-120/day |
 | Query rewrite + rerank (small models) | 30k × ~1.5k tokens × ~$0.15/M + reranker infra | ~$10-30/day |
 | Embeddings (steady state) | ~200k chunk updates/day × 500 tokens × ~$0.05/M | ~$5/day |
 | Full re-embed (rare) | 7.5B tokens × ~$0.05/M | ~$375/event |
@@ -212,7 +213,7 @@ Illustrative token math with assumed ~prices (state your assumptions; exact pric
 | **Blended per query** | | **~$0.015-0.03** |
 | **Monthly total** | LLM ~$8-12k + infra ~$5k + connectors/ops | **~$15-25k/mo** |
 
-Key levers, in order of impact: model tiering/routing, prompt caching on the shared prefix, retrieved-chunk count (context length dominates input cost), response caching where ACLs permit. At ~$20k/mo for 20k employees, this costs ~$1/employee/month - an easy ROI story if it saves minutes per week; interviewers like hearing the business framing.
+Key levers, in order of impact: model tiering/routing, retrieved-chunk count (context length dominates input cost), response caching where ACLs permit, then prompt caching (worth having, but the stable prefix is only ~15-20% of input here, so it moves the bill far less than in agent or chat-with-repo workloads). At ~$20k/mo for 20k employees, this costs ~$1/employee/month - an easy ROI story if it saves minutes per week; interviewers like hearing the business framing.
 
 ## Failure modes & mitigations
 
@@ -251,4 +252,5 @@ Key levers, in order of impact: model tiering/routing, prompt caching on the sha
 - *"Why not fine-tune on the wiki?"* (Freshness, ACLs, attribution, and cost of continuous retraining; fine-tuning stores knowledge unverifiably and can't unlearn a revoked doc.)
 - *"How do you bootstrap the golden set before you have users?"* (Expert-authored questions per department, synthetic questions generated from sampled docs then human-filtered, dogfood pilot traffic.)
 - *"Slack says you can't index DMs. Does your design change?"* (Connector-level scoping; the ACL model already handles it - index only channels meeting policy; call out legal/works-council review as a real-world gate.)
+- *"One of your sources tightens its API terms: no more bulk export for indexing, only a per-user search API or an MCP server. What changes?"* (Move that source to federated retrieval: at query time, call its search endpoint with the user's own delegated OAuth token so the source enforces its own ACLs, then fuse those results with the indexed ones via RRF and rerank together. Costs: you inherit its latency and rate limits, so run it in parallel with a tight timeout and degrade to "that source didn't respond"; you lose control of its ranking and freshness signals; you need per-source retrieval evals. Treat MCP tool output as untrusted retrieved text, same as any chunk.)
 - *"What breaks at 10x scale - 200k employees, 150M chunks?"* (Index sharding and filtered-ANN recall under selective ACL filters; identity-graph expansion caching; ingestion parallelism against API rate limits; cost forcing more aggressive tiering.)

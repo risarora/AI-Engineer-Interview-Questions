@@ -6,9 +6,10 @@ No role got transformed harder by AI than this one. Your entire discipline was b
 
 - **"How would you test this?" now has a non-deterministic subject.** The classic design-a-test-plan round is still the spine of the loop, but the feature under test is a support chatbot, a summariser, or an agent - and interviewers immediately probe whether you reach for exact-match assertions (fail) or graded evals, property checks, and statistical thresholds (pass).
 - **Eval harness design is the new test-framework question.** Where 2024 loops asked you to architect a Selenium/Playwright framework, 2026 loops ask you to architect an eval pipeline: golden datasets, scoring functions, LLM-as-judge with calibration, dashboards, and regression gates wired into CI. Same skill shape - test infrastructure - new substrate.
-- **Adversarial testing became a named round at AI-product companies.** Prompt injection suites, jailbreak regression packs, and PII-leak probes are treated as QA deliverables. Security-adjacent testing moved from "nice to have" to a direct interview topic for this role.
+- **Adversarial testing became a regular topic, sometimes its own round, at AI-product companies.** Prompt injection suites, jailbreak regression packs, and PII-leak probes are treated as QA deliverables. Security-adjacent testing moved from "nice to have" to a direct interview topic for this role.
 - **A new practical exercise: "here's a prompt change / model upgrade - ship or block?"** You're given eval results with noise in them and asked to make a release call. They're testing whether you understand variance, sample size, and the difference between a regression and a re-roll.
-- **AI-assisted test authoring is assumed, and tested.** Many loops now let (or require) you to use an AI coding tool during the exercise, then grill you on which generated tests you kept, which you rejected, and why. Refusing to use the tools reads as badly as trusting them blindly.
+- **AI-assisted coding rounds arrived, and AI-tool fluency is graded.** Meta began piloting an AI-enabled coding round in October 2025 (about 60 minutes in CoderPad with a built-in assistant, replacing one of the onsite coding rounds) and expanded it through 2026, and other large companies have run similar pilots or added AI-assisted tasks to online assessments (reported, varies by team). For SDET candidates the assisted exercise usually turns into a testing exercise: generate tests for an unfamiliar module with the assistant, then defend which generated tests you kept, which you rejected, and where the assistant guessed expected values instead of deriving them from the spec. Refusing to use the tools reads as badly as trusting them blindly. Rules differ by company and round, so ask the recruiter and practise both modes.
+- **Agentic test tooling is now a design question.** Browser-driving agents (Playwright's planner, generator and healer agents, MCP-connected browser control) mean interviewers ask where you would let an agent author or repair end-to-end tests, and what stops a "self-healing" suite from quietly absorbing real regressions.
 - **Testing AI-generated application code is a new mandate.** Teams shipping agent-written code ask how QA changes when the code author is a model: coverage as a gate rather than a vanity metric, mutation testing, and review heuristics for plausible-but-wrong code.
 - **De-emphasised:** encyclopedic Selenium locator trivia, manual test-case-document authoring, and pure UI-automation framework questions. They still appear, but they're screen-level table stakes, not the differentiator. Nobody asks you to derive ML math - that anxiety is misplaced.
 
@@ -48,8 +49,8 @@ The bar is: can you make quality *measurable* for a component that never gives t
 | [09-safety-security-and-responsible-ai](../09-safety-security-and-responsible-ai/) | 🟢 deep | Adversarial testing is QA territory now. Injection taxonomy, jailbreak regression suites, PII probes, and safety gates are asked directly. |
 | [10-multimodal](../10-multimodal/) | ⚪ skim | Awareness that image/audio features need their own eval sets; rarely a dedicated question unless the product is multimodal. |
 | [11-ai-system-design](../11-ai-system-design/) | 🟡 solid | Senior loops include "design the quality/eval layer for this system" - practise bolting your harness onto the standard chatbot and RAG designs. |
-| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Practical rounds: build a small eval runner, write property-based assertions, script a judge. Python fluency assumed. |
-| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Have stories ready: a quality regression you caught (or missed), a flaky-vs-real triage call, how you introduced evals to a skeptical team. |
+| [12-coding-challenges](../12-coding-challenges/) | 🟡 solid | Practical rounds: build a small eval runner, write property-based assertions, script a judge. Python fluency assumed, and an AI assistant is increasingly allowed, which raises the bar on how much you finish and how well you verify it. |
+| [13-interview-process-and-behavioral](../13-interview-process-and-behavioral/) | 🟡 solid | Have stories ready: a quality regression you caught (or missed), a flaky-vs-real triage call, how you introduced evals to a sceptical team, and a concrete account of how you use AI tools in testing and check their output. |
 
 ## Role-specific interview questions
 
@@ -78,7 +79,7 @@ The framing interviewers want: a single test run can't fail on "the wording chan
 Same anatomy as a test framework: cases, runner, assertions, reporting - plus two new organs: a judge and a baseline store.
 
 - **Dataset:** versioned golden set in the repo (JSONL: input, context, expected properties, reference answer where one exists, tags like `critical`/`edge`/`injection`). Sources: hand-written seed cases, mined production failures, synthetic expansions. Treat it like code - reviewed PRs, no silent edits, because changing the dataset changes what "passing" means.
-- **Runner:** executes cases against a pinned configuration (model ID, prompt version, temperature, retrieval index snapshot). Parallelized, cached (don't re-pay for unchanged case+config pairs), cost- and time-budgeted.
+- **Runner:** executes cases against a pinned configuration (model ID, prompt version, temperature, retrieval index snapshot). Parallelised, cached (don't re-pay for unchanged case+config pairs), cost- and time-budgeted.
 - **Scorers, layered by cost:** (1) code checks - schema, regex, invariants; (2) cheap similarity metrics; (3) LLM-as-judge with a rubric for the subjective dimensions (helpfulness, faithfulness). Every scorer returns a score plus a reason string for debuggability.
 - **Baseline + regression logic:** every main-branch run stores per-case scores. A candidate run diffs against baseline; the gate is statistical (aggregate threshold, plus zero tolerance on `critical` tags), and the report shows *which cases* moved, with before/after outputs.
 - **Reporting:** per-tag breakdown, cost/latency per case, judge disagreement flags, trend over time.
@@ -97,7 +98,7 @@ A ladder, cheapest and most trustworthy first:
 
 1. **Structural contracts:** parses as JSON, validates against a Pydantic schema, enums in range, required fields present. Deterministic, zero cost, catches a shocking fraction of real failures.
 2. **Deterministic content properties:** must-contain / must-not-contain (order ID echoed correctly, no "as an AI language model," no competitor names, no email addresses), length bounds, language detection, all cited URLs actually appear in the retrieved context.
-3. **Behavioral invariants:** the response *refuses* on the disallowed-topic cases; asks a clarifying question when the input is ambiguous-tagged; never invokes a tool not in the allowlist.
+3. **Behavioural invariants:** the response *refuses* on the disallowed-topic cases; asks a clarifying question when the input is ambiguous-tagged; never invokes a tool not in the allowlist.
 4. **Reference-based metrics** where a reference exists: semantic similarity to a gold answer above a tuned threshold - useful, but thresholds are fragile; treat as signal, not verdict.
 5. **Rubric-graded judgement** for the genuinely subjective residue: faithfulness to sources, helpfulness, tone.
 
@@ -123,9 +124,9 @@ You shouldn't trust it until it's measured - a judge is a model making judgement
 
 Calibration process: collect a sample of real outputs (100-300), have humans label them with the *same rubric* the judge will use, then measure judge - human agreement (Cohen's kappa for categorical verdicts, correlation for scalar scores). You're looking not just at overall agreement but at the *disagreement structure* - a judge that's lenient on hallucinations but strict on tone is worse than its average agreement suggests. Iterate on the judge prompt until agreement is acceptable, and re-run this whenever the judge model or prompt changes.
 
-Known judge failure modes to name unprompted: **position bias** in pairwise comparisons (mitigate by scoring both orderings), **verbosity bias** (longer answers score higher - control for length in the rubric), **self-preference** (judging its own family's outputs favorably - use a different model family or force rubric-anchored scoring), and score compression (everything gets 7/10 - use discrete labelled categories instead of 1-10 scales, and require the judge to cite evidence before the verdict).
+Known judge failure modes to name unprompted: **position bias** in pairwise comparisons (mitigate by scoring both orderings), **verbosity bias** (longer answers score higher - control for length in the rubric), **self-preference** (judging its own family's outputs favourably - use a different model family or force rubric-anchored scoring), and score compression (everything gets 7/10 - use discrete labelled categories instead of 1-10 scales, and require the judge to cite evidence before the verdict).
 
-Operationally: binary or small-enum verdicts over scalar scores, one rubric dimension per judge call rather than one omnibus judgement, temperature 0, and a periodic human audit of a random slice plus every judge-flagged failure. The judge is a scaling lever for human review, not a replacement for it.
+Operationally: binary or small-enum verdicts over scalar scores, one rubric dimension per judge call rather than one omnibus judgement, a pinned judge model at temperature 0 where it allows one, and a periodic human audit of a random slice plus every judge-flagged failure. The judge is a scaling lever for human review, not a replacement for it.
 
 **Follow-ups:** Judge agreement with humans is 90% - is that good enough to block releases on? How do you version the judge itself so a judge-prompt change doesn't masquerade as a product regression?
 
@@ -158,14 +159,14 @@ The anti-pattern to call out: teams that ship prompt edits straight to productio
 
 <details><summary><b>Answer</b></summary>
 
-No - and this question is a shibboleth for hands-on experience. Temperature 0 means greedy decoding: always pick the argmax token. But the numbers feeding the argmax aren't stable across runs. Floating-point addition is non-associative, so batching differences, kernel scheduling, and mixture-of-experts routing (where your tokens' expert assignment can depend on what else is in the batch) produce tiny logit differences. When two top tokens are near-tied, a 1e-6 wobble flips the pick - and one flipped token changes every token after it, because generation is autoregressive. Add provider-side realities - model snapshot updates, heterogeneous hardware, load-dependent inference paths - and identical requests to a hosted API can and do return different text at temperature 0.
+No - and this question is a shibboleth for hands-on experience. Temperature 0 means greedy decoding: always pick the argmax token. But the numbers feeding the argmax aren't stable across runs. Floating-point addition is non-associative, and most serving kernels are not batch-invariant: the reduction order changes with how many other requests share your batch, which depends on server load. Mixture-of-experts routing with capacity limits adds another batch-dependent path. The result is tiny logit differences between otherwise identical requests. When two top tokens are near-tied, a 1e-6 wobble flips the pick - and one flipped token changes every token after it, because generation is autoregressive. Add provider-side realities - model snapshot updates, heterogeneous hardware, load-dependent inference paths - and identical requests to a hosted API can and do return different text at temperature 0.
 
 Consequences for test strategy:
 
 - **Never build assertions that assume replay-stability** against a hosted model. Property checks and statistical gates are still required at temperature 0.
 - **Flake triage changes:** an intermittent eval failure may be (a) a real borderline behaviour worth a test case, (b) infra flake in your harness, or (c) intrinsic sampling wobble. Distinguish by re-running the *same* case k times: 1/20 failures on a near-tie is wobble; 8/20 is a behaviour problem.
-- **For true determinism** you need self-hosted inference with fixed seeds, fixed batch composition, and deterministic kernels - achievable, costly, and mostly useful for debugging, not CI.
-- Temperature 0 is still often *right* for structured tasks - lower variance is real; just don't confuse lower variance with determinism.
+- **For true determinism** you need self-hosted inference with fixed seeds and batch-invariant, deterministic kernels (some open serving stacks now offer a batch-invariant mode at a throughput cost) - achievable, costly, and mostly useful for debugging and replay, not as an assumption in CI.
+- Temperature 0 is still often *right* for structured tasks - lower variance is real; just don't confuse lower variance with determinism. And many reasoning models don't let you set temperature at all, so a test strategy that depends on it doesn't survive the next model upgrade.
 
 **Follow-ups:** How does this change your definition of "flaky test"? Would you cache model outputs in CI, and what does that trade away?
 
@@ -293,10 +294,68 @@ Both directions of this matter, and interviewers want to hear you've operational
 
 </details>
 
+### 14. We want an AI agent to maintain our end-to-end suite: generate tests from the running app and auto-heal the ones that break. What's your position, and what guardrails do you put on it?
+
+<details><summary><b>Answer</b></summary>
+
+Yes for authoring drafts and repairing locators, no for unsupervised changes to what a test asserts. The value is real: Playwright's test agents (planner, generator, healer) or an MCP-connected browser agent can explore an app, write a plan, produce tests with role-based locators, and patch selectors after a UI refactor. The risk is specific. A healer's goal is to turn a red test green, and the cheapest way to do that is to weaken the oracle. A checkout test that fails because the total is now wrong can be "healed" by updating the expected total. That is a regression laundered into the suite.
+
+So the policy is to classify the failure before anything gets repaired:
+
+- **Classify first.** Locator or timing break (element renamed, moved, slower render), environment or infra problem, or behaviour change. Only the first class is eligible for automatic repair. Behaviour changes go to a human as a possible bug.
+- **Constrain the diff mechanically.** Auto-merge a heal only if the patch touches locators, waits or navigation, never `expect()` lines, expected values or test data. Enforce that with a diff or AST check, not by instructing the agent.
+- **Re-verify against the last good build.** A genuine locator fix passes on both the old and new build. A heal that passes only on the new build has encoded the new behaviour, so it goes to triage.
+- **Audit and budget.** Log every heal with before and after, track heal rate per test, and sample merged heals for human review. A test healed every week is a design smell or a flaky feature.
+
+For generated tests the usual rule holds: the agent drafts steps and locators, expected values come from the spec or a human. Run mutation testing or seeded-bug checks on generated suites, because agents readily produce tests that click through a flow and assert almost nothing.
+
+**Worth sketching.** The triage gate that decides which failures an agent is allowed to repair.
+
+```mermaid
+flowchart TD
+    F["E2E test fails"] --> C{"Classify failure"}
+    C -->|"locator or timing"| H["Agent proposes heal"]
+    C -->|"behaviour change"| B["Possible bug<br/>human triage"]
+    C -->|"env or infra"| R["Retry and flag infra"]
+    H --> D{"Diff touches assertions?"}
+    D -->|"yes"| B
+    D -->|"no"| V["Run on last good build<br/>and new build"]
+    V -->|"passes both"| M["Auto-merge with audit log"]
+    V -->|"new build only"| B
+```
+
+**Follow-ups:** The healed locator passes on both builds but now targets a different button with the same accessible name - how would you catch that? What heal rate would make you stop trusting a test, and what do you do with it?
+
+</details>
+
+### 15. Our agent depends on MCP servers owned by three other teams. How do you test so a change on their side doesn't silently break our agent?
+
+<details><summary><b>Answer</b></summary>
+
+Treat each tool server as a provider in consumer-driven contract testing, with one twist: for an agent, the contract includes natural-language text that changes behaviour without breaking any schema.
+
+What the contract covers:
+
+- **Structure:** tool names, input JSON schemas, output shapes, error codes. Diff these mechanically on every provider release. A renamed field or a newly required argument is a breaking change, same as any API.
+- **Descriptions:** tool and parameter descriptions. The model picks tools and fills arguments from this text, so changing "search orders" to "search orders and invoices" can shift tool selection with zero schema change. Snapshot descriptions and treat any diff as a change that triggers agent evals, not a cosmetic edit. Unannounced description changes are also a security signal, so the same check doubles as rug-pull detection.
+- **Behaviour:** representative call and response pairs, recorded from the real server into fixtures. Keep them honest Pact-style: the provider replays your fixtures in their CI, so your mocks can't drift from reality.
+
+Test layers on your side:
+
+1. **Every PR, deterministic:** the agent runs against recorded fixtures, with trajectory assertions (right tool chosen, arguments schema-valid, failure responses handled).
+2. **On provider release and on a schedule:** fetch the live tool list (`tools/list`), diff schemas and descriptions against the pinned snapshot, and alert or block. Servers that emit `list_changed` notifications make this event-driven.
+3. **When anything changed:** statistical tool-selection evals, k runs per scenario, comparing tool-choice accuracy and task success against baseline.
+
+Operationally, pin server versions where you can, get provider teams to run your contract tests in their pipeline (that is the real win of consumer-driven contracts), and test degradation explicitly: when a tool disappears or errors, assert the agent reports the gap rather than inventing a result.
+
+**Follow-ups:** A provider adds an optional parameter and tool-selection accuracy drops 6% - whose bug is it, and who fixes it? How do you test description changes without paying for full agent evals on every provider commit?
+
+</details>
+
 ## Portfolio moves
 
 - **An open eval harness for a real LLM feature.** A small RAG or chatbot app plus a versioned golden set (100+, tagged), layered scorers (properties → similarity → calibrated judge), baseline comparison, and a GitHub Actions workflow that blocks on regression - with a README showing a real caught regression. *Demonstrates:* the exact job: eval-as-test-suite, wired into CI, not a notebook demo.
-- **A judge-calibration writeup.** Take one judged dimension (e.g., faithfulness), label 150 outputs yourself, publish judge-vs-human agreement, the bias you found (position/verbosity), and the prompt iterations that fixed it. *Demonstrates:* measurement rigor - the single rarest skill in this market; almost every candidate says "LLM-as-judge," almost none have calibrated one.
+- **A judge-calibration writeup.** Take one judged dimension (e.g., faithfulness), label 150 outputs yourself, publish judge-vs-human agreement, the bias you found (position/verbosity), and the prompt iterations that fixed it. *Demonstrates:* measurement rigour - the single rarest skill in this market; almost every candidate says "LLM-as-judge," almost none have calibrated one.
 - **A prompt-injection regression suite.** A categorised attack pack (direct, indirect, tool-abuse, exfiltration) with automated success detection (canary strings, mock-tool call recording), runnable against any endpoint, with attack-success-rate reporting over time. *Demonstrates:* adversarial QA instincts and safety literacy - gets you taken seriously in the security-adjacent rounds.
 - **A non-determinism study.** Run the same suite 20× across temperatures and two providers; publish variance bands, a temperature-0 non-determinism demonstration, and what threshold you'd need to detect a 3% real regression. *Demonstrates:* statistical flake literacy - the "temperature 0 isn't determinism" conversation, with your own data.
 - **A mutation-testing pass over AI-generated tests.** Generate a test suite with a coding agent, run mutation testing, document the weak assertions it exposed and how you hardened them. *Demonstrates:* you can supervise AI test authorship instead of merely consuming it.

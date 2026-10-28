@@ -11,7 +11,7 @@ This is the classic opener. The decision axes:
 | Axis | RAG | Long context | Fine-tuning |
 |---|---|---|---|
 | **Freshness** | Update index in minutes | Re-send docs every call | Retrain to update |
-| **Corpus size** | Effectively unbounded | Bounded by window (~1M tokens ≈ a few thousand pages) | Baked into weights, lossy |
+| **Corpus size** | Effectively unbounded | Bounded by window (frontier models commonly offer ~200k-1M tokens, and 1M ≈ a few thousand pages) | Baked into weights, lossy |
 | **Cost per query** | Retrieve top-k, pay for ~2-10k context tokens | Pay for the whole corpus per call (caching helps but doesn't eliminate it) | Cheap at inference, expensive to train/maintain |
 | **Attribution** | Natural - cite retrieved chunks | Possible but weaker | None - can't cite weights |
 | **Access control** | Filter at retrieval time | Must pre-filter what you stuff in | Impossible per-user |
@@ -44,7 +44,7 @@ Interviewers want you to know **every stage is a failure point** and to name whe
 
 ### Parsing: the unglamorous bottleneck
 
-Real corpora are PDFs with multi-column layouts, scanned pages, tables that turn to soup, headers/footers polluting every chunk. If parsing mangles a table, nothing downstream can recover. Modern practice: layout-aware parsers or VLM-based parsing (render page → vision model → markdown), tables extracted to markdown/HTML with a text summary embedded alongside. Budget more engineering time here than for anything else.
+Real corpora are PDFs with multi-column layouts, scanned pages, tables that turn to soup, headers/footers polluting every chunk. If parsing mangles a table, nothing downstream can recover. Modern practice: layout-aware parsers or VLM-based parsing (render page → vision model → markdown), tables extracted to markdown/HTML with a text summary embedded alongside. For layout-heavy corpora (slides, forms, charts, scanned reports) a newer option is to skip text extraction for retrieval altogether: **visual document retrievers** (ColPali-style) embed page images directly with multi-vector late interaction, and a vision-capable LLM reads the retrieved pages. Budget more engineering time here than for anything else.
 
 ### Chunking
 
@@ -56,14 +56,14 @@ Real corpora are PDFs with multi-column layouts, scanned pages, tables that turn
 
 Typical numbers: **256-1024 tokens per chunk, 10-20% overlap**. Small chunks → precise retrieval, fragmented context; large chunks → more context, diluted embeddings. Decouple when needed: retrieve small, return the parent ("small-to-big" / parent-document retrieval).
 
-**Contextual retrieval** (popularized by Anthropic): before embedding, prepend a short LLM-generated blurb situating the chunk in its document ("This chunk is from ACME's Q2 filing, discussing..."). Fixes the "chunk says 'the company' - which company?" problem. Anthropic reported it cut top-20 retrieval failures by ~49% combined with contextual BM25, ~67% with reranking added. Cost is one cheap LLM call per chunk at index time - prompt caching makes it affordable.
+**Contextual retrieval** (popularised by Anthropic): before embedding, prepend a short LLM-generated blurb situating the chunk in its document ("This chunk is from ACME's Q2 filing, discussing..."). Fixes the "chunk says 'the company' - which company?" problem. Anthropic reported it cut top-20 retrieval failures by ~49% combined with contextual BM25, ~67% with reranking added. Cost is one cheap LLM call per chunk at index time - prompt caching makes it affordable.
 
 ### Embeddings
 
 A **bi-encoder** embeds query and documents *independently* into one vector space; relevance ≈ cosine similarity. That independence is what makes pre-computation and ANN search possible - and what caps quality (no token-level interaction).
 
-- **MTEB** is the standard embedding benchmark - useful for shortlisting, but it's public (training-data contamination is rampant) and your domain isn't in it. Always eval top candidates on your own retrieval set.
-- **Dimensionality**: more dims → better quality, linearly more RAM and slower search. **Matryoshka embeddings** are trained so prefixes of the vector are themselves valid embeddings - truncate 3072→256 dims for cheap first-pass search, refine with full vectors (e.g., OpenAI's `text-embedding-3` `dimensions` parameter).
+- **MTEB** (now including the multilingual MMTEB extension) is the standard embedding benchmark - useful for shortlisting, but it's public (models can be tuned on overlapping data, so leaderboard gaps overstate real gaps) and your domain isn't in it. Always eval top candidates on your own retrieval set.
+- **Dimensionality**: more dims usually buy some quality with diminishing returns, and cost linearly more RAM and slower search. **Matryoshka embeddings** are trained so prefixes of the vector are themselves valid embeddings - truncate 3072→256 dims for cheap first-pass search, refine with full vectors (e.g., OpenAI's `text-embedding-3` `dimensions` parameter).
 - **Fine-tuning embedders** (contrastive training on your query→doc pairs, often mined from logs) is one of the highest-ROI moves for jargon-heavy domains.
 
 ### Vector search: exact vs ANN
@@ -78,7 +78,7 @@ Tradeoff triangle: **recall / latency / memory - pick two.** Report recall@k aga
 
 **Metadata filtering** breaks naive ANN: post-filtering can leave you with 3 of the requested 50 results after the filter; pre-filtering restricted to a rare tenant makes graph traversal degenerate. Good engines do *filter-aware* traversal; know that this is a hard problem and a real vendor differentiator.
 
-**Vector DB selection**: "use pgvector until it hurts" - your data is already in Postgres, joins/filters/transactions work, one system to operate. It hurts at very large scale (~50-100M+ vectors), heavy filtered-ANN workloads, or when you need built-in hybrid search - then dedicated stores (Qdrant, Milvus, Weaviate, Vespa, Turbopuffer) or search engines (Elasticsearch/OpenSearch - best when you already run them and need mature BM25 + faceting).
+**Vector DB selection**: "use pgvector until it hurts" - your data is already in Postgres, joins/filters/transactions work, one system to operate. It hurts at very large scale (roughly 50-100M+ vectors), heavy filtered-ANN workloads (pgvector 0.8's iterative index scans fixed the worst over-filtering, but dedicated engines still filter better), or when you need built-in hybrid search (Postgres full-text ranking is not BM25 - you need an extension such as ParadeDB's pg_search) - then dedicated stores (Qdrant, Milvus, Weaviate, Pinecone, Vespa, Turbopuffer) or search engines (Elasticsearch/OpenSearch - best when you already run them and need mature BM25 + faceting).
 
 ### Hybrid search & fusion
 
@@ -94,6 +94,8 @@ def rrf(rankings: list[list[str]], k: int = 60) -> dict[str, float]:
 ```
 
 RRF uses *ranks*, not scores - BM25 scores and cosine similarities live on incomparable scales, so score mixing needs fragile normalization while rank fusion just works.
+
+A middle path worth naming: **learned sparse retrieval** (SPLADE-style). A transformer produces weighted term expansions over the vocabulary ("myocardial infarction" also lights up "heart attack"), so you get some semantic matching while serving from an ordinary inverted index. It can replace or join the lexical leg of a hybrid stack.
 
 ### Reranking
 
@@ -117,7 +119,11 @@ Standard recipe: **hybrid retrieve top 100-200 → cross-encoder rerank → keep
 
 ### Security: ACLs and multi-tenancy
 
-**Enforce permissions in the retrieval filter, never via the LLM.** The model has no notion of authorization; anything in its context can be exfiltrated by prompt injection. Attach tenant/ACL metadata to every chunk, filter at query time with the *caller's* verified identity, and treat "the system prompt tells the model not to reveal other tenants' data" as an automatic interview fail.
+**Enforce permissions in the retrieval filter, never via the LLM.** The model has no notion of authorization; anything in its context can be exfiltrated by prompt injection. Attach tenant/ACL metadata to every chunk, filter at query time with the *caller's* verified identity, and treat "the system prompt tells the model not to reveal other tenants' data" as an automatic interview fail. The corpus itself is an attack surface too: if anyone can add documents (wikis, tickets, uploaded files), a planted document can carry indirect prompt injection or be written to rank for target queries. Treat retrieved text as untrusted data, track provenance and trust level per source, and keep tool privileges low in any agent that reads retrieved content.
+
+### Keeping the index fresh
+
+An index is a derived copy of your sources, so plan for change from day one: **incremental sync** via change detection (webhooks, modified timestamps, content hashes) rather than nightly full rebuilds; **deletes and permission changes propagated fast** (a revoked ACL that still matches in the index is a security bug, not a freshness bug); and **ANN maintenance**, since HNSW tombstones deleted nodes and IVF centroids drift, so schedule compaction or rebuilds and watch recall against exact search. Version the embedding model with every vector: a new embedder means re-embedding the whole corpus, because vectors from different models are not comparable. Run the migration as a dual-write and backfill into a new index, eval it on your golden set, then cut over with the old index kept for rollback.
 
 ### Evaluation & debugging
 
@@ -134,7 +140,7 @@ Typical online budget: query embed ~10-50ms, ANN search ~5-50ms, rerank ~50-300m
 
 ## Interview questions
 
-See [questions.md](questions.md) - 36 questions with detailed answers, from basics to production war stories.
+See [questions.md](questions.md) - 60 questions with detailed answers, from basics to production war stories.
 
 ## Red flags interviewers watch for
 
@@ -150,10 +156,12 @@ See [questions.md](questions.md) - 36 questions with detailed answers, from basi
 ## Further reading
 
 - [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401) - Lewis et al., the original RAG paper.
-- [Introducing Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval) - Anthropic's write-up on contextual embeddings + contextual BM25, with failure-rate numbers.
+- [Introducing Contextual Retrieval](https://www.anthropic.com/engineering/contextual-retrieval) - Anthropic's write-up on contextual embeddings + contextual BM25, with failure-rate numbers.
 - [Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs](https://arxiv.org/abs/1603.09320) - Malkov & Yashunin, the HNSW paper.
 - [ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction](https://arxiv.org/abs/2004.12832) - Khattab & Zaharia.
 - [Precise Zero-Shot Dense Retrieval without Relevance Labels](https://arxiv.org/abs/2212.10496) - the HyDE paper.
+- [SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking](https://arxiv.org/abs/2107.05720) - Formal et al., learned sparse retrieval.
+- [ColPali: Efficient Document Retrieval with Vision Language Models](https://arxiv.org/abs/2407.01449) - retrieval over page images instead of parsed text.
 - [MTEB: Massive Text Embedding Benchmark](https://arxiv.org/abs/2210.07316) - Muennighoff et al.
 - [From Local to Global: A Graph RAG Approach to Query-Focused Summarization](https://arxiv.org/abs/2404.16130) - Microsoft's GraphRAG paper.
 - [Lost in the Middle: How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172) - why context position matters when you assemble retrieved chunks.

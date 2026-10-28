@@ -61,12 +61,12 @@ flowchart TB
 |---|---|---|
 | Layout understanding | Sees tables, checkboxes, stamps, handwriting, logos natively | Lost unless OCR emits layout (hOCR/word boxes) and you re-serialize it |
 | Pipeline complexity | One model call | Two stages, two failure modes, error compounding |
-| Cost | Image tokens: ~1-2k tokens/page on current VLMs | OCR ~$0.0005-0.0015/page + fewer LLM tokens |
+| Cost | Image tokens: a few hundred to ~2k tokens/page, depending on provider and resolution setting | OCR ~$0.0005-0.0015/page (zero for born-digital PDFs with a text layer) + fewer LLM tokens |
 | Provenance (bboxes) | Weaker - must ask model for locations or align post-hoc | Strong - OCR gives word-level boxes for free |
 | Degraded scans | Better - trained on messy images | OCR errors poison everything downstream |
 | Auditability | "Model said so" | Can show exactly which OCR text produced a value |
 
-**Practical 2026 answer:** VLM-first for extraction quality, but *run cheap OCR in parallel anyway* - it costs almost nothing and gives you (a) bbox provenance by fuzzy-aligning extracted values to OCR words, (b) a cross-check signal (extracted total not found anywhere in OCR text → confidence penalty), (c) a text layer for search/audit. Candidates who present this hybrid rather than a binary choice stand out.
+**Practical 2026 answer:** VLM-first for extraction quality, but *build a word-level text layer in parallel anyway* - born-digital PDFs already carry one (extract it with word boxes, no OCR needed), and only scans and photos need cheap OCR. It gives you (a) bbox provenance by fuzzy-aligning extracted values to OCR words, (b) a cross-check signal (extracted total not found anywhere in OCR text → confidence penalty), (c) a text layer for search/audit. Candidates who present this hybrid rather than a binary choice stand out.
 
 ### Classification & normalization front-end
 
@@ -84,29 +84,35 @@ Use structured output enforcement (JSON schema / tool-call mode, or constrained 
 {
   "invoice_number":  {"type": ["string", "null"]},
   "issue_date":      {"type": ["string", "null"], "format": "date"},
-  "currency":        {"type": ["string", "null"], "enum": ["USD", "EUR", "GBP", "..."]},
+  "currency":        {"type": ["string", "null"], "enum": ["USD", "EUR", "GBP", "...", null]},
   "total":           {"type": ["number", "null"]},
   "po_number":       {"type": ["string", "null"]},
   "line_items": {
     "type": "array",
     "items": {
-      "description": {"type": ["string", "null"]},
-      "quantity":    {"type": ["number", "null"]},
-      "unit_price":  {"type": ["number", "null"]},
-      "amount":      {"type": ["number", "null"]},
-      "source_text": {"type": "string"}
+      "type": "object",
+      "properties": {
+        "description": {"type": ["string", "null"]},
+        "quantity":    {"type": ["number", "null"]},
+        "unit_price":  {"type": ["number", "null"]},
+        "amount":      {"type": ["number", "null"]},
+        "source_text": {"type": "string"}
+      }
     }
   },
   "field_evidence": {
-    "total":     {"quote": "string", "page": "int"},
-    "po_number": {"quote": "string", "page": "int"}
+    "type": "object",
+    "properties": {
+      "total":     {"type": "object", "properties": {"quote": {"type": "string"}, "page": {"type": "integer"}}},
+      "po_number": {"type": "object", "properties": {"quote": {"type": "string"}, "page": {"type": "integer"}}}
+    }
   }
 }
 ```
 
 Two rules that do most of the work:
 
-- **Every field explicitly nullable, with the instruction "null if not present."** The single most common extraction failure is the model *filling in* a plausible PO number that isn't on the document; forcing an explicit null option measurably cuts this.
+- **Every field explicitly nullable, with the instruction "null if not present."** (For enum fields, `null` must also appear in the enum list, or a strict validator rejects the null.) The single most common extraction failure is the model *filling in* a plausible PO number that isn't on the document; forcing an explicit null option measurably cuts this.
 - **Evidence quotes (`field_evidence`) required for critical fields.** A value whose quote can't be fuzzy-located in the OCR text is treated as unsupported - routed to human, never auto-approved. This converts hallucination from a silent failure into a routable event.
 
 Custom per-customer fields: schemas are data, composed at request time (core schema + tenant extension), so onboarding a new field is config, not a deploy.
@@ -164,7 +170,7 @@ The review UI is where automation-rate gains actually get realised, so treat it 
 
 ### Batch API usage
 
-Both major provider batch APIs (OpenAI Batch, Anthropic Message Batches) offer ~50% discounts with 24h completion windows. The nightly ERP-sync traffic fits perfectly, but "fire and forget" is how you miss SLAs. Operational design:
+The major providers' batch APIs (e.g., OpenAI Batch, Anthropic Message Batches) typically offer ~50% discounts with completion windows of up to 24h. The nightly ERP-sync traffic fits perfectly, but "fire and forget" is how you miss SLAs. Operational design:
 
 - **Staggered submission:** submit in waves through the evening rather than one giant midnight batch, so a slow batch only delays a slice; each wave is sized so that, if the provider takes its full window, the *sync-API fallback* can still absorb the remainder before the 8am deadline.
 - **Reconciliation loop:** a tracker holds every submitted item ID; on batch completion, diff returned vs submitted, resubmit missing/errored items (batches can partially fail), and escalate persistent failures to the sync path.
@@ -196,26 +202,28 @@ Both major provider batch APIs (OpenAI Batch, Anthropic Message Batches) offer ~
 Assumed ~prices for illustration: mid-tier VLM ~$1/M input, ~$4/M output; batch −50%; frontier ~$3/M in, ~$15/M out; page image ≈ ~1,600 tokens.
 
 **Invoices (240k/day, ~1.3 pages avg, ~90% on batch - 5% interactive plus deadline-driven sync overflow):**
-- Per doc input ≈ 1.3 × 1,600 (images) + 1,200 (cached instructions+schema, ~$0.10/M cached) + few-shots cached ≈ ~2,100 uncached + cached remainder. Output ≈ 500 tokens JSON.
-- Input: 240k × 2,100 ≈ 500M tok/day → batch ~$0.50/M → **~$250/day**
+- Per doc input ≈ 1.3 × 1,600 ≈ ~2,100 uncached image tokens, plus a cached prefix of ~3k (1,200 instructions + schema, ~2k few-shots). Output ≈ 500 tokens JSON.
+- Uncached input: 240k × 2,100 ≈ 500M tok/day → batch ~$0.50/M → **~$250/day**
+- Cached prefix: 240k × ~3k ≈ 720M tok → ~$0.10/M → **~$70/day**
 - Output: 240k × 500 = 120M → batch ~$2/M → **~$240/day**
-- Self-consistency second pass on ~30% of docs (money-field verification): +~$150/day
-- OCR sidecar: ~310k invoice pages × ~$0.001 → **~$310/day**
-- ≈ **$950/day → ~$0.004/invoice.** Comfortably under the $0.01 target; headroom for month-end 2.5× peaks.
+- Self-consistency second pass on ~30% of docs (money-field verification): 0.3 × ~$560 → +~$170/day
+- Sync share (~10% of docs at full rather than batch price): +~$75/day
+- Text layer: born-digital PDFs (~70%) need no OCR; ~95k scanned/photo pages × ~$0.001 → **~$95/day**
+- ≈ **~$900/day → ~$0.004/invoice.** Comfortably under the $0.01 target; headroom for month-end 2.5× peaks.
 
 **Contracts (10k/day, ~30 pages):**
 - Parse: 10k × 30 × 1,600 = 480M image tok → batch ~$240/day; parse output (markdown) ~700 tok/page → 210M × $2 = $420/day.
 - Extraction on frontier: per contract ~6k retrieved-clause tokens in + 1.5k out → 60M in ($1.50/M batch → $90) + 15M out ($7.50/M batch → $113).
 - ≈ **$860/day → ~$0.086/contract.**
 
-**Humans:** ~10% of 250k = 25k docs/day reviewed × ~$0.40 ≈ **$10k/day** - 5× the entire model bill. Moving auto-approval from 90%→93% saves ~$3k/day; that's the ROI justification for better calibration, self-consistency passes, or a fine-tuned model - spend tokens to save reviewer-minutes.
+**Humans:** ~10% of 250k = 25k docs/day reviewed × ~$0.40 ≈ **$10k/day** - over 5× the entire model bill (~$1.8k/day). Moving auto-approval from 90%→93% saves ~$3k/day; that's the ROI justification for better calibration, self-consistency passes, or a fine-tuned model - spend tokens to save reviewer-minutes.
 
 **Cost-per-document engineering levers, in order of leverage:**
 
 1. **Automation rate** (human cost dominates): better calibration and evidence-quoting beat any token optimisation by 10×.
 2. **Batch vs sync mix:** every doc that can wait overnight halves its model cost.
 3. **Model tiering:** digital-native single-page invoices from known vendors don't need the same model as blurry photos of handwritten receipts - route by (quality score, layout familiarity) to cheap/expensive extraction tiers.
-4. **Image token budget:** downscale to the minimum DPI that holds accuracy (measure it - the accuracy/resolution curve is usually flat well below default rendering), crop whitespace, skip terms-and-conditions pages for invoice schemas.
+4. **Image token budget:** downscale to the minimum DPI that holds accuracy (measure it - the accuracy/resolution curve is usually flat well below default rendering), crop whitespace, skip terms-and-conditions pages for invoice schemas. For born-digital contracts, parse from the PDF text layer and send only layout-heavy pages (tables, signature blocks, scanned exhibits) to the VLM.
 5. **Prompt caching:** instructions + schema + few-shots are identical across millions of calls; keep them as the cached prefix and the variable page images last.
 6. **Distillation:** the endgame - fine-tuned open-weights VLM for the stable 80% of traffic at ~10× lower unit cost.
 
@@ -245,6 +253,7 @@ Assumed ~prices for illustration: mid-tier VLM ~$1/M input, ~$4/M output; batch 
 2. **"Your auto-approved error rate on totals is 0.8% and the target is 0.5%. Walk me through what you do this week."** - Slice by layout family/language/quality to find the concentration; tighten money-field thresholds (trade automation rate short-term); add targeted few-shots or rules for the offending family; verify calibration hasn't drifted after the last model change.
 3. **"How do you handle a 500-page contract with amendments that override earlier clauses?"** - Document-set reasoning: extract amendment relationships first, build an effective-terms view (later-dated amendments win), extract from the resolved view, cite both original and amending clause. Flag conflicts for legal review rather than resolving silently.
 4. **"Customer says a value is wrong but your provenance shows it matches the document."** - Provenance is the product feature: show the highlighted source region. Distinguish extraction errors from document errors - the latter is a customer-workflow feature (dispute flag), not a model bug.
-5. **"When does self-hosting beat the API here?"** - At this volume (~$2k/day model spend) APIs are fine; self-host when (a) strict data-residency tenants demand it, (b) a distilled model matches quality and GPU + ops cost < API spend, or (c) batch windows need guarantees providers won't give. Show the math, not ideology.
+5. **"When does self-hosting beat the API here?"** - At this volume (~$1.8k/day model spend) APIs are fine; self-host when (a) strict data-residency tenants demand it, (b) a distilled model matches quality and GPU + ops cost < API spend, or (c) batch windows need guarantees providers won't give. Show the math, not ideology.
 6. **"An attacker submits invoices designed to be misread - inflated totals in a layout your model fumbles. How do you even detect this?"** - Extraction alone can't; this is where the downstream fraud controls close the loop: vendor-history anomaly detection (new bank details + amount out of distribution → hold), three-way match against PO and receiving data where it exists, and duplicate-invoice detection across layout variants. Extraction confidence and fraud risk are different axes - a perfectly extracted fraudulent invoice should still be caught, and a fumbled legitimate one shouldn't be paid wrong. Present them as two separate gates.
 7. **"How would you onboard a brand-new document type - say, customs forms - in a week?"** - Schema definition with the customer, VLM+prompt with 5-10 few-shot examples (no training data needed), aggressive human-review routing (reviewers cover the accuracy gap while volume is low), and let the correction flywheel accumulate labels; graduate fields to auto-approval as their measured calibration supports it. The architecture makes new doc types a configuration exercise, which is the point of building schema-driven from the start.
+8. **"Structured B2B e-invoicing mandates are rolling out across EU markets through 2026 and beyond (Peppol UBL, XRechnung, Factur-X/ZUGFeRD hybrid PDFs). Does that make this pipeline obsolete?"** - No, it changes the routing. Detect structured payloads at ingest (UBL or CII XML, or XML embedded in a PDF/A-3 hybrid) and parse them deterministically: no VLM, near-zero cost, accuracy bounded only by the sender's data. For hybrids, compare the embedded XML with the rendered page and flag disagreements, since the two can diverge and, where a mandate applies, the structured data is typically what counts legally. The VLM path narrows to receipts, non-mandated markets, legacy suppliers and contracts, so re-run the cost model per market as the mix shifts. The durable value moves downstream to validation, PO matching and fraud controls, which matter just as much for a perfectly structured invoice.
