@@ -1,8 +1,5 @@
 # The AI Engineer 75
 
-A Blind-75-style checklist, inspired by the well-known Blind 75 list for coding interviews, but for AI engineering interviews. These are the 75 highest-signal items pulled from across the whole repo: the questions, system design case studies, and coding challenges most likely to actually come up, and most likely to sink you if you can't answer them cold.
-
-This is not a replacement for the full repo. It is the floor, not the ceiling: if you can work through every item below without opening the answer first, you are in reasonable shape for a loop. If you have more time, go back and do the full question banks in each topic.
 
 **How to use this list:** work top to bottom. For each question, answer out loud before opening the linked answer. For each case study, spend 30-45 minutes designing it yourself on a doc before reading the worked solution. For each coding challenge, implement it from scratch before looking at the reference solution. Check items off as you go.
 
